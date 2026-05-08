@@ -268,20 +268,27 @@ Both trivial. Defer until needed. ~50 lines each.
 
 ## Suggested staging
 
-| Stage | Deliverable | Time est. |
-|---|---|---|
-| 0 | Use ezdxf in pyseas-yard for padeye/shackle 2D drawings | days |
-| 1 | pyseas-cad scaffolded; DXF writer with LINE/LWPOLYLINE/CIRCLE/ARC | 1 week |
-| 2 | DXF MTEXT, HATCH, INSERT (blocks) | 1 week |
-| 3 | DXF DIMENSION (linear + radial); pyseas-yard switches to pyseas-cad for 2D | 2 weeks |
-| 4 | STL writer (fast win, useful for 3D preview) | 2 days |
-| 5 | STEP writer — basic extruded prisms, no booleans | 3–4 weeks |
-| 6 | STEP writer — boolean cut via emitted "two solids, CAD does boolean" approach | 1 week |
-| 7 | Optional: kernel-quality boolean / fillet | open-ended |
+The controlling v1 roadmap now lives at:
 
-Stage 0–3 has the biggest leverage and is the realistic 2026 target.
-Stage 5+ is "build vs. delegate to CadQuery/build123d" decision to
-make later.
+```text
+.warden/specs/2026-05-08-pyseas-cad-v1-roadmap.md
+```
+
+That roadmap supersedes the older linear stage sketch. Stage 1 has already
+shipped geometry, DXF basics, and STL. The optimal route from here is
+model-first:
+
+| Stage | Deliverable | Why |
+|---|---|---|
+| 1 | Geometry, DXF basics, STL | Implemented foundation. |
+| 2 | `cad.model` layer | One source model feeds DXF, STL, STEP, and future exporters. |
+| 3 | Production DXF | HATCH, BLOCK, INSERT, linetypes, reusable symbols. |
+| 4 | Dimensions and drawing helpers | Practical 2D engineering drawings. |
+| 5 | STEP MVP and v1 hardening | Viewer-loadable 3D interchange plus docs and compatibility matrix. |
+
+Every stage must end by updating README, this roadmap note, preference locks if
+decisions changed, the stage post-implementation review, and the next stage
+spec/plan.
 
 ---
 
