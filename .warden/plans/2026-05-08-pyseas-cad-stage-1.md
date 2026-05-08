@@ -2120,7 +2120,12 @@ def test_mirror_through_xz_plane():
 
 - [ ] **Step 3: Implementation**
 
-Per concrete Shape3D type, add `translate(dx, dy, dz)`, `rotate(axis_origin, axis_dir, angle)`, `mirror(plane_origin, plane_normal)`. For `Sphere` translate just shifts the centre; for `Prism` shift origin. Rotation/mirror update `centre` (or `origin`) only — true B-rep rotation of `Prism` produces a non-axis-aligned solid, but for Stage 1 we keep the value type cheap. Document this limitation in the docstring: arbitrary rotation of axis-aligned `Prism` returns the rotated *centre* with the same dimensions (still axis-aligned in its local frame).
+Per concrete Shape3D type, add `translate(dx, dy, dz)`, `rotate(axis_origin, axis_dir, angle)`, `mirror(plane_origin, plane_normal)`. The field each method touches depends on the type:
+
+- `Sphere` carries `centre`. `translate` shifts `centre`. `rotate` rotates `centre` around the supplied axis. `mirror` reflects `centre` across the supplied plane. `radius` is invariant.
+- `Prism` carries `origin` and `size`. `translate` shifts `origin`. `rotate` rotates `origin` around the supplied axis and keeps `size` unchanged — the resulting `Prism` is still axis-aligned in its local frame. True B-rep rotation of an axis-aligned box would produce a non-axis-aligned solid, which Stage 1 does not represent; document this in the `Prism.rotate` docstring as a Stage 1 simplification. `mirror` reflects `origin` across the plane and keeps `size`.
+- `Extrusion` carries `profile`, `axis`, `distance`, and a new `offset: Vec3 = Vec3(0,0,0)` field added in this task (see snippet below). `translate` bakes `(dx, dy, dz)` into `offset`. `rotate` and `mirror` update `offset` and, where applicable, `axis`.
+- `Revolution` carries `axis_origin`, `axis_direction`, `angle_rad`. `translate` shifts `axis_origin`. `rotate` rotates `axis_origin` around the supplied axis and updates `axis_direction`. `mirror` reflects `axis_origin` and negates `axis_direction` across the plane.
 
 For `Extrusion` and `Revolution`, transforms wrap the profile or update the axis fields:
 
