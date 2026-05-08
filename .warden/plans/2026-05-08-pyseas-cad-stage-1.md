@@ -208,7 +208,7 @@ def test_runtime_has_no_external_deps():
 Run: `pytest tests/test_smoke_import.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'cad'` or `PackageNotFoundError`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 `pyproject.toml`:
 
@@ -287,7 +287,7 @@ Each vendored module retains its upstream licence and attribution; see the
 top of each file under src/cad/_vendor/.
 ```
 
-`README.md`: one-paragraph stub describing scope and pointing at the spec.
+`README.md`: one-paragraph summary describing scope and pointing at the spec.
 
 `tests/conftest.py`:
 
@@ -394,7 +394,7 @@ def test_vec_rejects_nan():
 Run: `pytest tests/geom/test_vec.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'cad.geom.vec'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 `src/cad/geom/vec.py`:
 
@@ -526,7 +526,7 @@ def test_shape2d_cannot_be_instantiated_directly():
 Run: `pytest tests/geom/test_shape_base.py -q`
 Expected: FAIL with `ImportError`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 `src/cad/geom/base.py`:
 
@@ -630,7 +630,7 @@ def test_line_zero_length_rejected():
 Run: `pytest tests/geom/test_line.py -q`
 Expected: FAIL with `ImportError` (no `cad.line`).
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 `src/cad/geom/shapes2d.py`:
 
@@ -753,7 +753,7 @@ def test_arc_bounds_half_circle_top():
 Run: `pytest tests/geom/test_arc.py -q`
 Expected: FAIL with `ImportError` (no `cad.arc`).
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write the implementation**
 
 In `src/cad/geom/shapes2d.py` add:
 
@@ -1272,7 +1272,7 @@ git commit -m "feat(geom): add Path + Shape2D.__add__ head-to-tail composition"
 ### Task 11: shape2d_close
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py` (add `.close()` stub)
+- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py` (add `.close()` declaration)
 - Create: `tests/geom/test_close.py`
 
 - [ ] **Step 1: Failing test**
@@ -1488,7 +1488,7 @@ def translate(self, dx: float, dy: float) -> "Line":
 
 For `mirror(through=Line)`, use the standard 2D reflection across a line defined by two points.
 
-Add abstract stubs on `Shape2D` so `.translate(2, 3)` is statically resolvable on any Shape2D.
+Add abstract declarations on `Shape2D` so `.translate(2, 3)` is statically resolvable on any Shape2D.
 
 - [ ] **Step 4: Run** → 5 passed.
 
@@ -2088,7 +2088,7 @@ git commit -m "feat(geom): add Shape2D.revolve bridge to Revolution"
 ### Task 22: shape3d_transforms
 
 **Files:**
-- Modify: `src/cad/geom/shapes3d.py`, `src/cad/geom/base.py` (add `Shape3D` transform stubs)
+- Modify: `src/cad/geom/shapes3d.py`, `src/cad/geom/base.py` (add `Shape3D` transform declarations)
 - Create: `tests/geom/test_transforms_3d.py`
 
 - [ ] **Step 1: Failing test**
