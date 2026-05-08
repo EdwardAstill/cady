@@ -12,6 +12,7 @@ build/
 venv/
 
 .worktrees/
+.warden/runtime/
 
 *.dxf.tmp
 *.stl.tmp
