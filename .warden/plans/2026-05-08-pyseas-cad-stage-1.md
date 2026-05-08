@@ -14,8 +14,8 @@
 
 **Machine plan:** 2026-05-08-pyseas-cad-stage-1.yaml
 
-**Status:** draft
-**Refinement passes:** 0
+**Status:** approved
+**Refinement passes:** 1 (warden lint clean; plan-document-reviewer approved with one Medium finding addressed in Task 22 Step 3 clarification, and two advisory notes carried into the executing agent's awareness — see commit `8c54abd`).
 
 ## Bootstrap context
 
