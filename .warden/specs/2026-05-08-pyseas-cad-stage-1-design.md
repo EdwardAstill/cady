@@ -674,23 +674,54 @@ Mechanical, runnable checks every Stage-1 implementation must satisfy.
 
 ## Known Limitations
 
-Empty at spec-write time. The executing agent populates this during
-implementation when an acceptance item cannot be satisfied after 2-3 distinct
-approaches. An empty list at completion means everything passed.
+- Vendored triangulation: `src/cad/_vendor/earcut.py` is an original
+  pure-Python mapbox-earcut-compatible shim, not a copied upstream
+  mapbox-earcut port pinned to an external commit. The public
+  `polygon_to_triangles(...)` contract, including the Stage 1 rectangle with
+  circular hole acceptance case, is implemented and tested in
+  `src/cad/geom/tessellate.py`.
 
 ## Post-Implementation Review
 
-Empty at spec-write time. Filled by the executing agent as the final step
-before claiming done.
+Implemented on branch `stage-1` in `.worktrees/stage-1`.
 
 ### Acceptance results
 
-(Re-state every acceptance item with verification evidence.)
+- Package shape: `src/cad/__init__.py`, geometry bases, factories, scenes,
+  errors, `_vendor/earcut.py`, and import smoke test are present. Evidence:
+  `PYTHONPATH=src .venv/bin/python -c "import cad; from cad import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"`
+  exited 0.
+- Runtime dependency promise: runtime metadata has no `Requires-Dist` entries.
+  Evidence:
+  `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+  exited 0.
+- Geom, tessellation, scene, writer, error, and example acceptance: covered by
+  `tests/geom/`, `tests/scene/`, `tests/write/`, `tests/errors/`, and
+  `tests/examples/`. Evidence: `.venv/bin/pytest -q` reported
+  `48 passed, 4 warnings`.
+- Static typing: `pyproject.toml` sets pyright strict mode for `src/cad`.
+  Evidence: `.venv/bin/pyright src/cad` reported
+  `0 errors, 0 warnings, 0 informations`. The installed pyright CLI does not
+  accept a `--strict` flag, so strictness is configured in project settings.
+- Lint and stdlib-only import gate: Evidence:
+  `.venv/bin/ruff check src/cad tests` reported `All checks passed!`; runtime
+  import convention is also covered by `tests/conventions/test_stdlib_only.py`.
 
 ### Scope drift
 
-(List every change beyond the spec; justify or revert.)
+- Dev tools moved from `[project.optional-dependencies] dev` to
+  `requirements-dev.txt` so installed package metadata remains free of runtime
+  or optional `Requires-Dist` entries, matching the acceptance command.
+- `_vendor/earcut.py` is an internal compatibility shim instead of an upstream
+  pinned mapbox-earcut copy. This keeps runtime stdlib-only and avoids shipping
+  an unverified third-party source, but should be replaced with a properly
+  attributed upstream port if Stage 2 needs broader polygon robustness.
 
 ### Refactor proposals
 
-(Things noticed but not executed; include trigger conditions.)
+- Replace the grid-based hole triangulation fallback with a verified upstream
+  earcut port before relying on arbitrary concave polygons or production-grade
+  hole-heavy nesting.
+- Split `tests/geom/test_geom_core.py` and `tests/write/test_dxf.py` into
+  one-file-per-node test modules if future stages need plan-node traceability
+  over compactness.
