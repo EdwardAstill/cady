@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-08.
 **Branch:** `main`.
-**Current HEAD before this note:** `afd3551 docs(plan): outline pyseas-cad v1 stage plans`.
+**Saved handoff commit:** `5c6f168 docs: save pyseas-cad handoff`.
 
 ## Current State
 
