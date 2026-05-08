@@ -11,11 +11,13 @@ format-blind geometry primitives into DXF (R2018) and STL (binary + ASCII) files
 ## Bootstrap exception
 
 This is a greenfield project. At spec-write time the repository contained only
-`IDEAS.md` and this spec — no `src/`, no tests, no prior commits. The first
-implementation tasks (`git init`, scaffold layout, first commit on `main`) are
-executed before a worktree exists. Subsequent tasks run inside
-`.worktrees/stage-1/` on branch `stage-1`. Once Task 1 lands, normal
-worktree-rooted execution applies.
+`IDEAS.md` and this spec — no `src/`, no tests, no prior commits. Bootstrap
+(`git init -b main`, two commits carrying `IDEAS.md`, this spec,
+`.warden/preference-lock.json`, `notes/` cheatsheets, `.gitignore`, then
+`git worktree add -b stage-1 .worktrees/stage-1`) was executed by the
+`writing-plans` skill before plan tasks begin, so all plan tasks run inside
+`.worktrees/stage-1/` on branch `stage-1`. The plan therefore starts directly
+at the first source-code task; no in-plan `git init` step is required.
 
 ---
 
