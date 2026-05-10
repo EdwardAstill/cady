@@ -84,6 +84,18 @@
         "node_id": "model_production_dxf",
         "timestamp": "2026-05-10T23:54:06.274314Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "production_example_docs",
+        "timestamp": "2026-05-10T23:54:13.344612Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "production_example_docs",
+        "timestamp": "2026-05-10T23:54:59.357671Z",
+        "to": "done"
       }
     ]
   },
@@ -93,5 +105,6 @@
   "hatch_writer": "done",
   "linetype_scene_api": "done",
   "ltype_writer": "done",
-  "model_production_dxf": "done"
+  "model_production_dxf": "done",
+  "production_example_docs": "done"
 }

@@ -3,10 +3,12 @@
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018 or STL.
 
-pyseas-cad is currently at **Stage 2**:
+pyseas-cad is currently at **Stage 3**:
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
+- production DXF helpers for `HATCH`, `BLOCK`, `INSERT`, and built-in
+  linetypes,
 - binary and ASCII STL writer,
 - model layer for named drawings, parts, assemblies, and metadata,
 - end-to-end plate-with-hole example.
@@ -39,6 +41,15 @@ This writes:
 
 - `/tmp/pyseas-cad-demo/model_plate.dxf`
 - `/tmp/pyseas-cad-demo/model_plate.stl`
+
+Run the production DXF example:
+
+```bash
+python examples/production_dxf.py --out /tmp/pyseas-cad-production
+```
+
+This writes `/tmp/pyseas-cad-production/production_plate.dxf` with hatching,
+centerlines, a reusable block, and two inserts.
 
 ## Current API
 
@@ -74,6 +85,23 @@ from cad import Assembly, Drawing2D, DxfDrawing, Model, Part, StlMesh
 Use `Model` as the preferred organizing layer for named drawings and parts.
 Use `DxfDrawing` and `StlMesh` directly for low-level or single-format output.
 
+Production DXF features:
+
+```python
+from cad import Model, circle, line, rectangle
+
+outline = rectangle((0, 0), (1.0, 0.6))
+
+model = Model("production_plate")
+front = model.drawing("front")
+front.layer("PLATE").add(outline)
+front.layer("SECTION").hatch(outline, pattern="ANSI31", scale=0.025)
+front.layer("CENTER", linetype="CENTER").add(line((0.5, 0.05), (0.5, 0.55)))
+front.block("PIN_MARK").layer("SYMBOL").add(circle((0, 0), 0.025))
+front.insert("PIN_MARK", at=(0.5, 0.3), layer="SYMBOL")
+model.write_dxf("production_plate.dxf")
+```
+
 ## Target v1 API
 
 The roadmap moves toward one source model exporting DXF, STL, and STEP:
@@ -107,8 +135,8 @@ Current sequence:
 
 1. Stage 1: geometry, DXF basics, STL — implemented
 2. Stage 2: `cad.model` layer — implemented
-3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — next
-4. Stage 4: dimensions and drawing helpers
+3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — implemented
+4. Stage 4: dimensions and drawing helpers — next
 5. Stage 5: STEP MVP and v1 hardening
 
 ## Development
