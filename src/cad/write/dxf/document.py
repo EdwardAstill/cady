@@ -3,6 +3,7 @@ from __future__ import annotations
 from cad.errors import WriteError
 from cad.geom.vec import Vec2
 from cad.scene.dxf import DxfDrawing
+from cad.write.dxf.blocks import blocks_section_body, insert_entity
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
 from cad.write.dxf.hatch import hatch_entity
@@ -45,6 +46,8 @@ def _entities(drawing: DxfDrawing) -> list[str]:
         body.extend(mtext_entity(text))
     for hatch in drawing.hatches:
         body.extend(hatch_entity(hatch))
+    for insert in drawing.inserts:
+        body.extend(insert_entity(insert))
     return section("ENTITIES", body)
 
 
@@ -59,6 +62,8 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
     for hatch in drawing.hatches:
         mn, mx = hatch.boundary.bounds()
         points.extend((mn, mx))
+    for insert in drawing.inserts:
+        points.append(insert.at)
     if not points:
         return (Vec2(0, 0), Vec2(0, 0))
     return (
@@ -72,6 +77,8 @@ def _entity_count(drawing: DxfDrawing) -> int:
         sum(len(layer.entities) for layer in drawing.layers.values())
         + len(drawing.texts)
         + len(drawing.hatches)
+        + len(drawing.blocks)
+        + len(drawing.inserts)
     )
 
 
@@ -84,7 +91,7 @@ def render_document(drawing: DxfDrawing) -> str:
     lines.extend(section("CLASSES", []))
     layers = tuple(drawing.layers.values())
     lines.extend(section("TABLES", [*linetype_table(layers), *layer_table(layers)]))
-    lines.extend(section("BLOCKS", []))
+    lines.extend(section("BLOCKS", blocks_section_body(drawing)))
     lines.extend(_entities(drawing))
     lines.extend(section("OBJECTS", []))
     lines.extend(("0", "EOF"))

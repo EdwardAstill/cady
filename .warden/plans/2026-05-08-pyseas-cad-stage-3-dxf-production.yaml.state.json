@@ -60,9 +60,22 @@
         "node_id": "block_scene_api",
         "timestamp": "2026-05-10T23:52:18.077615Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "block_insert_writer",
+        "timestamp": "2026-05-10T23:52:29.506471Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "block_insert_writer",
+        "timestamp": "2026-05-10T23:53:18.044256Z",
+        "to": "done"
       }
     ]
   },
+  "block_insert_writer": "done",
   "block_scene_api": "done",
   "hatch_scene_api": "done",
   "hatch_writer": "done",
