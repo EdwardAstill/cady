@@ -204,10 +204,32 @@ scene APIs working.
 
 ## 8. Post-Implementation Review
 
-To be filled when Stage 2 is complete:
+Filled 2026-05-11.
 
-- Shipped API differences from this spec:
+- Shipped API differences from this spec: none material. The shipped model layer
+  uses `Model`, `Drawing2D`, `ModelLayer`, `Part`, `Assembly`, and
+  `ModelMetadata` as specified.
 - Verification commands and results:
+  - `pytest tests/model tests/examples -q` -> 19 passed, 4 warnings from
+    `ezdxf`/`pyparsing` deprecations.
+  - `pytest -q` -> 65 passed, 8 warnings from `ezdxf`/`pyparsing`
+    deprecations.
+  - `pyright src/cad` -> 0 errors.
+  - `ruff check src/cad tests` -> all checks passed.
+  - `python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> exits 0.
 - Known limitations:
+  - `Model.write_dxf` flattens all named drawings into one DXF modelspace.
+  - `Model.write_stl` aggregates all parts into one STL triangle soup.
+  - `Assembly` is metadata-only.
+  - `Model.write_step` raises `NotImplementedError` until Stage 5.
 - Stage 3 plan updates made:
+  - Created
+    `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`.
+  - Created
+    `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md`.
 - Preference-lock decisions added:
+  - `model-layer`
+  - `model-dxf-export`
+  - `model-stl-export`
+  - `assembly-stage-2`
+  - `step-placeholder`

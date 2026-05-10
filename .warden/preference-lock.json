@@ -150,19 +150,44 @@
       "area": "vec-arithmetic",
       "set_at": "2026-05-08T08:31:20.998359+00:00",
       "value": "Vec2/Vec3 internal arithmetic kept (+,-,scalar*,length,normalised,dot,cross); not exposed in user API surface \u2014 see vec-types-internal"
+    },
+    {
+      "area": "model-layer",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Stage 2 Model is a thin facade over Stage 1 DxfDrawing and StlMesh scenes; writers are not refactored into a shared document abstraction"
+    },
+    {
+      "area": "model-dxf-export",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Model.write_dxf flattens all named Drawing2D containers into one DXF modelspace in insertion order"
+    },
+    {
+      "area": "model-stl-export",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Model.write_stl aggregates all Part solids into one StlMesh; STL remains a triangle soup without part names"
+    },
+    {
+      "area": "assembly-stage-2",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Assembly is metadata-only in Stage 2; DXF and STL exporters ignore assemblies until STEP/product structure work"
+    },
+    {
+      "area": "step-placeholder",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Model.write_step exists but raises NotImplementedError until Stage 5"
     }
   ],
   "deferred": [
     {
-      "item": "DIMENSION rendering (linear/aligned/angular/radius) \u2014 Stage 3 spec, AutoCAD-anonymous vs computed-block strategy decided then",
+      "item": "DIMENSION rendering (linear/aligned/angular/radius) \u2014 Stage 4 spec, AutoCAD-anonymous vs computed-block strategy decided then",
       "reason": ""
     },
     {
-      "item": "HATCH (weld hatching) \u2014 Stage 2; ANSI31 pattern minimum",
+      "item": "HATCH (weld hatching) \u2014 Stage 3; ANSI31 pattern minimum",
       "reason": ""
     },
     {
-      "item": "INSERT/BLOCK references for shackle/bolt/weld symbol reuse \u2014 Stage 2",
+      "item": "INSERT/BLOCK references for shackle/bolt/weld symbol reuse \u2014 Stage 3",
       "reason": ""
     },
     {

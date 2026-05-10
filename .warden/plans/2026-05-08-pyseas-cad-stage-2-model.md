@@ -12,7 +12,7 @@
 
 **Recommended MCPs:** none
 
-**Status:** approved
+**Status:** done
 **Refinement passes:** 1 (structured validation clean: YAML sidecar validates, worktree precondition satisfied, no placeholder markers found)
 
 ## Bootstrap Context

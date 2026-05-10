@@ -96,11 +96,24 @@
         "node_id": "model_example_docs",
         "timestamp": "2026-05-10T23:17:13.993010Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "downstream_artifacts",
+        "timestamp": "2026-05-10T23:17:24.333302Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "downstream_artifacts",
+        "timestamp": "2026-05-10T23:18:56.277502Z",
+        "to": "done"
       }
     ]
   },
   "assembly_metadata": "done",
   "debug_representation": "done",
+  "downstream_artifacts": "done",
   "drawing_facade": "done",
   "model_core": "done",
   "model_dxf_export": "done",

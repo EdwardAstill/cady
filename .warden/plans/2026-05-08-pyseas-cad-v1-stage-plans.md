@@ -65,6 +65,9 @@ python, reviewer, verification-before-completion, writing, git
 **Purpose:** Create the single source model that future DXF/STL/STEP exporters
 consume.
 
+**Status:** implemented on branch `stage-2-model`; see
+`.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`.
+
 **Design Spec To Create:**
 
 - `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`
