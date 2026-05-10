@@ -24,17 +24,24 @@ from cad.geom import (
     sphere,
     spline,
 )
+from cad.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
 from cad.scene import DxfDrawing, Layer, StlMesh
 
 __all__ = [
     "Arc",
+    "Assembly",
     "CadError",
     "Circle",
+    "Drawing2D",
     "DxfDrawing",
     "Extrusion",
     "Layer",
     "Line",
+    "Model",
+    "ModelLayer",
+    "ModelMetadata",
     "Path",
+    "Part",
     "Polyline",
     "Prism",
     "Rectangle",

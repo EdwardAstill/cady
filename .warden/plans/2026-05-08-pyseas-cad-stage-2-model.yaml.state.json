@@ -1,0 +1,19 @@
+{
+  "__meta": {
+    "events": [
+      {
+        "from": "pending",
+        "node_id": "model_core",
+        "timestamp": "2026-05-10T23:12:51.958213Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "model_core",
+        "timestamp": "2026-05-10T23:14:38.240935Z",
+        "to": "done"
+      }
+    ]
+  },
+  "model_core": "done"
+}
