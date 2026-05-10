@@ -2,6 +2,7 @@ version: 1
 plan:
   slug: pyseas-cad-stage-2-model
   prose: .warden/plans/2026-05-08-pyseas-cad-stage-2-model.md
+  status: approved
   goal: Add the cad.model layer so one model can organize drawings, parts, assemblies, metadata, and export DXF/STL through existing Stage 1 writers.
   assumptions:
     - id: A1
