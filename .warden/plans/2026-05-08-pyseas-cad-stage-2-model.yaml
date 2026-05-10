@@ -1,0 +1,172 @@
+version: 1
+plan:
+  slug: pyseas-cad-stage-2-model
+  prose: .warden/plans/2026-05-08-pyseas-cad-stage-2-model.md
+  goal: Add the cad.model layer so one model can organize drawings, parts, assemblies, metadata, and export DXF/STL through existing Stage 1 writers.
+  assumptions:
+    - id: A1
+      statement: Stage 2 model layer should be a facade over existing DxfDrawing and StlMesh, not a writer refactor.
+      type: architectural
+      source: v1 roadmap Stage 2 and Stage 2 design spec
+      check: implementation keeps src/cad/write behavior unchanged except imports if needed
+      if_false: stop and redesign Stage 2 around a shared writer contract before implementation
+      owner: drawing_facade
+    - id: A2
+      statement: Runtime remains pure stdlib.
+      type: policy
+      source: README boundaries and v1 roadmap product principles
+      check: python -c importlib.metadata dependency assertion exits 0
+      if_false: remove dependency or record explicit architecture decision before continuing
+      owner: full_verification
+    - id: A3
+      statement: Existing direct Stage 1 APIs remain supported.
+      type: compatibility
+      source: v1 roadmap Stage 2 acceptance
+      check: pytest tests/scene tests/write tests/examples -q passes
+      if_false: adjust model facade to delegate without breaking scene APIs
+      owner: full_verification
+    - id: A4
+      statement: Model.write_dxf may flatten all named drawings into one modelspace DXF in Stage 2.
+      type: design
+      source: Stage 2 design spec
+      check: DXF smoke test asserts entities from two named drawings appear in one readable DXF
+      if_false: add a sheet/layout design before implementing multi-drawing export
+      owner: model_dxf_export
+    - id: A5
+      statement: Assembly is metadata-only in Stage 2.
+      type: design
+      source: Stage 2 design spec
+      check: tests assert Assembly.to_dict references part names while STL/DXF exporters ignore assemblies
+      if_false: defer assemblies from Stage 2 or write a separate assembly export design
+      owner: assembly_metadata
+nodes:
+  - id: model_core
+    type: implement
+    description: Scaffold cad.model package, metadata parsing, Model constructor, named container identity, and top-level exports.
+    files:
+      create:
+        - src/cad/model/__init__.py
+        - src/cad/model/core.py
+        - tests/model/__init__.py
+        - tests/model/test_model_core.py
+      modify:
+        - src/cad/__init__.py
+    verify:
+      - pytest tests/model/test_model_core.py -q
+      - pyright src/cad
+    on_fail: escalate
+
+  - id: debug_representation
+    type: implement
+    depends_on: [model_core]
+    description: Add Model.to_dict plus container debug summaries.
+    files:
+      create:
+        - src/cad/model/core.py
+        - tests/model/test_model_core.py
+    verify:
+      - pytest tests/model/test_model_core.py -q
+
+  - id: drawing_facade
+    type: implement
+    depends_on: [debug_representation]
+    assumption_refs: [A1, A3]
+    description: Add Drawing2D, ModelLayer, text delegation, and to_dxf_drawing.
+    files:
+      create:
+        - tests/model/test_model_dxf.py
+        - src/cad/model/core.py
+    verify:
+      - pytest tests/model/test_model_dxf.py -q
+      - pytest tests/scene tests/write -q
+
+  - id: model_dxf_export
+    type: implement
+    depends_on: [drawing_facade]
+    assumption_refs: [A1, A3, A4]
+    description: Add Model.write_dxf and multi-drawing flattening through DxfDrawing.
+    files:
+      create:
+        - src/cad/model/core.py
+        - tests/model/test_model_dxf.py
+    verify:
+      - pytest tests/model/test_model_dxf.py -q
+      - pytest tests/write/test_dxf.py tests/scene/test_scene.py -q
+
+  - id: stl_facade
+    type: implement
+    depends_on: [model_dxf_export]
+    assumption_refs: [A1, A3]
+    description: Add Part.add, Part.to_stl_mesh, and Model.write_stl.
+    files:
+      create:
+        - tests/model/test_model_stl.py
+        - src/cad/model/core.py
+    verify:
+      - pytest tests/model/test_model_stl.py -q
+      - pytest tests/write/test_stl.py tests/scene/test_scene.py -q
+
+  - id: assembly_metadata
+    type: implement
+    depends_on: [stl_facade]
+    assumption_refs: [A5]
+    description: Add assembly reference validation and debug output.
+    files:
+      create:
+        - src/cad/model/core.py
+        - tests/model/test_model_core.py
+    verify:
+      - pytest tests/model/test_model_core.py -q
+
+  - id: step_placeholder
+    type: implement
+    depends_on: [assembly_metadata]
+    description: Add Model.write_step reserved Stage 5 NotImplementedError behavior.
+    files:
+      create:
+        - tests/model/test_model_step.py
+        - src/cad/model/core.py
+    verify:
+      - pytest tests/model/test_model_step.py -q
+
+  - id: model_example_docs
+    type: implement
+    depends_on: [step_placeholder]
+    assumption_refs: [A3]
+    description: Add model-first example and update README current API.
+    files:
+      create:
+        - examples/model_plate.py
+        - tests/examples/test_model_plate.py
+      modify:
+        - README.md
+    verify:
+      - pytest tests/examples/test_model_plate.py tests/examples/test_plate_with_hole.py -q
+
+  - id: downstream_artifacts
+    type: implement
+    depends_on: [model_example_docs]
+    assumption_refs: [A1, A4, A5]
+    description: Fill Stage 2 review, update preference lock, and create Stage 3 spec/plan stubs.
+    files:
+      create:
+        - .warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md
+        - .warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md
+      modify:
+        - .warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md
+        - .warden/preference-lock.json
+        - .warden/plans/2026-05-08-pyseas-cad-v1-stage-plans.md
+    verify:
+      - rg "Stage 2|Model" README.md .warden/specs .warden/plans
+
+  - id: full_verification
+    type: verify
+    depends_on: [downstream_artifacts]
+    assumption_refs: [A2, A3]
+    description: Run full pytest, pyright, ruff, dependency, and diff review gates.
+    verify:
+      - pytest tests/model tests/examples -q
+      - pytest -q
+      - pyright src/cad
+      - ruff check src/cad tests
+      - python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
