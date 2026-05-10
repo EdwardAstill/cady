@@ -16,6 +16,14 @@ def test_dxf_layers_and_chaining() -> None:
     assert len(layer.entities) == 2
 
 
+def test_dxf_existing_layer_keeps_first_linetype() -> None:
+    d = DxfDrawing()
+    layer = d.layer("CENTERLINES", color=3, linetype="CENTER")
+    assert d.layer("CENTERLINES", color=7, linetype="HIDDEN") is layer
+    assert d.layers["CENTERLINES"].color == 3
+    assert d.layers["CENTERLINES"].linetype == "CENTER"
+
+
 def test_dxf_rejects_3d() -> None:
     with pytest.raises(SceneError):
         DxfDrawing().layer("X").add(sphere((0, 0, 0), 1))  # type: ignore[arg-type]

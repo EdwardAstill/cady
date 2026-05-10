@@ -1,0 +1,19 @@
+{
+  "__meta": {
+    "events": [
+      {
+        "from": "pending",
+        "node_id": "linetype_scene_api",
+        "timestamp": "2026-05-10T23:47:18.276034Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "linetype_scene_api",
+        "timestamp": "2026-05-10T23:47:52.673126Z",
+        "to": "done"
+      }
+    ]
+  },
+  "linetype_scene_api": "done"
+}

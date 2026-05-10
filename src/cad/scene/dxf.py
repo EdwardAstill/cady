@@ -9,6 +9,16 @@ from cad.geom.base import Shape2D
 from cad.geom.vec import Vec2, promote2
 
 
+SUPPORTED_LINETYPES = {"CONTINUOUS", "HIDDEN", "CENTER"}
+
+
+def _normalise_linetype(linetype: str) -> str:
+    value = linetype.upper()
+    if value not in SUPPORTED_LINETYPES:
+        raise SceneError(f"unsupported DXF linetype: {linetype}")
+    return value
+
+
 @dataclass(slots=True)
 class TextEntity:
     text: str
@@ -36,13 +46,14 @@ class DxfDrawing:
     layers: dict[str, Layer] = field(default_factory=dict[str, Layer])
     texts: list[TextEntity] = field(default_factory=list[TextEntity])
 
-    def layer(self, name: str, color: int = 7) -> Layer:
+    def layer(self, name: str, color: int = 7, linetype: str = "CONTINUOUS") -> Layer:
         if not name:
             raise SceneError("layer name cannot be empty")
+        normalised_linetype = _normalise_linetype(linetype)
         existing = self.layers.get(name)
         if existing is not None:
             return existing
-        layer = Layer(name, int(color))
+        layer = Layer(name, int(color), normalised_linetype)
         self.layers[name] = layer
         return layer
 

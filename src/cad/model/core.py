@@ -66,11 +66,11 @@ class Drawing2D:
         if not self.name:
             raise ValueError("drawing name cannot be empty")
 
-    def layer(self, name: str, color: int = 7) -> ModelLayer:
+    def layer(self, name: str, color: int = 7, linetype: str = "CONTINUOUS") -> ModelLayer:
         existing = self._layers.get(name)
         if existing is not None:
             return existing
-        layer = self._drawing.layer(name, color)
+        layer = self._drawing.layer(name, color, linetype)
         wrapped = ModelLayer(name, layer)
         self._layers[name] = wrapped
         return wrapped
@@ -197,7 +197,7 @@ class Model:
         for source in self._drawings.values():
             dxf = source.to_dxf_drawing()
             for layer in dxf.layers.values():
-                target = drawing.layer(layer.name, layer.color)
+                target = drawing.layer(layer.name, layer.color, layer.linetype)
                 for entity in layer.entities:
                     target.add(entity)
             for text in dxf.texts:

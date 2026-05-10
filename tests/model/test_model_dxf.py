@@ -8,13 +8,14 @@ from cad.scene import DxfDrawing
 
 def test_drawing_layer_delegates_to_dxf_drawing() -> None:
     drawing = Model("demo", created_at="2026-05-08T00:00:00Z").drawing("front")
-    layer = drawing.layer("PLATE", color=7).add(rectangle((0, 0), (1, 1)))
+    layer = drawing.layer("PLATE", color=7, linetype="CENTER").add(rectangle((0, 0), (1, 1)))
     assert layer is drawing.layer("PLATE")
 
     dxf = drawing.to_dxf_drawing()
     assert isinstance(dxf, DxfDrawing)
     assert "PLATE" in dxf.layers
     assert len(dxf.layers["PLATE"].entities) == 1
+    assert dxf.layers["PLATE"].linetype == "CENTER"
 
 
 def test_drawing_text_delegates_to_dxf_drawing() -> None:
