@@ -8,7 +8,7 @@ from typing import NoReturn, cast
 from cad.errors import SceneError
 from cad.geom.base import Shape2D, Shape3D
 from cad.geom.vec import Vec2
-from cad.scene.dxf import DxfDrawing, Layer
+from cad.scene.dxf import BlockDefinition, DxfDrawing, Layer
 from cad.scene.stl import StlMesh
 
 
@@ -94,6 +94,25 @@ class Drawing2D:
         layer: str = "0",
     ) -> Drawing2D:
         self._drawing.add_text(text, at, height, layer)
+        return self
+
+    def block(
+        self,
+        name: str,
+        base: Vec2 | tuple[float, float] = (0, 0),
+    ) -> BlockDefinition:
+        return self._drawing.block(name, base)
+
+    def insert(
+        self,
+        name: str,
+        at: Vec2 | tuple[float, float],
+        *,
+        layer: str = "0",
+        scale: float = 1.0,
+        rotation: float = 0.0,
+    ) -> Drawing2D:
+        self._drawing.insert(name, at, layer=layer, scale=scale, rotation=rotation)
         return self
 
     def to_dxf_drawing(self) -> DxfDrawing:

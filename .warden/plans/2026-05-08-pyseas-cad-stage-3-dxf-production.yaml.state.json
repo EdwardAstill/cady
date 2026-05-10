@@ -48,9 +48,22 @@
         "node_id": "hatch_writer",
         "timestamp": "2026-05-10T23:51:21.172095Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "block_scene_api",
+        "timestamp": "2026-05-10T23:51:33.489715Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "block_scene_api",
+        "timestamp": "2026-05-10T23:52:18.077615Z",
+        "to": "done"
       }
     ]
   },
+  "block_scene_api": "done",
   "hatch_scene_api": "done",
   "hatch_writer": "done",
   "linetype_scene_api": "done",

@@ -37,6 +37,15 @@ class HatchEntity:
 
 
 @dataclass(slots=True)
+class InsertEntity:
+    name: str
+    at: Vec2
+    layer: str = "0"
+    scale: float = 1.0
+    rotation: float = 0.0
+
+
+@dataclass(slots=True)
 class Layer:
     name: str
     color: int = 7
@@ -71,9 +80,48 @@ class Layer:
 
 
 @dataclass(slots=True)
+class BlockDefinition:
+    name: str
+    base: Vec2 = field(default_factory=lambda: Vec2(0, 0))
+    layers: dict[str, Layer] = field(default_factory=dict[str, Layer])
+    texts: list[TextEntity] = field(default_factory=list[TextEntity])
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise SceneError("block name cannot be empty")
+        object.__setattr__(self, "base", promote2(self.base))
+
+    def layer(self, name: str, color: int = 7, linetype: str = "CONTINUOUS") -> Layer:
+        if not name:
+            raise SceneError("layer name cannot be empty")
+        normalised_linetype = _normalise_linetype(linetype)
+        existing = self.layers.get(name)
+        if existing is not None:
+            return existing
+        layer = Layer(name, int(color), normalised_linetype)
+        self.layers[name] = layer
+        return layer
+
+    def add_text(
+        self,
+        text: str,
+        at: Vec2 | tuple[float, float],
+        height: float,
+        layer: str = "0",
+    ) -> BlockDefinition:
+        if height <= 0:
+            raise SceneError("text height must be positive")
+        self.layer(layer)
+        self.texts.append(TextEntity(text, promote2(at), float(height), layer))
+        return self
+
+
+@dataclass(slots=True)
 class DxfDrawing:
     layers: dict[str, Layer] = field(default_factory=dict[str, Layer])
     texts: list[TextEntity] = field(default_factory=list[TextEntity])
+    blocks: dict[str, BlockDefinition] = field(default_factory=dict[str, BlockDefinition])
+    inserts: list[InsertEntity] = field(default_factory=list[InsertEntity])
 
     @property
     def hatches(self) -> list[HatchEntity]:
@@ -101,6 +149,36 @@ class DxfDrawing:
             raise SceneError("text height must be positive")
         self.layer(layer)
         self.texts.append(TextEntity(text, promote2(at), float(height), layer))
+        return self
+
+    def block(
+        self,
+        name: str,
+        base: Vec2 | tuple[float, float] = (0, 0),
+    ) -> BlockDefinition:
+        if not name:
+            raise SceneError("block name cannot be empty")
+        if name in self.blocks:
+            raise SceneError(f"duplicate block name: {name}")
+        block = BlockDefinition(name, promote2(base))
+        self.blocks[name] = block
+        return block
+
+    def insert(
+        self,
+        name: str,
+        at: Vec2 | tuple[float, float],
+        *,
+        layer: str = "0",
+        scale: float = 1.0,
+        rotation: float = 0.0,
+    ) -> DxfDrawing:
+        if name not in self.blocks:
+            raise SceneError(f"unknown block: {name}")
+        if scale <= 0:
+            raise SceneError("insert scale must be positive")
+        self.layer(layer)
+        self.inserts.append(InsertEntity(name, promote2(at), layer, float(scale), float(rotation)))
         return self
 
     def add_dimension(self, *args: object, **kwargs: object) -> None:
