@@ -3,11 +3,12 @@
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018 or STL.
 
-pyseas-cad is currently at **Stage 1**:
+pyseas-cad is currently at **Stage 2**:
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
 - binary and ASCII STL writer,
+- model layer for named drawings, parts, assemblies, and metadata,
 - end-to-end plate-with-hole example.
 
 STEP support is planned, but not implemented by the package yet.
@@ -15,29 +16,29 @@ STEP support is planned, but not implemented by the package yet.
 ## Quickstart
 
 ```python
-from cad import DxfDrawing, StlMesh, circle, rectangle
+from cad import Model, circle, rectangle
 
 profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-solid = profile.extrude("+z", 0.04)
 
-drawing = DxfDrawing()
-drawing.layer("PLATE", color=7).add(profile)
-drawing.add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="TEXT")
-drawing.write("plate.dxf")
+model = Model("plate")
+model.drawing("front").layer("PLATE", color=7).add(profile)
+model.drawing("front").add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="TEXT")
+model.part("plate").add(profile.extrude("+z", 0.04))
 
-StlMesh(tolerance=1e-3).add(solid).write("plate.stl")
+model.write_dxf("plate.dxf")
+model.write_stl("plate.stl")
 ```
 
-Run the included example:
+Run the model-first example:
 
 ```bash
-python examples/plate_with_hole.py --out /tmp/pyseas-cad-demo
+python examples/model_plate.py --out /tmp/pyseas-cad-demo
 ```
 
 This writes:
 
-- `/tmp/pyseas-cad-demo/plate.dxf`
-- `/tmp/pyseas-cad-demo/plate.stl`
+- `/tmp/pyseas-cad-demo/model_plate.dxf`
+- `/tmp/pyseas-cad-demo/model_plate.stl`
 
 ## Current API
 
@@ -67,15 +68,15 @@ from cad import arc, circle, line, polyline, prism, rectangle, sphere, spline
 Scenes and writers:
 
 ```python
-from cad import DxfDrawing, StlMesh
+from cad import Assembly, Drawing2D, DxfDrawing, Model, Part, StlMesh
 ```
 
-Use `DxfDrawing` for 2D shapes and annotations. Use `StlMesh` for 3D shapes.
+Use `Model` as the preferred organizing layer for named drawings and parts.
+Use `DxfDrawing` and `StlMesh` directly for low-level or single-format output.
 
 ## Target v1 API
 
-The roadmap moves toward a model-first API where one source model can export
-DXF, STL, and STEP:
+The roadmap moves toward one source model exporting DXF, STL, and STEP:
 
 ```python
 from cad import Model, circle, rectangle
@@ -91,8 +92,8 @@ model.write_stl("padeye_plate.stl")
 model.write_step("padeye_plate.step")
 ```
 
-`Model` and STEP export are not implemented yet. They are the planned Stage 2
-and Stage 5 work.
+`Model.write_dxf` and `Model.write_stl` are implemented. `Model.write_step`
+is reserved and raises `NotImplementedError` until Stage 5.
 
 ## Roadmap
 
@@ -105,8 +106,8 @@ The controlling roadmap is:
 Current sequence:
 
 1. Stage 1: geometry, DXF basics, STL — implemented
-2. Stage 2: `cad.model` layer — next
-3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes
+2. Stage 2: `cad.model` layer — implemented
+3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — next
 4. Stage 4: dimensions and drawing helpers
 5. Stage 5: STEP MVP and v1 hardening
 

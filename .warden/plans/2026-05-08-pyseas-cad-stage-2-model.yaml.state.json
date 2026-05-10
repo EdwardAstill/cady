@@ -84,6 +84,18 @@
         "node_id": "step_placeholder",
         "timestamp": "2026-05-10T23:16:11.222359Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "model_example_docs",
+        "timestamp": "2026-05-10T23:16:27.912254Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "model_example_docs",
+        "timestamp": "2026-05-10T23:17:13.993010Z",
+        "to": "done"
       }
     ]
   },
@@ -92,6 +104,7 @@
   "drawing_facade": "done",
   "model_core": "done",
   "model_dxf_export": "done",
+  "model_example_docs": "done",
   "step_placeholder": "done",
   "stl_facade": "done"
 }
