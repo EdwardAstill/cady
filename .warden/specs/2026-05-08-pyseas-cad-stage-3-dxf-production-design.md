@@ -1,59 +1,217 @@
 # pyseas-cad Stage 3 - Production DXF
 
-**Status:** draft.
+**Status:** approved planning contract.
 **Date:** 2026-05-11.
-**Purpose:** Design the next DXF capability layer after Stage 2 `Model`.
+**Purpose:** Add production-oriented DXF features to the Stage 2 model-first API:
+HATCH, BLOCK, INSERT, and linetypes.
 
-## Goal
+---
 
-Make generated 2D drawings useful for pyseas-yard-style review and fabrication
-output by adding production DXF entities to the existing model-first API.
+## 1. Goal
 
-Stage 3 builds on:
+Stage 3 makes 2D output useful for pyseas-yard-style fabrication and review
+drawings without starting the dimension engine.
+
+Target user flow:
 
 ```python
-model = Model("drawing")
+from cad import Model, circle, line, rectangle
+
+outline = rectangle((0, 0), (1.0, 0.6))
+hole = circle((0.5, 0.3), 0.12)
+
+model = Model("production_plate")
 front = model.drawing("front")
-front.layer("PLATE").add(profile)
-model.write_dxf("drawing.dxf")
+front.layer("PLATE", color=7).add(outline).add(hole)
+front.layer("SECTION", color=8).hatch(outline, pattern="ANSI31", scale=0.025)
+front.layer("CENTER", color=3, linetype="CENTER").add(line((0.5, 0.05), (0.5, 0.55)))
+
+symbol = front.block("PIN_MARK", base=(0, 0))
+symbol.layer("SYMBOL", color=2).add(circle((0, 0), 0.025))
+front.insert("PIN_MARK", at=(0.5, 0.3), layer="SYMBOL")
+
+model.write_dxf("production_plate.dxf")
 ```
 
-## Scope
+## 2. Constraints
 
-- `HATCH`, with ANSI31 minimum.
-- `BLOCK` definitions and `INSERT` references.
-- Linetype table support beyond `CONTINUOUS` where needed for hidden and center
-  lines.
-- Model-first examples for hatching and inserted reusable symbols.
-- Golden and `ezdxf` audit tests.
+Runtime remains pure stdlib. Stage 1 direct APIs and Stage 2 `Model` APIs remain
+supported. DXF output stays R2018 (`AC1032`) and write-only. Geometry stays
+format-blind; hatch, block, insert, and linetype data live in `cad.scene.dxf`
+and model facade wrappers, not in `cad.geom`.
 
-## Deferred
+Stage 3 is not a full drafting system. Dimensions move to Stage 4. Sheet/title
+block layout remains outside core.
 
-- Full dimension engine remains Stage 4 unless Stage 3 design proves a small
-  self-rendered subset is necessary for symbol work.
-- STEP remains Stage 5.
-- Sheet/title-block composition remains outside core unless separately approved.
+## 3. Alternatives Considered
 
-## Design Questions
+| Criterion | Layer-level hatch/block facade | Drawing-level only | Raw writer-only API |
+|---|---|---|---|
+| User ergonomics | Best: matches existing `layer(...).add(...)` | Acceptable but more verbose | Poor |
+| Preserves existing API | Yes | Yes | Yes |
+| Model-first fit | Strong | Medium | Weak |
+| Implementation effort | Medium | Low | Low |
+| Stage 4 extensibility | Good | Good | Poor |
 
-- Hatch API location: `Drawing2D.hatch(...)`, `ModelLayer.hatch(...)`, or
-  lower-level `DxfDrawing` first with model facade delegation.
-- Hatch boundary representation: closed `Shape2D` only, or explicit boundary
-  loops.
-- Block ownership: model-wide, drawing-wide, or direct `DxfDrawing` ownership.
-- Insert layer behavior: insertion layer only, definition layer preservation, or
-  both.
-- Linetype API: layer attribute update versus explicit table registration.
+Decision: add low-level state to `DxfDrawing`, expose hatch through `Layer` and
+`ModelLayer`, and expose block/insert at drawing level. This keeps layer-owned
+visual styling natural while keeping block definitions and insert references in
+the drawing namespace where DXF expects them.
 
-## Acceptance Draft
+## 4. Public API Contract
 
-- `Model(...).drawing(...).hatch(...)` or chosen equivalent emits readable DXF
-  with expected `HATCH` entity.
-- A reusable symbol can be defined once and inserted at least twice.
-- `ezdxf.readfile(path).audit()` reports no errors on hatch/block smoke files.
-- Existing Stage 1 direct scene APIs and Stage 2 `Model` APIs keep passing.
-- README shows one production-style drawing example.
+### 4.1 Linetypes
 
-## Post-Design Notes
+`Layer` keeps its existing `linetype` field. `DxfDrawing.layer` and
+`Drawing2D.layer` gain an optional keyword:
 
-To be filled when Stage 3 design is approved.
+```python
+layer(name: str, color: int = 7, linetype: str = "CONTINUOUS")
+```
+
+Rules:
+
+- Existing positional calls continue to work.
+- Re-requesting an existing layer returns it and does not mutate color or
+  linetype.
+- Supported built-in linetypes: `CONTINUOUS`, `HIDDEN`, `CENTER`.
+- Any other linetype raises `SceneError` until custom pattern registration is
+  separately designed.
+
+The DXF writer emits an `LTYPE` table containing `CONTINUOUS` plus every
+non-continuous linetype used by a layer.
+
+### 4.2 HATCH
+
+Layer-level API:
+
+```python
+Layer.hatch(
+    boundary: Shape2D,
+    *,
+    pattern: str = "ANSI31",
+    angle: float = 45.0,
+    scale: float = 1.0,
+) -> Layer
+```
+
+Model facade:
+
+```python
+ModelLayer.hatch(...) -> ModelLayer
+```
+
+Rules:
+
+- `boundary` must be closed.
+- `pattern` supports `ANSI31` only in Stage 3.
+- `scale` must be positive.
+- Hatches are stored separately from layer shape entities so tests can count
+  ordinary shapes and hatches independently.
+- DXF HATCH boundary supports closed polylines/rectangles and closed shapes that
+  can be flattened to a closed polyline. Holes in hatches are not required in
+  Stage 3; hole hatching can be expressed by hatching only the desired outline.
+
+### 4.3 BLOCK and INSERT
+
+Drawing-level API:
+
+```python
+DxfDrawing.block(name: str, base: Vec2 | tuple[float, float] = (0, 0)) -> BlockDefinition
+DxfDrawing.insert(
+    name: str,
+    at: Vec2 | tuple[float, float],
+    *,
+    layer: str = "0",
+    scale: float = 1.0,
+    rotation: float = 0.0,
+) -> DxfDrawing
+```
+
+Model facade:
+
+```python
+Drawing2D.block(...) -> BlockDefinition
+Drawing2D.insert(...) -> Drawing2D
+```
+
+Rules:
+
+- Block names must be non-empty and unique in one drawing.
+- A block definition has layers and text support similar to `DxfDrawing`, but no
+  nested block definitions in Stage 3.
+- `insert` requires a previously defined block name.
+- `scale` must be positive.
+- `rotation` is degrees, matching DXF group code semantics.
+- Insert layer controls the `INSERT` entity layer. Definition entity layers are
+  preserved inside the block definition.
+- `Model.write_dxf` merges block definitions from named drawings. Duplicate
+  block names across drawings raise `SceneError`.
+
+### 4.4 Writer Layout
+
+Keep public imports stable:
+
+```python
+from cad.write.dxf.sections import render_dxf, write_dxf
+```
+
+Internal writer modules:
+
+- `entities.py`: LINE/LWPOLYLINE/CIRCLE/ARC/MTEXT/INSERT dispatch.
+- `hatch.py`: HATCH boundary conversion and entity emission.
+- `blocks.py`: BLOCK/ENDBLK section body emission.
+- `tables.py`: LAYER and LTYPE table bodies.
+- `document.py`: section ordering and top-level DXF rendering.
+
+## 5. Test Strategy
+
+Working means a caller can create a model-first drawing with normal geometry,
+text, ANSI31 hatch, a reusable block inserted twice, and a hidden/center
+linetype layer, then write a DXF that `ezdxf` opens and audits without errors.
+
+| Behavior | Risk | Layer | Tool | Assertion |
+|---|---|---|---|---|
+| Linetype table | Medium | Writer | pytest + text checks + ezdxf | LTYPE table includes CENTER/HIDDEN when used |
+| Hatch validation | Medium | Scene | pytest | rejects open boundary, bad pattern, non-positive scale |
+| Hatch writer | High | Writer | pytest + ezdxf | modelspace contains HATCH and audit has no errors |
+| Block validation | Medium | Scene | pytest | rejects duplicate/empty block names and unknown inserts |
+| Block/insert writer | High | Writer | pytest + ezdxf | BLOCKS contains definition, ENTITIES contains INSERTs |
+| Model merge | High | Integration | pytest | hatches, linetypes, blocks, inserts survive `Model.write_dxf` |
+| Existing behavior | High | Regression | pytest existing tests | Stage 1/2 tests pass unchanged |
+| Docs/example | Medium | Smoke | pytest subprocess | production example writes DXF with new entity types |
+
+## 6. Acceptance Criteria
+
+- Existing `DxfDrawing.layer("NAME", color)` and `Model.drawing(...).layer(...)`
+  calls remain valid.
+- A drawing using `linetype="CENTER"` emits a valid `LTYPE` table and opens in
+  `ezdxf`.
+- `Layer.hatch(rectangle(...), pattern="ANSI31")` emits a valid HATCH entity.
+- A block definition can be inserted twice and appears as one `BLOCK` plus two
+  `INSERT` entities in a readable DXF.
+- `Model.write_dxf` preserves hatches, block definitions, inserts, and
+  linetypes from `Drawing2D`.
+- `pytest tests/write -q -k dxf`, `pytest tests/model tests/examples -q`,
+  `pytest -q`, `pyright src/cad`, and `ruff check src/cad tests` pass.
+- README includes one production-style DXF example.
+- Stage 4 dimensions spec and plan drafts are created or updated.
+
+## 7. Non-Goals
+
+- No DIMENSION entities.
+- No custom linetype pattern registration beyond built-in `HIDDEN` and `CENTER`.
+- No nested block definitions.
+- No hatch holes or associative hatch metadata.
+- No DXF parser.
+- No domain-specific symbols in core.
+
+## 8. Post-Implementation Review
+
+To be filled when Stage 3 is complete:
+
+- Shipped API differences from this spec:
+- Verification commands and results:
+- Known limitations:
+- Stage 4 plan updates made:
+- Preference-lock decisions added:
