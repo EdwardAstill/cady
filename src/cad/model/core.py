@@ -230,8 +230,33 @@ class Model:
                 target = drawing.layer(layer.name, layer.color, layer.linetype)
                 for entity in layer.entities:
                     target.add(entity)
+                for hatch in layer.hatches:
+                    target.hatch(
+                        hatch.boundary,
+                        pattern=hatch.pattern,
+                        angle=hatch.angle,
+                        scale=hatch.scale,
+                    )
             for text in dxf.texts:
                 drawing.add_text(text.text, text.at, text.height, text.layer)
+            for block in dxf.blocks.values():
+                if block.name in drawing.blocks:
+                    raise SceneError(f"duplicate block name across model drawings: {block.name}")
+                target_block = drawing.block(block.name, block.base)
+                for layer in block.layers.values():
+                    target_layer = target_block.layer(layer.name, layer.color, layer.linetype)
+                    for entity in layer.entities:
+                        target_layer.add(entity)
+                for text in block.texts:
+                    target_block.add_text(text.text, text.at, text.height, text.layer)
+            for insert in dxf.inserts:
+                drawing.insert(
+                    insert.name,
+                    insert.at,
+                    layer=insert.layer,
+                    scale=insert.scale,
+                    rotation=insert.rotation,
+                )
         drawing.write(path)
         return self
 
