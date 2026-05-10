@@ -5,6 +5,7 @@ from cad.geom.vec import Vec2
 from cad.scene.dxf import DxfDrawing
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
+from cad.write.dxf.hatch import hatch_entity
 from cad.write.dxf.tables import layer_table, linetype_table
 
 
@@ -42,6 +43,8 @@ def _entities(drawing: DxfDrawing) -> list[str]:
             body.extend(shape_entities(shape, layer.name))
     for text in drawing.texts:
         body.extend(mtext_entity(text))
+    for hatch in drawing.hatches:
+        body.extend(hatch_entity(hatch))
     return section("ENTITIES", body)
 
 
@@ -53,6 +56,9 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
             points.extend((mn, mx))
     for text in drawing.texts:
         points.append(text.at)
+    for hatch in drawing.hatches:
+        mn, mx = hatch.boundary.bounds()
+        points.extend((mn, mx))
     if not points:
         return (Vec2(0, 0), Vec2(0, 0))
     return (
@@ -62,7 +68,11 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
 
 
 def _entity_count(drawing: DxfDrawing) -> int:
-    return sum(len(layer.entities) for layer in drawing.layers.values()) + len(drawing.texts)
+    return (
+        sum(len(layer.entities) for layer in drawing.layers.values())
+        + len(drawing.texts)
+        + len(drawing.hatches)
+    )
 
 
 def render_document(drawing: DxfDrawing) -> str:
