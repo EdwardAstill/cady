@@ -8,7 +8,6 @@ from cad.errors import SceneError
 from cad.geom.base import Shape2D
 from cad.geom.vec import Vec2, promote2
 
-
 SUPPORTED_LINETYPES = {"CONTINUOUS", "HIDDEN", "CENTER"}
 
 
@@ -182,7 +181,7 @@ class DxfDrawing:
         return self
 
     def add_dimension(self, *args: object, **kwargs: object) -> None:
-        raise NotImplementedError("DXF dimensions are reserved for Stage 3")
+        raise NotImplementedError("DXF dimensions are reserved for Stage 4")
 
     def write(self, path: str | Path) -> DxfDrawing:
         from cad.write.dxf.sections import write_dxf

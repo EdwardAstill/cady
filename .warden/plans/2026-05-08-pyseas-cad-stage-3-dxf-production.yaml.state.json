@@ -108,12 +108,25 @@
         "node_id": "downstream_artifacts",
         "timestamp": "2026-05-10T23:56:17.156312Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "full_verification",
+        "timestamp": "2026-05-10T23:56:24.627702Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "full_verification",
+        "timestamp": "2026-05-10T23:58:34.906954Z",
+        "to": "done"
       }
     ]
   },
   "block_insert_writer": "done",
   "block_scene_api": "done",
   "downstream_artifacts": "done",
+  "full_verification": "done",
   "hatch_scene_api": "done",
   "hatch_writer": "done",
   "linetype_scene_api": "done",

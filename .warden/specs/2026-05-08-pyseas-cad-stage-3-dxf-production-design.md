@@ -218,8 +218,10 @@ Filled 2026-05-11.
     `tests/write/test_dxf_linetypes.py`, `tests/write/test_dxf_hatch.py`,
     `tests/write/test_dxf_blocks.py`, and
     `tests/model/test_model_dxf_production.py`.
-  - Full acceptance results are recorded by the final verification task in
-    `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.yaml.state.json`.
+  - `.venv/bin/ruff check src/cad tests` -> pass.
+  - `.venv/bin/pyright src/cad` -> 0 errors, 0 warnings.
+  - `.venv/bin/pytest -q` -> 88 passed, 28 dependency warnings.
+  - `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> pass.
 - Known limitations:
   - HATCH supports ANSI31 with one closed flattened boundary.
   - Custom linetype registration is not implemented.
