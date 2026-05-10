@@ -108,6 +108,18 @@
         "node_id": "downstream_artifacts",
         "timestamp": "2026-05-10T23:18:56.277502Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "full_verification",
+        "timestamp": "2026-05-10T23:19:00.778836Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "full_verification",
+        "timestamp": "2026-05-10T23:19:26.591120Z",
+        "to": "done"
       }
     ]
   },
@@ -115,6 +127,7 @@
   "debug_representation": "done",
   "downstream_artifacts": "done",
   "drawing_facade": "done",
+  "full_verification": "done",
   "model_core": "done",
   "model_dxf_export": "done",
   "model_example_docs": "done",
