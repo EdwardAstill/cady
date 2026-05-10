@@ -12,8 +12,21 @@
         "node_id": "linetype_scene_api",
         "timestamp": "2026-05-10T23:47:52.673126Z",
         "to": "done"
+      },
+      {
+        "from": "pending",
+        "node_id": "ltype_writer",
+        "timestamp": "2026-05-10T23:48:24.904955Z",
+        "to": "running"
+      },
+      {
+        "from": "running",
+        "node_id": "ltype_writer",
+        "timestamp": "2026-05-10T23:49:05.504853Z",
+        "to": "done"
       }
     ]
   },
-  "linetype_scene_api": "done"
+  "linetype_scene_api": "done",
+  "ltype_writer": "done"
 }

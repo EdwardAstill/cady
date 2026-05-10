@@ -5,7 +5,7 @@ from cad.geom.vec import Vec2
 from cad.scene.dxf import DxfDrawing
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
-from cad.write.dxf.tables import layer_table
+from cad.write.dxf.tables import layer_table, linetype_table
 
 
 def section(name: str, body: list[str]) -> list[str]:
@@ -72,7 +72,8 @@ def render_document(drawing: DxfDrawing) -> str:
     lines: list[str] = []
     lines.extend(_header(_bounds(drawing)))
     lines.extend(section("CLASSES", []))
-    lines.extend(section("TABLES", layer_table(drawing.layers.values())))
+    layers = tuple(drawing.layers.values())
+    lines.extend(section("TABLES", [*linetype_table(layers), *layer_table(layers)]))
     lines.extend(section("BLOCKS", []))
     lines.extend(_entities(drawing))
     lines.extend(section("OBJECTS", []))
