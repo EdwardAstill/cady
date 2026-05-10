@@ -55,6 +55,17 @@ class ModelLayer:
         self._layer.add(shape)
         return self
 
+    def hatch(
+        self,
+        boundary: Shape2D,
+        *,
+        pattern: str = "ANSI31",
+        angle: float = 45.0,
+        scale: float = 1.0,
+    ) -> ModelLayer:
+        self._layer.hatch(boundary, pattern=pattern, angle=angle, scale=scale)
+        return self
+
 
 @dataclass(slots=True)
 class Drawing2D:

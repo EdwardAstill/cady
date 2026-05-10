@@ -28,11 +28,21 @@ class TextEntity:
 
 
 @dataclass(slots=True)
+class HatchEntity:
+    boundary: Shape2D
+    layer: str
+    pattern: str = "ANSI31"
+    angle: float = 45.0
+    scale: float = 1.0
+
+
+@dataclass(slots=True)
 class Layer:
     name: str
     color: int = 7
     linetype: str = "CONTINUOUS"
     entities: list[Shape2D] = field(default_factory=list[Shape2D])
+    hatches: list[HatchEntity] = field(default_factory=list[HatchEntity])
 
     def add(self, shape: Shape2D) -> Layer:
         if not isinstance(cast(object, shape), Shape2D):
@@ -40,11 +50,34 @@ class Layer:
         self.entities.append(shape)
         return self
 
+    def hatch(
+        self,
+        boundary: Shape2D,
+        *,
+        pattern: str = "ANSI31",
+        angle: float = 45.0,
+        scale: float = 1.0,
+    ) -> Layer:
+        if not isinstance(cast(object, boundary), Shape2D):
+            raise SceneError("DXF hatches require Shape2D boundaries")
+        if not boundary.closed:
+            raise SceneError("DXF hatch boundary must be closed")
+        if pattern.upper() != "ANSI31":
+            raise SceneError("only ANSI31 hatch pattern is supported in Stage 3")
+        if scale <= 0:
+            raise SceneError("hatch scale must be positive")
+        self.hatches.append(HatchEntity(boundary, self.name, "ANSI31", float(angle), float(scale)))
+        return self
+
 
 @dataclass(slots=True)
 class DxfDrawing:
     layers: dict[str, Layer] = field(default_factory=dict[str, Layer])
     texts: list[TextEntity] = field(default_factory=list[TextEntity])
+
+    @property
+    def hatches(self) -> list[HatchEntity]:
+        return [hatch for layer in self.layers.values() for hatch in layer.hatches]
 
     def layer(self, name: str, color: int = 7, linetype: str = "CONTINUOUS") -> Layer:
         if not name:
