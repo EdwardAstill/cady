@@ -175,6 +175,31 @@
       "area": "step-placeholder",
       "set_at": "2026-05-11T00:00:00+08:00",
       "value": "Model.write_step exists but raises NotImplementedError until Stage 5"
+    },
+    {
+      "area": "dxf-linetypes-stage-3",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Stage 3 supports built-in CONTINUOUS, HIDDEN, and CENTER linetypes through Layer.linetype; custom linetype registration is deferred"
+    },
+    {
+      "area": "dxf-hatch-api",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "HATCH is layer-level via Layer.hatch and ModelLayer.hatch; Stage 3 supports ANSI31 with a single closed flattened boundary"
+    },
+    {
+      "area": "dxf-block-api",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "BLOCK definitions are drawing-local via DxfDrawing.block and Drawing2D.block; nested blocks and attributes are deferred"
+    },
+    {
+      "area": "dxf-insert-api",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "INSERT references are drawing-level via DxfDrawing.insert and Drawing2D.insert; insertion layer controls the INSERT entity layer"
+    },
+    {
+      "area": "model-dxf-production-export",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Model.write_dxf preserves hatches, linetypes, block definitions, and inserts from Drawing2D scenes; duplicate block names across drawings raise SceneError"
     }
   ],
   "deferred": [

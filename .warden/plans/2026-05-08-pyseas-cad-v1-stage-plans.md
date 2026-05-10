@@ -120,6 +120,9 @@ consume.
 **Purpose:** Make 2D drawings rich enough for practical review/manufacturing
 outputs before tackling dimensions or STEP.
 
+**Status:** implemented on branch `stage-3-dxf-plan`; see
+`.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`.
+
 **Design Spec To Create:**
 
 - `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`

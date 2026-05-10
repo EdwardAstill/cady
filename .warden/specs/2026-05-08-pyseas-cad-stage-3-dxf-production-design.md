@@ -208,10 +208,29 @@ linetype layer, then write a DXF that `ezdxf` opens and audits without errors.
 
 ## 8. Post-Implementation Review
 
-To be filled when Stage 3 is complete:
+Filled 2026-05-11.
 
-- Shipped API differences from this spec:
+- Shipped API differences from this spec: none material. The shipped API uses
+  layer-level `hatch`, drawing-level `block`/`insert`, and built-in `CENTER` /
+  `HIDDEN` linetypes as specified.
 - Verification commands and results:
+  - Focused Stage 3 entity tests passed during implementation:
+    `tests/write/test_dxf_linetypes.py`, `tests/write/test_dxf_hatch.py`,
+    `tests/write/test_dxf_blocks.py`, and
+    `tests/model/test_model_dxf_production.py`.
+  - Full acceptance results are recorded by the final verification task in
+    `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.yaml.state.json`.
 - Known limitations:
+  - HATCH supports ANSI31 with one closed flattened boundary.
+  - Custom linetype registration is not implemented.
+  - Nested block definitions and block attributes are not implemented.
+  - Dimensions remain Stage 4.
 - Stage 4 plan updates made:
+  - Created `.warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md`.
+  - Created `.warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md`.
 - Preference-lock decisions added:
+  - `dxf-linetypes-stage-3`
+  - `dxf-hatch-api`
+  - `dxf-block-api`
+  - `dxf-insert-api`
+  - `model-dxf-production-export`
