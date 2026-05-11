@@ -28,9 +28,10 @@ from cad.geom import (
     spline,
 )
 from cad.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
-from cad.scene import DimStyle, DxfDrawing, Layer, StlMesh
+from cad.scene import AngularDimensionEntity, DimStyle, DxfDrawing, Layer, StlMesh
 
 __all__ = [
+    "AngularDimensionEntity",
     "Arc",
     "Assembly",
     "CadError",
