@@ -42,13 +42,40 @@ def test_angular_dimension_measurement_uses_degrees() -> None:
     assert drawing.dimensions[0].measurement_text == "30"
 
 
-def test_angular_dimension_rejects_unknown_layer() -> None:
+def test_angular_dimension_auto_creates_unknown_layer() -> None:
     drawing = DxfDrawing()
-    with pytest.raises(ValueError, match="layer 'DIMS' not registered"):
-        drawing.angular_dimension(
+    drawing.angular_dimension(
+        center=(0.0, 0.0),
+        p1=(1.0, 0.0),
+        p2=(0.0, 1.0),
+        distance=0.5,
+        layer="DIMS",
+    )
+    assert "DIMS" in drawing.layers
+
+
+def test_angular_dimension_rejects_zero_length_ray() -> None:
+    with pytest.raises(ValueError, match="rays must be non-degenerate"):
+        AngularDimensionEntity(
             center=(0.0, 0.0),
-            p1=(1.0, 0.0),
-            p2=(0.0, 1.0),
+            p1=(0.0, 0.0),
+            p2=(1.0, 0.0),
             distance=0.5,
             layer="DIMS",
+            measurement_text="45",
         )
+
+
+def test_add_dimension_entity_accepts_angular() -> None:
+    drawing = DxfDrawing()
+    entity = AngularDimensionEntity(
+        center=(0.0, 0.0),
+        p1=(1.0, 0.0),
+        p2=(0.0, 1.0),
+        distance=0.5,
+        layer="DIMS",
+    )
+    drawing.add_dimension_entity(entity)
+    assert len(drawing.dimensions) == 1
+    assert drawing.dimensions[0] is entity
+    assert "DIMS" in drawing.layers

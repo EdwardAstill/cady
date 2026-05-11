@@ -55,19 +55,19 @@ class AngularDimensionEntity:
     p2: tuple[float, float]
     distance: float
     layer: str
-    dimstyle: str = "PYSEAS"
+    dimstyle: str = "Standard"
     measurement_text: str = ""
 
     def __post_init__(self) -> None:
         if self.distance <= 0:
             raise ValueError("AngularDimensionEntity: distance must be positive")
+        v1 = (self.p1[0] - self.center[0], self.p1[1] - self.center[1])
+        v2 = (self.p2[0] - self.center[0], self.p2[1] - self.center[1])
+        mag1 = math.hypot(*v1)
+        mag2 = math.hypot(*v2)
+        if mag1 == 0 or mag2 == 0:
+            raise ValueError("AngularDimensionEntity: rays must be non-degenerate")
         if self.measurement_text == "":
-            v1 = (self.p1[0] - self.center[0], self.p1[1] - self.center[1])
-            v2 = (self.p2[0] - self.center[0], self.p2[1] - self.center[1])
-            mag1 = math.hypot(*v1)
-            mag2 = math.hypot(*v2)
-            if mag1 == 0 or mag2 == 0:
-                raise ValueError("AngularDimensionEntity: rays must be non-degenerate")
             cos_a = max(-1.0, min(1.0, (v1[0] * v2[0] + v1[1] * v2[1]) / (mag1 * mag2)))
             angle_deg = math.degrees(math.acos(cos_a))
             object.__setattr__(self, "measurement_text", _format_measurement(angle_deg))
@@ -324,9 +324,9 @@ class DxfDrawing:
         distance: float,
         *,
         layer: str,
-        dimstyle: str = "PYSEAS",
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
-        self._require_layer(layer)
+        self.layer(layer)
         self.dimensions.append(
             AngularDimensionEntity(
                 center=center,
