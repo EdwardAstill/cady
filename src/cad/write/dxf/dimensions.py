@@ -22,7 +22,7 @@ def _base_dimension(
         (8, dimension.layer),
         (100, "AcDbDimension"),
         (2, block_name),
-        (3, "Standard"),
+        (3, dimension.dimstyle),
         (10, defpoint.x),
         (20, defpoint.y),
         (30, 0.0),

@@ -137,7 +137,7 @@ def render_document(drawing: DxfDrawing) -> str:
             [
                 *linetype_table(plan.layers),
                 *layer_table(plan.layers),
-                *dimstyle_table(plan.uses_dimstyle),
+                *dimstyle_table(plan.uses_dimstyle, plan.dimstyles, plan.referenced_dimstyles),
             ],
         )
     )

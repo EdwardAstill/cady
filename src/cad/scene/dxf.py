@@ -13,6 +13,25 @@ from cad.geom.vec import Vec2, promote2
 SUPPORTED_LINETYPES = {"CONTINUOUS", "HIDDEN", "CENTER"}
 
 
+@dataclass(frozen=True, slots=True)
+class DimStyle:
+    """User-configurable dimension style parameters."""
+
+    name: str
+    text_height: float = 0.18   # DXF DIMTXT  group 140
+    arrow_size: float = 0.18    # DIMASZ       group 41
+    decimal_places: int = 4     # DIMDEC       group 271
+    extension_offset: float = 0.0625  # DIMEXO group 42
+    extension_extend: float = 0.18    # DIMEXE group 44
+    text_gap: float = 0.09      # DIMGAP       group 147
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("DimStyle: name must be non-empty")
+        if self.decimal_places < 0:
+            raise ValueError("DimStyle: decimal_places must be non-negative")
+
+
 def _normalise_linetype(linetype: str) -> str:
     value = linetype.upper()
     if value not in SUPPORTED_LINETYPES:
@@ -44,6 +63,7 @@ class DimensionEntity:
     layer: str
     text: str
     text_height: float
+    dimstyle: str = "Standard"
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +182,10 @@ class BlockDefinition:
         return self
 
 
+def _default_dimstyles() -> dict[str, DimStyle]:
+    return {"Standard": DimStyle(name="Standard")}
+
+
 @dataclass(slots=True)
 class DxfDrawing:
     layers: dict[str, Layer] = field(default_factory=dict[str, Layer])
@@ -171,10 +195,23 @@ class DxfDrawing:
     dimensions: list[DimensionEntity | AngularDimensionEntity] = field(
         default_factory=list[DimensionEntity | AngularDimensionEntity]
     )
+    _dimstyles: dict[str, DimStyle] = field(default_factory=_default_dimstyles, repr=False)
 
     @property
     def hatches(self) -> list[HatchEntity]:
         return [hatch for layer in self.layers.values() for hatch in layer.hatches]
+
+    def dimstyle(self, style: DimStyle) -> DxfDrawing:
+        self._dimstyles[style.name] = style
+        return self
+
+    @property
+    def dimstyles(self) -> tuple[DimStyle, ...]:
+        return tuple(self._dimstyles.values())
+
+    def _require_dimstyle(self, name: str) -> None:
+        if name not in self._dimstyles:
+            raise ValueError(f"dimstyle {name!r} not registered")
 
     def layer(self, name: str, color: int = 7, linetype: str = "CONTINUOUS") -> Layer:
         if not name:
@@ -232,21 +269,30 @@ class DxfDrawing:
 
     def linear_dimension(
         self,
-        a: Vec2 | tuple[float, float],
-        b: Vec2 | tuple[float, float],
+        a: Vec2 | tuple[float, float] | None = None,
+        b: Vec2 | tuple[float, float] | None = None,
         *,
+        p1: Vec2 | tuple[float, float] | None = None,
+        p2: Vec2 | tuple[float, float] | None = None,
         offset: float,
         layer: str = "DIMENSIONS",
         text: str | None = None,
         text_height: float = 0.025,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
-        start = promote2(a)
-        end = promote2(b)
+        # Support both positional (a, b) and keyword (p1, p2) argument styles
+        raw_a = a if a is not None else p1
+        raw_b = b if b is not None else p2
+        if raw_a is None or raw_b is None:
+            raise SceneError("linear_dimension requires two points (a, b) or (p1, p2)")
+        self._require_dimstyle(dimstyle)
+        start = promote2(raw_a)
+        end = promote2(raw_b)
         if start == end:
             raise SceneError("dimension points must differ")
         if start.x != end.x and start.y != end.y:
             raise SceneError("linear dimensions require horizontal or vertical points; use aligned")
-        return self._dimension("linear", start, end, offset, layer, text, text_height)
+        return self._dimension("linear", start, end, offset, layer, text, text_height, dimstyle)
 
     def aligned_dimension(
         self,
@@ -257,12 +303,14 @@ class DxfDrawing:
         layer: str = "DIMENSIONS",
         text: str | None = None,
         text_height: float = 0.025,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
+        self._require_dimstyle(dimstyle)
         start = promote2(a)
         end = promote2(b)
         if start == end:
             raise SceneError("dimension points must differ")
-        return self._dimension("aligned", start, end, offset, layer, text, text_height)
+        return self._dimension("aligned", start, end, offset, layer, text, text_height, dimstyle)
 
     def radius_dimension(
         self,
@@ -273,13 +321,15 @@ class DxfDrawing:
         layer: str = "DIMENSIONS",
         text: str | None = None,
         text_height: float = 0.025,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
+        self._require_dimstyle(dimstyle)
         if radius <= 0:
             raise SceneError("dimension radius must be positive")
         start = promote2(centre)
         end = Vec2(start.x + float(radius) * cos(angle), start.y + float(radius) * sin(angle))
         label = text if text is not None else f"R{_format_measurement(float(radius))}"
-        return self._dimension("radius", start, end, 0.0, layer, label, text_height)
+        return self._dimension("radius", start, end, 0.0, layer, label, text_height, dimstyle)
 
     def diameter_dimension(
         self,
@@ -290,13 +340,15 @@ class DxfDrawing:
         layer: str = "DIMENSIONS",
         text: str | None = None,
         text_height: float = 0.025,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
+        self._require_dimstyle(dimstyle)
         if radius <= 0:
             raise SceneError("dimension radius must be positive")
         start = promote2(centre)
         end = Vec2(start.x + float(radius) * cos(angle), start.y + float(radius) * sin(angle))
         label = text if text is not None else f"DIA {_format_measurement(float(radius) * 2)}"
-        return self._dimension("diameter", start, end, 0.0, layer, label, text_height)
+        return self._dimension("diameter", start, end, 0.0, layer, label, text_height, dimstyle)
 
     def add_dimension(
         self,
@@ -322,6 +374,7 @@ class DxfDrawing:
         layer: str,
         dimstyle: str = "Standard",
     ) -> DxfDrawing:
+        self._require_dimstyle(dimstyle)
         self.layer(layer)
         self.dimensions.append(
             AngularDimensionEntity(
@@ -351,6 +404,7 @@ class DxfDrawing:
         layer: str,
         text: str | None,
         text_height: float,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
         if not layer:
             raise SceneError("dimension layer cannot be empty")
@@ -359,7 +413,7 @@ class DxfDrawing:
         self.layer(layer)
         label = text if text is not None else _format_measurement((b - a).length())
         self.dimensions.append(
-            DimensionEntity(kind, a, b, float(offset), layer, label, text_height)
+            DimensionEntity(kind, a, b, float(offset), layer, label, text_height, dimstyle)
         )
         return self
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from cad.scene.dxf import Layer
+from cad.scene.dxf import DimStyle, Layer
 from cad.write.dxf.emit import pairs
 
 _LINETYPE_PATTERNS: dict[str, tuple[str, tuple[float, ...]]] = {
@@ -55,40 +55,59 @@ def layer_table(layers: Iterable[Layer]) -> list[str]:
     return body
 
 
-def dimstyle_table(uses_dimstyle: bool) -> list[str]:
-    if not uses_dimstyle:
-        return []
-    body = pairs(((0, "TABLE"), (2, "DIMSTYLE"), (70, 1)))
-    body.extend(
-        pairs(
-            (
-                (0, "DIMSTYLE"),
-                (100, "AcDbSymbolTableRecord"),
-                (100, "AcDbDimStyleTableRecord"),
-                (2, "Standard"),
-                (70, 0),
-                (3, ""),
-                (4, ""),
-                (5, ""),
-                (6, ""),
-                (7, ""),
-                (40, 1.0),
-                (41, 0.18),
-                (42, 0.0625),
-                (140, 0.18),
-                (141, 0.09),
-                (142, 0.0),
-                (143, 25.4),
-                (144, 1.0),
-                (147, 0.09),
-                (171, 3),
-                (172, 1),
-                (271, 2),
-                (272, 2),
-                (274, 3),
-                (340, 0),
-            )
+def _dimstyle_record(style: DimStyle) -> list[str]:
+    return pairs(
+        (
+            (0, "DIMSTYLE"),
+            (100, "AcDbSymbolTableRecord"),
+            (100, "AcDbDimStyleTableRecord"),
+            (2, style.name),
+            (70, 0),
+            (3, ""),
+            (4, ""),
+            (5, ""),
+            (6, ""),
+            (7, ""),
+            (40, 1.0),
+            (41, style.arrow_size),
+            (42, style.extension_offset),
+            (44, style.extension_extend),
+            (140, style.text_height),
+            (141, 0.09),
+            (142, 0.0),
+            (143, 25.4),
+            (144, 1.0),
+            (147, style.text_gap),
+            (171, 3),
+            (172, 1),
+            (271, style.decimal_places),
+            (272, 2),
+            (274, 3),
+            (340, 0),
         )
     )
+
+
+_STANDARD_DIMSTYLE = DimStyle(name="Standard")
+
+
+def dimstyle_table(
+    uses_dimstyle: bool,
+    dimstyles: Iterable[DimStyle] = (),
+    referenced_dimstyles: frozenset[str] = frozenset(),
+) -> list[str]:
+    if not uses_dimstyle:
+        return []
+    # Collect styles to emit: Standard always first, then other referenced styles
+    styles_by_name: dict[str, DimStyle] = {}
+    for style in dimstyles:
+        styles_by_name[style.name] = style
+    to_emit: list[DimStyle] = [styles_by_name.get("Standard", _STANDARD_DIMSTYLE)]
+    for style in styles_by_name.values():
+        if style.name != "Standard" and style.name in referenced_dimstyles:
+            to_emit.append(style)
+    body = pairs(((0, "TABLE"), (2, "DIMSTYLE"), (70, len(to_emit))))
+    for style in to_emit:
+        body.extend(_dimstyle_record(style))
     body.extend(pairs(((0, "ENDTAB"),)))
     return body

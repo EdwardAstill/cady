@@ -28,13 +28,14 @@ from cad.geom import (
     spline,
 )
 from cad.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
-from cad.scene import DxfDrawing, Layer, StlMesh
+from cad.scene import DimStyle, DxfDrawing, Layer, StlMesh
 
 __all__ = [
     "Arc",
     "Assembly",
     "CadError",
     "Circle",
+    "DimStyle",
     "Drawing2D",
     "DxfDrawing",
     "Extrusion",
