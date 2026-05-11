@@ -5,6 +5,8 @@ from pathlib import Path
 
 from cad import Model, circle, line, rectangle
 
+GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
+
 
 def build_model() -> Model:
     outline = rectangle((0.0, 0.0), (1.0, 0.6))
@@ -28,7 +30,7 @@ def build_model() -> Model:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=GALLERY_DIR)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 

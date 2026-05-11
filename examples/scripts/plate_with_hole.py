@@ -5,6 +5,8 @@ from pathlib import Path
 
 from cad import DxfDrawing, StlMesh, circle, rectangle
 
+GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
+
 
 def build_plate():
     outline = rectangle((0.0, 0.0), (1.0, 0.6))
@@ -15,7 +17,7 @@ def build_plate():
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=GALLERY_DIR)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 

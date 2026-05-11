@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_plate_with_hole_example(tmp_path) -> None:
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
     subprocess.run(
-        [sys.executable, "examples/plate_with_hole.py", "--out", str(tmp_path)],
+        [sys.executable, "examples/scripts/plate_with_hole.py", "--out", str(tmp_path)],
         cwd=ROOT,
         env=env,
         check=True,
@@ -32,6 +32,6 @@ def test_plate_with_hole_example(tmp_path) -> None:
 
 
 def test_example_uses_public_factories() -> None:
-    text = (ROOT / "examples" / "plate_with_hole.py").read_text(encoding="utf-8")
+    text = (ROOT / "examples" / "scripts" / "plate_with_hole.py").read_text(encoding="utf-8")
     for forbidden in ("Polyline(", "Circle(", "Vec2(", "Vec3("):
         assert forbidden not in text

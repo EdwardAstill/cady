@@ -34,22 +34,23 @@ model.write_stl("plate.stl")
 Run the model-first example:
 
 ```bash
-python examples/model_plate.py --out /tmp/pyseas-cad-demo
+PYTHONPATH=src python examples/scripts/model_plate.py
 ```
 
 This writes:
 
-- `/tmp/pyseas-cad-demo/model_plate.dxf`
-- `/tmp/pyseas-cad-demo/model_plate.stl`
+- `examples/gallery/model_plate.dxf`
+- `examples/gallery/model_plate.stl`
 
 Run the production DXF example:
 
 ```bash
-python examples/production_dxf.py --out /tmp/pyseas-cad-production
+PYTHONPATH=src python examples/scripts/production_dxf.py
 ```
 
-This writes `/tmp/pyseas-cad-production/production_plate.dxf` with hatching,
-centerlines, a reusable block, and two inserts.
+This writes `examples/gallery/production_plate.dxf` with hatching, centerlines,
+a reusable block, and two inserts. Pass `--out <dir>` to any example script to
+write somewhere else.
 
 ## Current API
 
