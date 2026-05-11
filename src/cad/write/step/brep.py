@@ -107,11 +107,10 @@ def prism_brep(ids: IdAllocator, solid: Prism) -> int:
     af_ids: list[int] = []
     for vloop, normal, ref, ov in face_defs:
         n = len(vloop)
-        oe_ids = [
-            _oe(ids, ec_ids[edge_lu[(vloop[k], vloop[(k + 1) % n])][0]],
-                edge_lu[(vloop[k], vloop[(k + 1) % n])][1])
-            for k in range(n)
-        ]
+        oe_ids: list[int] = []
+        for k in range(n):
+            ec_idx, forward = edge_lu[(vloop[k], vloop[(k + 1) % n])]
+            oe_ids.append(_oe(ids, ec_ids[ec_idx], forward))
         el_id = _el(ids, oe_ids)
         fob_id = _fob(ids, el_id)
         plane_id = _plane(ids, coords[ov], normal, ref)

@@ -76,11 +76,8 @@ def render_step(parts: list[Part], model_name: str, *, timestamp: str | None = N
             else:
                 raise WriteError(
                     f"STEP export does not support {type(solid).__name__}; "
-                    f"only Prism is supported in Stage 5"
+                    f"only Prism is supported"
                 )
-
-        if not solid_ids:
-            continue
 
         any_solid = True
 
