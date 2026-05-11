@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from cad import Model, WriteError, prism
+from cad.write.step.ids import IdAllocator
+from cad.write.step.document import render_step
+
+
+def test_id_allocator_returns_sequential_ids() -> None:
+    ids = IdAllocator()
+    assert ids.add("FOO('bar')") == 1
+    assert ids.add("BAZ()") == 2
+
+
+def test_id_allocator_renders_data_section() -> None:
+    ids = IdAllocator()
+    ids.add("FOO('x')")
+    ids.add("BAR(#1)")
+    assert ids.render_data() == "#1=FOO('x');\n#2=BAR(#1);"
+
+
+def test_render_step_contains_iso_header() -> None:
+    parts = [Model("m").part("plate")]
+    parts[0].add(prism((0, 0, 0), (1, 0.5, 0.01)))
+    text = render_step(parts, "plate")
+    assert text.startswith("ISO-10303-21;")
+    assert text.strip().endswith("END-ISO-10303-21;")
+    assert "FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));" in text
+
+
+def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
+    from cad.model.core import Part
+    part = Part("box")
+    part.add(prism((0, 0, 0), (1, 1, 1)))
+    text = render_step([part], "box_model")
+    assert "MANIFOLD_SOLID_BREP" in text
+    assert "CLOSED_SHELL" in text
+    assert text.count("ADVANCED_FACE") == 6
+    assert text.count("EDGE_CURVE") == 12
+
+
+def test_render_step_rejects_sphere_solid() -> None:
+    from cad import sphere
+    from cad.model.core import Part
+    part = Part("bad")
+    part.add(sphere((0, 0, 0), 1.0))
+    try:
+        render_step([part], "bad")
+        assert False, "expected WriteError"
+    except WriteError:
+        pass
+
+
+def test_model_write_step_produces_file(tmp_path) -> None:
+    model = Model("demo")
+    model.part("plate").add(prism((0, 0, 0), (1, 0.5, 0.01)))
+    model.write_step(tmp_path / "demo.step")
+    text = (tmp_path / "demo.step").read_text(encoding="ascii")
+    assert "MANIFOLD_SOLID_BREP" in text
