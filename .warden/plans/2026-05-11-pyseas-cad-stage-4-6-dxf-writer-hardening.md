@@ -8,7 +8,7 @@
 **Architecture:** Add a small DXF render plan/context local to `cad.write.dxf`.
 Do not introduce a cross-format writer framework.
 
-**Status:** draft
+**Status:** complete
 
 ## Draft Task Headings
 
