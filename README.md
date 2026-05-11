@@ -1,9 +1,9 @@
 # pyseas-cad
 
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
-and emitting DXF R2018 or STL.
+and emitting DXF R2018, binary/ASCII STL, or AP214 STEP.
 
-pyseas-cad is currently at **Stage 4**:
+pyseas-cad is at **v1** (Stages 1–6):
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
@@ -11,10 +11,9 @@ pyseas-cad is currently at **Stage 4**:
   linetypes,
 - native editable DXF dimensions and hatch holes/islands,
 - binary and ASCII STL writer,
+- AP214 STEP writer for `Prism` (box) solids,
 - model layer for named drawings, parts, assemblies, and metadata,
-- end-to-end plate-with-hole example.
-
-STEP support is planned, but not implemented by the package yet.
+- end-to-end plate examples for DXF and STEP.
 
 ## Quickstart
 
@@ -52,6 +51,15 @@ PYTHONPATH=src python examples/scripts/production_dxf.py
 This writes `examples/gallery/production_plate.dxf` with hatching, hatch holes,
 centerlines, dimensions, a reusable block, and two inserts. Pass `--out <dir>`
 to any example script to write somewhere else.
+
+Run the STEP example:
+
+```bash
+PYTHONPATH=src python examples/scripts/production_step.py
+```
+
+This writes `examples/gallery/production_plate.step` — a two-part model (plate
+and pin stud) as a viewer-loadable AP214 STEP file.
 
 ## Current API
 
@@ -130,8 +138,9 @@ model.write_stl("padeye_plate.stl")
 model.write_step("padeye_plate.step")
 ```
 
-`Model.write_dxf` and `Model.write_stl` are implemented. `Model.write_step`
-is reserved and raises `NotImplementedError` until Stage 5.
+`write_dxf`, `write_stl`, and `write_step` are all implemented. STEP export
+currently supports `Prism` (box) solids only; `Extrusion`, `Revolution`, and
+`Sphere` are queued for post-v1 stages.
 
 ## Roadmap
 
@@ -147,9 +156,17 @@ Current sequence:
 2. Stage 2: `cad.model` layer — implemented
 3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — implemented
 4. Stage 4: dimensions and drawing helpers — implemented
-5. Stage 4.6: DXF writer hardening — next
-6. Stage 5: STEP MVP
-7. Stage 6: v1 product hardening
+5. Stage 4.6: DXF writer hardening — implemented
+6. Stage 5: STEP MVP — implemented
+7. Stage 6: v1 product hardening — implemented
+
+## Viewer Support
+
+| Format | Tested tool | Notes |
+|--------|-------------|-------|
+| DXF R2018 | `ezdxf` (CI) | Zero audit errors on production example. Compatible with FreeCAD, LibreCAD, and any AC1032-capable viewer. |
+| STL binary | Any mesh viewer | FreeCAD, Blender, MeshLab, browser-based viewers. |
+| STEP AP214 | FreeCAD (manual) | File loads as a multi-body solid. Only `Prism` solids in v1. |
 
 ## Development
 
