@@ -65,7 +65,7 @@ def _entities(drawing: DxfDrawing, plan: DxfRenderPlan) -> list[str]:
     return section("ENTITIES", body)
 
 
-def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
+def bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
     points: list[Vec2] = []
     for layer in drawing.layers.values():
         for entity in layer.entities:
@@ -87,6 +87,9 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
         Vec2(min(point.x for point in points), min(point.y for point in points)),
         Vec2(max(point.x for point in points), max(point.y for point in points)),
     )
+
+
+_bounds = bounds
 
 
 def _dimension_bounds(

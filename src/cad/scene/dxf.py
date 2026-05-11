@@ -219,6 +219,12 @@ class DxfDrawing:
     )
 
     @property
+    def bounds(self) -> tuple[Vec2, Vec2]:
+        from cad.write.dxf.document import bounds as _compute_bounds
+
+        return _compute_bounds(self)
+
+    @property
     def header(self) -> dict[str, int | float | str]:
         return dict(self._header)
 
