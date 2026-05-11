@@ -89,9 +89,6 @@ def bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
     )
 
 
-_bounds = bounds
-
-
 def _dimension_bounds(
     dimension: DimensionEntity | AngularDimensionEntity,
 ) -> tuple[Vec2, Vec2]:
@@ -139,7 +136,7 @@ def render_document(drawing: DxfDrawing) -> str:
 
     plan = make_render_plan(drawing)
     lines: list[str] = []
-    lines.extend(_header(_bounds(drawing), drawing))
+    lines.extend(_header(bounds(drawing), drawing))
     lines.extend(section("CLASSES", []))
     lines.extend(
         section(
