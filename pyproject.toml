@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pyseas-cad"
 version = "0.1.0"
-description = "Small write-only CAD geometry package for DXF and STL output."
+description = "Small write-only CAD geometry package for DXF, STL, and AP214 STEP output."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
