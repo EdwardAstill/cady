@@ -312,10 +312,6 @@ class DxfDrawing:
             a, b, offset=offset, layer=layer, text=text, text_height=text_height
         )
 
-    def _require_layer(self, layer: str) -> None:
-        if layer not in self.layers:
-            raise ValueError(f"layer '{layer}' not registered")
-
     def angular_dimension(
         self,
         center: tuple[float, float],
