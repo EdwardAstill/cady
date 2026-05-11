@@ -4,11 +4,12 @@ from cad.errors import WriteError
 from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
 from cad.scene.dxf import DimensionEntity, DxfDrawing
-from cad.write.dxf.blocks import blocks_section_body, dimension_block_names, insert_entity
+from cad.write.dxf.blocks import blocks_section_body, insert_entity
 from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
 from cad.write.dxf.hatch import hatch_entity
+from cad.write.dxf.plan import DxfRenderPlan, make_render_plan
 from cad.write.dxf.tables import dimstyle_table, layer_table, linetype_table
 
 
@@ -39,9 +40,9 @@ def _header(bounds: tuple[Vec2, Vec2]) -> list[str]:
     )
 
 
-def _entities(drawing: DxfDrawing) -> list[str]:
+def _entities(drawing: DxfDrawing, plan: DxfRenderPlan) -> list[str]:
     body: list[str] = []
-    for layer in drawing.layers.values():
+    for layer in plan.layers:
         for shape in layer.entities:
             body.extend(shape_entities(shape, layer.name))
     for text in drawing.texts:
@@ -51,7 +52,7 @@ def _entities(drawing: DxfDrawing) -> list[str]:
     for insert in drawing.inserts:
         body.extend(insert_entity(insert))
     for dimension, block_name in zip(
-        drawing.dimensions, dimension_block_names(drawing), strict=True
+        drawing.dimensions, plan.dimension_block_names, strict=True
     ):
         body.extend(dimension_entities(dimension, block_name))
     return section("ENTITIES", body)
@@ -110,22 +111,22 @@ def render_document(drawing: DxfDrawing) -> str:
     if _entity_count(drawing) == 0:
         raise WriteError("cannot write empty DXF drawing")
 
+    plan = make_render_plan(drawing)
     lines: list[str] = []
     lines.extend(_header(_bounds(drawing)))
     lines.extend(section("CLASSES", []))
-    layers = tuple(drawing.layers.values())
     lines.extend(
         section(
             "TABLES",
             [
-                *linetype_table(layers),
-                *layer_table(layers),
-                *dimstyle_table(drawing.dimensions),
+                *linetype_table(plan.layers),
+                *layer_table(plan.layers),
+                *dimstyle_table(plan.uses_dimstyle),
             ],
         )
     )
-    lines.extend(section("BLOCKS", blocks_section_body(drawing)))
-    lines.extend(_entities(drawing))
+    lines.extend(section("BLOCKS", blocks_section_body(drawing, plan.dimension_block_names)))
+    lines.extend(_entities(drawing, plan))
     lines.extend(section("OBJECTS", []))
     lines.extend(("0", "EOF"))
     return "\n".join(lines) + "\n"

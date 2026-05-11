@@ -77,11 +77,13 @@ def dimension_block_definition(name: str) -> list[str]:
     )
 
 
-def blocks_section_body(drawing: DxfDrawing) -> list[str]:
+def blocks_section_body(
+    drawing: DxfDrawing, dim_block_names: tuple[str, ...]
+) -> list[str]:
     body: list[str] = []
     for block in drawing.blocks.values():
         body.extend(block_definition(block))
-    for name in dimension_block_names(drawing):
+    for name in dim_block_names:
         body.extend(dimension_block_definition(name))
     return body
 

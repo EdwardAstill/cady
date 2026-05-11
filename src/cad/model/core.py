@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import cast
 
 from cad.errors import SceneError
 from cad.geom.base import Shape2D, Shape3D
@@ -329,8 +329,11 @@ class Model:
         mesh.write(path, ascii=ascii)
         return self
 
-    def write_step(self, path: str | Path) -> NoReturn:
-        raise NotImplementedError("STEP export is reserved for Stage 5")
+    def write_step(self, path: str | Path) -> Model:
+        from cad.write.step.document import render_step
+        text = render_step(list(self._parts.values()), self.name)
+        Path(path).write_text(text, encoding="ascii")
+        return self
 
     def to_dict(self) -> dict[str, object]:
         return {
