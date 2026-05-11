@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from math import cos, sin
 from pathlib import Path
@@ -43,6 +44,33 @@ class DimensionEntity:
     layer: str
     text: str
     text_height: float
+
+
+@dataclass(frozen=True, slots=True)
+class AngularDimensionEntity:
+    """3-point angular dimension (vertex + two ray endpoints)."""
+
+    center: tuple[float, float]
+    p1: tuple[float, float]
+    p2: tuple[float, float]
+    distance: float
+    layer: str
+    dimstyle: str = "PYSEAS"
+    measurement_text: str = ""
+
+    def __post_init__(self) -> None:
+        if self.distance <= 0:
+            raise ValueError("AngularDimensionEntity: distance must be positive")
+        if self.measurement_text == "":
+            v1 = (self.p1[0] - self.center[0], self.p1[1] - self.center[1])
+            v2 = (self.p2[0] - self.center[0], self.p2[1] - self.center[1])
+            mag1 = math.hypot(*v1)
+            mag2 = math.hypot(*v2)
+            if mag1 == 0 or mag2 == 0:
+                raise ValueError("AngularDimensionEntity: rays must be non-degenerate")
+            cos_a = max(-1.0, min(1.0, (v1[0] * v2[0] + v1[1] * v2[1]) / (mag1 * mag2)))
+            angle_deg = math.degrees(math.acos(cos_a))
+            object.__setattr__(self, "measurement_text", _format_measurement(angle_deg))
 
 
 @dataclass(slots=True)
@@ -140,7 +168,9 @@ class DxfDrawing:
     texts: list[TextEntity] = field(default_factory=list[TextEntity])
     blocks: dict[str, BlockDefinition] = field(default_factory=dict[str, BlockDefinition])
     inserts: list[InsertEntity] = field(default_factory=list[InsertEntity])
-    dimensions: list[DimensionEntity] = field(default_factory=list[DimensionEntity])
+    dimensions: list[DimensionEntity | AngularDimensionEntity] = field(
+        default_factory=list[DimensionEntity | AngularDimensionEntity]
+    )
 
     @property
     def hatches(self) -> list[HatchEntity]:
@@ -281,6 +311,33 @@ class DxfDrawing:
         return self.aligned_dimension(
             a, b, offset=offset, layer=layer, text=text, text_height=text_height
         )
+
+    def _require_layer(self, layer: str) -> None:
+        if layer not in self.layers:
+            raise ValueError(f"layer '{layer}' not registered")
+
+    def angular_dimension(
+        self,
+        center: tuple[float, float],
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        distance: float,
+        *,
+        layer: str,
+        dimstyle: str = "PYSEAS",
+    ) -> DxfDrawing:
+        self._require_layer(layer)
+        self.dimensions.append(
+            AngularDimensionEntity(
+                center=center,
+                p1=p1,
+                p2=p2,
+                distance=distance,
+                layer=layer,
+                dimstyle=dimstyle,
+            )
+        )
+        return self
 
     def add_dimension_entity(self, dimension: DimensionEntity) -> DxfDrawing:
         self.layer(dimension.layer)

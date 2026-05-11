@@ -3,7 +3,7 @@ from __future__ import annotations
 from cad.errors import WriteError
 from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
-from cad.scene.dxf import DimensionEntity, DxfDrawing
+from cad.scene.dxf import AngularDimensionEntity, DimensionEntity, DxfDrawing
 from cad.write.dxf.blocks import blocks_section_body, insert_entity
 from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
@@ -82,7 +82,19 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
     )
 
 
-def _dimension_bounds(dimension: DimensionEntity) -> tuple[Vec2, Vec2]:
+def _dimension_bounds(
+    dimension: DimensionEntity | AngularDimensionEntity,
+) -> tuple[Vec2, Vec2]:
+    if isinstance(dimension, AngularDimensionEntity):
+        pts = [
+            Vec2(dimension.center[0], dimension.center[1]),
+            Vec2(dimension.p1[0], dimension.p1[1]),
+            Vec2(dimension.p2[0], dimension.p2[1]),
+        ]
+        return (
+            Vec2(min(p.x for p in pts), min(p.y for p in pts)),
+            Vec2(max(p.x for p in pts), max(p.y for p in pts)),
+        )
     points = [dimension.a, dimension.b]
     if dimension.kind in {"linear", "aligned"}:
         offset = perpendicular(dimension.b - dimension.a) * dimension.offset

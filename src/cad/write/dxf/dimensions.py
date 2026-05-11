@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
 from math import atan2, degrees
 
 from cad.geom.helpers import midpoint, perpendicular
 from cad.geom.vec import Vec2
-from cad.scene.dxf import DimensionEntity
+from cad.scene.dxf import AngularDimensionEntity, DimensionEntity
 from cad.write.dxf.emit import pairs
 
 
@@ -84,7 +85,64 @@ def _diameter_dimension(dimension: DimensionEntity, block_name: str) -> list[str
     return pairs(items)
 
 
-def dimension_entities(dimension: DimensionEntity, block_name: str) -> list[str]:
+def _angular_dim_arc_point(dim: AngularDimensionEntity) -> tuple[float, float]:
+    v1 = (dim.p1[0] - dim.center[0], dim.p1[1] - dim.center[1])
+    v2 = (dim.p2[0] - dim.center[0], dim.p2[1] - dim.center[1])
+    mag1 = math.hypot(*v1)
+    mag2 = math.hypot(*v2)
+    nx = v1[0] / mag1 + v2[0] / mag2
+    ny = v1[1] / mag1 + v2[1] / mag2
+    bm = math.hypot(nx, ny)
+    if bm == 0:
+        return (
+            dim.center[0] - v1[1] / mag1 * dim.distance,
+            dim.center[1] + v1[0] / mag1 * dim.distance,
+        )
+    return (
+        dim.center[0] + nx / bm * dim.distance,
+        dim.center[1] + ny / bm * dim.distance,
+    )
+
+
+def _angular_dimension(dim: AngularDimensionEntity, block_name: str) -> list[str]:
+    arc_pt = _angular_dim_arc_point(dim)
+    items: list[tuple[int, object]] = [
+        (0, "DIMENSION"),
+        (100, "AcDbEntity"),
+        (8, dim.layer),
+        (100, "AcDbDimension"),
+        (2, block_name),
+        (3, dim.dimstyle),
+        (10, dim.center[0]),
+        (20, dim.center[1]),
+        (30, 0.0),
+        (11, arc_pt[0]),
+        (21, arc_pt[1]),
+        (31, 0.0),
+        (70, 5),
+        (1, dim.measurement_text),
+        (100, "AcDb3PointAngularDimension"),
+        (13, dim.p1[0]),
+        (23, dim.p1[1]),
+        (33, 0.0),
+        (14, dim.p2[0]),
+        (24, dim.p2[1]),
+        (34, 0.0),
+        (15, dim.center[0]),
+        (25, dim.center[1]),
+        (35, 0.0),
+        (16, arc_pt[0]),
+        (26, arc_pt[1]),
+        (36, 0.0),
+    ]
+    return pairs(items)
+
+
+def dimension_entities(
+    dimension: DimensionEntity | AngularDimensionEntity, block_name: str
+) -> list[str]:
+    if isinstance(dimension, AngularDimensionEntity):
+        return _angular_dimension(dimension, block_name)
     if dimension.kind in {"linear", "aligned"}:
         return _rotated_dimension(dimension, block_name)
     if dimension.kind == "radius":
