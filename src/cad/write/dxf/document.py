@@ -3,7 +3,7 @@ from __future__ import annotations
 from cad.errors import WriteError
 from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
-from cad.scene.dxf import AngularDimensionEntity, DimensionEntity, DxfDrawing
+from cad.scene.dxf import _HEADER_VARS, AngularDimensionEntity, DimensionEntity, DxfDrawing
 from cad.write.dxf.blocks import blocks_section_body, insert_entity
 from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
@@ -17,27 +17,34 @@ def section(name: str, body: list[str]) -> list[str]:
     return ["0", "SECTION", "2", name, *body, "0", "ENDSEC"]
 
 
-def _header(bounds: tuple[Vec2, Vec2]) -> list[str]:
+def _header(bounds: tuple[Vec2, Vec2], drawing: DxfDrawing) -> list[str]:
     mn, mx = bounds
-    return section(
-        "HEADER",
-        pairs(
-            (
-                (9, "$ACADVER"),
-                (1, "AC1032"),
-                (9, "$INSUNITS"),
-                (70, 6),
-                (9, "$EXTMIN"),
-                (10, mn.x),
-                (20, mn.y),
-                (30, 0.0),
-                (9, "$EXTMAX"),
-                (10, mx.x),
-                (20, mx.y),
-                (30, 0.0),
-            )
-        ),
-    )
+    user = drawing.header
+    insunits_value: int | float | str = user.get("$INSUNITS", 6)
+    fixed: list[tuple[int, int | float | str]] = [
+        (9, "$ACADVER"),
+        (1, "AC1032"),
+        (9, "$INSUNITS"),
+        (70, insunits_value),
+    ]
+    # Emit any other user-set variables (skip $INSUNITS already handled)
+    for var_name, var_value in user.items():
+        if var_name == "$INSUNITS":
+            continue
+        group_code = _HEADER_VARS[var_name]
+        fixed.append((9, var_name))
+        fixed.append((group_code, var_value))
+    fixed += [
+        (9, "$EXTMIN"),
+        (10, mn.x),
+        (20, mn.y),
+        (30, 0.0),
+        (9, "$EXTMAX"),
+        (10, mx.x),
+        (20, mx.y),
+        (30, 0.0),
+    ]
+    return section("HEADER", pairs(tuple(fixed)))
 
 
 def _entities(drawing: DxfDrawing, plan: DxfRenderPlan) -> list[str]:
@@ -129,7 +136,7 @@ def render_document(drawing: DxfDrawing) -> str:
 
     plan = make_render_plan(drawing)
     lines: list[str] = []
-    lines.extend(_header(_bounds(drawing)))
+    lines.extend(_header(_bounds(drawing), drawing))
     lines.extend(section("CLASSES", []))
     lines.extend(
         section(
