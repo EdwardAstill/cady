@@ -47,8 +47,7 @@ engineering drawings through the model-first API.
 - Sheet/title-block layout.
 - General TRIM/split/intersection editing unless required for dimension helper
   placement.
-- Native DXF `DIMENSION` entities; Stage 4 self-renders dimensions as `LINE` and
-  `MTEXT` primitives for compatibility and simpler auditing.
+- Angular dimensions.
 
 ## Post-Implementation Review
 
@@ -61,9 +60,9 @@ Filled 2026-05-11.
     equivalents.
   - `cad.geom.helpers.midpoint`, `perpendicular`, and `offset_point`.
 - Strategy decision:
-  - Dimensions are self-rendered as `LINE` and `MTEXT`, not native DXF
-    `DIMENSION` records. This keeps files pure-stdlib and ezdxf-auditable but
-    means dimensions are not editable CAD dimension objects.
+  - Stage 4 initially used self-rendered `LINE`/`MTEXT` dimensions.
+  - Stage 4.5 replaced that renderer with native DXF `DIMENSION` entities and
+    compact anonymous geometry blocks.
 - Scope update from the original draft:
   - Added hatch holes/islands because the Stage 3 production plate visual showed
     hatching through holes.
@@ -72,7 +71,8 @@ Filled 2026-05-11.
   - Focused Stage 4 tests:
     `tests/geom/test_helpers.py`, `tests/write/test_dxf_dimensions.py`, hatch
     hole test, model dimension preservation test, and production example test.
-  - `PYTHONPATH=src .venv/bin/pytest -q` -> 100 passed, 40 dependency warnings.
+  - `PYTHONPATH=src .venv/bin/pytest -q` -> 102 passed, 70 dependency warnings
+    after the native-dimension follow-up.
   - `PYTHONPATH=src .venv/bin/ruff check src/cad tests examples/scripts` -> pass.
   - `PYTHONPATH=src .venv/bin/pyright src/cad` -> 0 errors, 0 warnings.
   - `PYTHONPATH=src .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> pass.

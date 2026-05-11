@@ -51,7 +51,7 @@ def test_model_write_dxf_preserves_dimensions(tmp_path) -> None:
     audit = doc.audit()
 
     assert not audit.errors
-    assert sum(1 for entity in doc.modelspace() if entity.dxftype() == "MTEXT") == 2
+    assert sum(1 for entity in doc.modelspace() if entity.dxftype() == "DIMENSION") == 2
 
 
 def test_model_write_dxf_rejects_duplicate_block_names_across_drawings(tmp_path) -> None:

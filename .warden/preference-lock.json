@@ -204,7 +204,12 @@
     {
       "area": "dxf-dimensions-stage-4",
       "set_at": "2026-05-11T00:00:00+08:00",
-      "value": "Stage 4 dimensions are self-rendered as LINE and MTEXT primitives, not native DXF DIMENSION entities"
+      "value": "SUPERSEDED by dxf-native-dimensions-stage-4-5"
+    },
+    {
+      "area": "dxf-native-dimensions-stage-4-5",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Dimensions emit native DXF DIMENSION entities with compact anonymous geometry blocks; primitive LINE/MTEXT fallback is not the default writer path"
     },
     {
       "area": "dxf-hatch-islands-stage-4",
@@ -218,10 +223,6 @@
     }
   ],
   "deferred": [
-    {
-      "item": "Native DXF DIMENSION entities \u2014 deferred until editable CAD dimensions are worth the compatibility risk",
-      "reason": ""
-    },
     {
       "item": "Angular dimensions \u2014 deferred beyond Stage 4; linear/aligned/radius/diameter cover the production plate example",
       "reason": ""

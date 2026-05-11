@@ -4,12 +4,12 @@ from cad.errors import WriteError
 from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
 from cad.scene.dxf import DimensionEntity, DxfDrawing
-from cad.write.dxf.blocks import blocks_section_body, insert_entity
+from cad.write.dxf.blocks import blocks_section_body, dimension_block_names, insert_entity
 from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
 from cad.write.dxf.hatch import hatch_entity
-from cad.write.dxf.tables import layer_table, linetype_table
+from cad.write.dxf.tables import dimstyle_table, layer_table, linetype_table
 
 
 def section(name: str, body: list[str]) -> list[str]:
@@ -50,8 +50,10 @@ def _entities(drawing: DxfDrawing) -> list[str]:
         body.extend(hatch_entity(hatch))
     for insert in drawing.inserts:
         body.extend(insert_entity(insert))
-    for dimension in drawing.dimensions:
-        body.extend(dimension_entities(dimension))
+    for dimension, block_name in zip(
+        drawing.dimensions, dimension_block_names(drawing), strict=True
+    ):
+        body.extend(dimension_entities(dimension, block_name))
     return section("ENTITIES", body)
 
 
@@ -112,7 +114,16 @@ def render_document(drawing: DxfDrawing) -> str:
     lines.extend(_header(_bounds(drawing)))
     lines.extend(section("CLASSES", []))
     layers = tuple(drawing.layers.values())
-    lines.extend(section("TABLES", [*linetype_table(layers), *layer_table(layers)]))
+    lines.extend(
+        section(
+            "TABLES",
+            [
+                *linetype_table(layers),
+                *layer_table(layers),
+                *dimstyle_table(drawing.dimensions),
+            ],
+        )
+    )
     lines.extend(section("BLOCKS", blocks_section_body(drawing)))
     lines.extend(_entities(drawing))
     lines.extend(section("OBJECTS", []))

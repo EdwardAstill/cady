@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -23,3 +25,14 @@ def test_production_dxf_example(tmp_path) -> None:
     assert "DIA 0.24" in text
     assert "R0.12" in text
     assert text.count("\n0\nHATCH\n") == 1
+    assert text.count("\n0\nDIMENSION\n") == 4
+
+
+def test_production_dxf_gallery_uses_native_dimensions() -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.readfile(ROOT / "examples" / "gallery" / "production_plate.dxf")
+    audit = doc.audit()
+    dimensions = list(doc.modelspace().query("DIMENSION"))
+
+    assert not audit.errors
+    assert len(dimensions) == 4

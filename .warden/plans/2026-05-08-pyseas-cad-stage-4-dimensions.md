@@ -29,12 +29,13 @@
 
 ## Implementation Result
 
-- Implemented self-rendered linear, aligned, radius, and diameter dimensions.
+- Implemented linear, aligned, radius, and diameter dimensions. Stage 4.5 then
+  replaced the primitive renderer with native editable DXF `DIMENSION` output.
 - Implemented one-level HATCH holes/islands for shapes with `inner_loops`.
 - Added small geometry helpers for midpoint, perpendicular normal, and
   perpendicular offset points.
 - Updated the production DXF example and regenerated the gallery DXF.
-- Deferred angular dimensions and native DXF `DIMENSION` entities.
+- Deferred angular dimensions.
 
 ## Draft Acceptance Commands
 

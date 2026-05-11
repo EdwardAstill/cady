@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from cad.scene.dxf import Layer
+from cad.scene.dxf import DimensionEntity, Layer
 from cad.write.dxf.emit import pairs
 
 _LINETYPE_PATTERNS: dict[str, tuple[str, tuple[float, ...]]] = {
@@ -51,5 +51,44 @@ def layer_table(layers: Iterable[Layer]) -> list[str]:
     body.extend(_layer_record("0", 7, "CONTINUOUS"))
     for layer in scene_layers:
         body.extend(_layer_record(layer.name, layer.color, layer.linetype))
+    body.extend(pairs(((0, "ENDTAB"),)))
+    return body
+
+
+def dimstyle_table(dimensions: Iterable[DimensionEntity]) -> list[str]:
+    if not tuple(dimensions):
+        return []
+    body = pairs(((0, "TABLE"), (2, "DIMSTYLE"), (70, 1)))
+    body.extend(
+        pairs(
+            (
+                (0, "DIMSTYLE"),
+                (100, "AcDbSymbolTableRecord"),
+                (100, "AcDbDimStyleTableRecord"),
+                (2, "Standard"),
+                (70, 0),
+                (3, ""),
+                (4, ""),
+                (5, ""),
+                (6, ""),
+                (7, ""),
+                (40, 1.0),
+                (41, 0.18),
+                (42, 0.0625),
+                (140, 0.18),
+                (141, 0.09),
+                (142, 0.0),
+                (143, 25.4),
+                (144, 1.0),
+                (147, 0.09),
+                (171, 3),
+                (172, 1),
+                (271, 2),
+                (272, 2),
+                (274, 3),
+                (340, 0),
+            )
+        )
+    )
     body.extend(pairs(((0, "ENDTAB"),)))
     return body

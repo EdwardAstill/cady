@@ -1,74 +1,92 @@
 from __future__ import annotations
 
+from math import atan2, degrees
+
 from cad.geom.helpers import midpoint, perpendicular
-from cad.geom.shapes2d import Line
 from cad.geom.vec import Vec2
 from cad.scene.dxf import DimensionEntity
-from cad.write.dxf.entities import line_entity, mtext_entity
+from cad.write.dxf.emit import pairs
 
 
-def _text(text: str, at: Vec2, height: float, layer: str) -> list[str]:
-    from cad.scene.dxf import TextEntity
+def _base_dimension(
+    dimension: DimensionEntity,
+    dimtype: int,
+    defpoint: Vec2,
+    block_name: str,
+) -> list[tuple[int, object]]:
+    text_point = midpoint(dimension.a, dimension.b)
+    return [
+        (0, "DIMENSION"),
+        (100, "AcDbEntity"),
+        (8, dimension.layer),
+        (100, "AcDbDimension"),
+        (2, block_name),
+        (3, "Standard"),
+        (10, defpoint.x),
+        (20, defpoint.y),
+        (30, 0.0),
+        (11, text_point.x),
+        (21, text_point.y),
+        (31, 0.0),
+        (70, dimtype),
+        (71, 5),
+        (1, dimension.text),
+    ]
 
-    return mtext_entity(TextEntity(text, at, height, layer))
 
-
-def _tick(point: Vec2, normal: Vec2, length: float) -> Line:
-    half = normal * (length * 0.5)
-    return Line(point - half, point + half)
-
-
-def _offset_dimension(dimension: DimensionEntity) -> list[str]:
+def _rotated_dimension(dimension: DimensionEntity, block_name: str) -> list[str]:
     direction = dimension.b - dimension.a
     normal = perpendicular(direction)
-    offset = normal * dimension.offset
-    start = dimension.a + offset
-    end = dimension.b + offset
-    tick_length = min(max(direction.length() * 0.06, dimension.text_height * 0.8), 0.06)
-    text_gap = normal * (dimension.text_height * 0.6)
-
-    out: list[str] = []
-    for line in (
-        Line(dimension.a, start),
-        Line(dimension.b, end),
-        Line(start, end),
-        _tick(start, normal, tick_length),
-        _tick(end, normal, tick_length),
-    ):
-        out.extend(line_entity(line, dimension.layer))
-    out.extend(
-        _text(
-            dimension.text,
-            midpoint(start, end) + text_gap,
-            dimension.text_height,
-            dimension.layer,
+    defpoint = dimension.a + normal * dimension.offset
+    angle = degrees(atan2(direction.y, direction.x))
+    items = _base_dimension(dimension, 32, defpoint, block_name)
+    items.extend(
+        (
+            (100, "AcDbAlignedDimension"),
+            (13, dimension.a.x),
+            (23, dimension.a.y),
+            (33, 0.0),
+            (14, dimension.b.x),
+            (24, dimension.b.y),
+            (34, 0.0),
+            (50, angle),
+            (100, "AcDbRotatedDimension"),
         )
     )
-    return out
+    return pairs(items)
 
 
-def _radius_dimension(dimension: DimensionEntity) -> list[str]:
+def _radius_dimension(dimension: DimensionEntity, block_name: str) -> list[str]:
+    items = _base_dimension(dimension, 36, dimension.a, block_name)
+    items.extend(
+        (
+            (100, "AcDbRadialDimension"),
+            (15, dimension.b.x),
+            (25, dimension.b.y),
+            (35, 0.0),
+        )
+    )
+    return pairs(items)
+
+
+def _diameter_dimension(dimension: DimensionEntity, block_name: str) -> list[str]:
     radius = dimension.b - dimension.a
-    unit = radius.normalised()
-    label_point = dimension.b + unit * (dimension.text_height * 1.5)
-    out = line_entity(Line(dimension.a, dimension.b), dimension.layer)
-    out.extend(_text(dimension.text, label_point, dimension.text_height, dimension.layer))
-    return out
+    opposite = dimension.a - radius
+    items = _base_dimension(dimension, 35, dimension.b, block_name)
+    items.extend(
+        (
+            (100, "AcDbDiametricDimension"),
+            (15, opposite.x),
+            (25, opposite.y),
+            (35, 0.0),
+        )
+    )
+    return pairs(items)
 
 
-def _diameter_dimension(dimension: DimensionEntity) -> list[str]:
-    radius = dimension.b - dimension.a
-    start = dimension.a - radius
-    end = dimension.a + radius
-    label_point = end + radius.normalised() * (dimension.text_height * 1.5)
-    out = line_entity(Line(start, end), dimension.layer)
-    out.extend(_text(dimension.text, label_point, dimension.text_height, dimension.layer))
-    return out
-
-
-def dimension_entities(dimension: DimensionEntity) -> list[str]:
+def dimension_entities(dimension: DimensionEntity, block_name: str) -> list[str]:
     if dimension.kind in {"linear", "aligned"}:
-        return _offset_dimension(dimension)
+        return _rotated_dimension(dimension, block_name)
     if dimension.kind == "radius":
-        return _radius_dimension(dimension)
-    return _diameter_dimension(dimension)
+        return _radius_dimension(dimension, block_name)
+    return _diameter_dimension(dimension, block_name)

@@ -38,13 +38,16 @@ def test_radius_and_diameter_dimensions_record_default_text() -> None:
     assert drawing.dimensions[1].text == "DIA 0.24"
 
 
-def test_dimension_entities_emit_lines_and_text() -> None:
+def test_dimension_entities_emit_native_dimension_records() -> None:
     drawing = DxfDrawing()
     drawing.linear_dimension((0, 0), (1, 0), offset=0.1, layer="DIM")
     text = render_dxf(drawing)
 
-    assert text.count("\n0\nLINE\n") >= 3
-    assert "\n0\nMTEXT\n" in text
+    assert "\n0\nDIMENSION\n" in text
+    assert "\n100\nAcDbAlignedDimension\n" in text
+    assert "\n100\nAcDbRotatedDimension\n" in text
+    assert "\n0\nDIMSTYLE\n" in text
+    assert "\n0\nLINE\n" not in text
     assert "\n1\n1\n" in text
 
 
@@ -65,5 +68,22 @@ def test_dimensions_round_trip_with_ezdxf(tmp_path) -> None:
         counts[entity.dxftype()] = counts.get(entity.dxftype(), 0) + 1
 
     assert not audit.errors
-    assert counts["LINE"] >= 10
-    assert counts["MTEXT"] == 4
+    assert counts["DIMENSION"] == 4
+    assert counts.get("LINE", 0) == 0
+    assert counts.get("MTEXT", 0) == 0
+
+
+def test_native_dimension_types_round_trip_with_ezdxf(tmp_path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    path = tmp_path / "native-types.dxf"
+    drawing = DxfDrawing()
+    drawing.linear_dimension((0, 0), (1, 0), offset=0.1)
+    drawing.aligned_dimension((0, 0), (1, 1), offset=0.1)
+    drawing.radius_dimension((0.5, 0.5), 0.2)
+    drawing.diameter_dimension((1.5, 0.5), 0.2)
+    drawing.write(path)
+
+    entities = list(ezdxf.readfile(path).modelspace().query("DIMENSION"))
+
+    assert [entity.dimtype for entity in entities] == [0, 0, 4, 3]
+    assert [entity.dxf.text for entity in entities] == ["1", "1.414214", "R0.2", "DIA 0.4"]

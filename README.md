@@ -9,7 +9,7 @@ pyseas-cad is currently at **Stage 4**:
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
 - production DXF helpers for `HATCH`, `BLOCK`, `INSERT`, and built-in
   linetypes,
-- self-rendered DXF dimensions and hatch holes/islands,
+- native editable DXF dimensions and hatch holes/islands,
 - binary and ASCII STL writer,
 - model layer for named drawings, parts, assemblies, and metadata,
 - end-to-end plate-with-hole example.
@@ -108,9 +108,9 @@ front.diameter_dimension((0.5, 0.3), 0.12)
 model.write_dxf("production_plate.dxf")
 ```
 
-Dimensions are self-rendered as standard `LINE` and `MTEXT` primitives instead
-of native DXF `DIMENSION` entities. This keeps generated DXF small and auditable,
-but it does not create editable CAD dimension objects.
+Dimensions are emitted as native DXF `DIMENSION` entities with compact anonymous
+dimension blocks, so CAD viewers can treat them as dimension objects instead of
+plain lines and text.
 
 ## Target v1 API
 

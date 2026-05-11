@@ -40,10 +40,49 @@ def block_definition(block: BlockDefinition) -> list[str]:
     return body
 
 
+def dimension_block_names(drawing: DxfDrawing) -> tuple[str, ...]:
+    existing = set(drawing.blocks)
+    names: list[str] = []
+    candidate = 1
+    for _dimension in drawing.dimensions:
+        name = f"*D{candidate}"
+        while name in existing:
+            candidate += 1
+            name = f"*D{candidate}"
+        names.append(name)
+        existing.add(name)
+        candidate += 1
+    return tuple(names)
+
+
+def dimension_block_definition(name: str) -> list[str]:
+    return pairs(
+        (
+            (0, "BLOCK"),
+            (100, "AcDbEntity"),
+            (LAYER, "0"),
+            (100, "AcDbBlockBegin"),
+            (2, name),
+            (70, 1),
+            (X, 0.0),
+            (Y, 0.0),
+            (Z, 0.0),
+            (3, name),
+            (1, ""),
+            (0, "ENDBLK"),
+            (100, "AcDbEntity"),
+            (LAYER, "0"),
+            (100, "AcDbBlockEnd"),
+        )
+    )
+
+
 def blocks_section_body(drawing: DxfDrawing) -> list[str]:
     body: list[str] = []
     for block in drawing.blocks.values():
         body.extend(block_definition(block))
+    for name in dimension_block_names(drawing):
+        body.extend(dimension_block_definition(name))
     return body
 
 
