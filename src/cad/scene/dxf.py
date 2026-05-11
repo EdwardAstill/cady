@@ -391,6 +391,7 @@ class DxfDrawing:
     def add_dimension_entity(
         self, dimension: DimensionEntity | AngularDimensionEntity
     ) -> DxfDrawing:
+        self._require_dimstyle(dimension.dimstyle)
         self.layer(dimension.layer)
         self.dimensions.append(dimension)
         return self

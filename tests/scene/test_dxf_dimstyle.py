@@ -52,3 +52,19 @@ def test_drawing_rejects_dimension_for_unknown_dimstyle() -> None:
             layer="DIMS",
             dimstyle="DETAIL",
         )
+
+
+def test_add_dimension_entity_rejects_unknown_dimstyle() -> None:
+    from cad.scene.dxf import AngularDimensionEntity
+
+    drawing = DxfDrawing()
+    entity = AngularDimensionEntity(
+        center=(0.0, 0.0),
+        p1=(1.0, 0.0),
+        p2=(0.0, 1.0),
+        distance=0.5,
+        layer="DIMS",
+        dimstyle="DETAIL",
+    )
+    with pytest.raises(ValueError, match="dimstyle 'DETAIL' not registered"):
+        drawing.add_dimension_entity(entity)
