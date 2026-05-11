@@ -29,11 +29,11 @@ def test_dxf_rejects_3d() -> None:
         DxfDrawing().layer("X").add(sphere((0, 0, 0), 1))  # type: ignore[arg-type]
 
 
-def test_dxf_text_and_dimension_placeholder() -> None:
+def test_dxf_text_and_dimension_chaining() -> None:
     d = DxfDrawing().add_text("LABEL", at=(0, 0), height=0.01, layer="TEXT")
     assert d.texts[0].text == "LABEL"
-    with pytest.raises(NotImplementedError):
-        d.add_dimension()
+    assert d.add_dimension((0, 0), (1, 0), offset=0.1) is d
+    assert d.dimensions[0].kind == "aligned"
 
 
 def test_stl_mesh_chains_and_rejects_2d(tmp_path) -> None:

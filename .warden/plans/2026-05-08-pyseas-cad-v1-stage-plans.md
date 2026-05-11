@@ -174,6 +174,10 @@ outputs before tackling dimensions or STEP.
 
 ## Stage 4 Plan — Dimensions and Drawing Helpers
 
+**Status:** implemented 2026-05-11. Linear, aligned, radius, and diameter
+dimensions shipped as self-rendered `LINE`/`MTEXT` primitives; angular and
+native DXF `DIMENSION` entities are deferred.
+
 **Purpose:** Add the drawing features that make generated DXF useful as an
 engineering drawing rather than just geometry.
 

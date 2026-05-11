@@ -115,6 +115,66 @@ class Drawing2D:
         self._drawing.insert(name, at, layer=layer, scale=scale, rotation=rotation)
         return self
 
+    def linear_dimension(
+        self,
+        a: Vec2 | tuple[float, float],
+        b: Vec2 | tuple[float, float],
+        *,
+        offset: float,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> Drawing2D:
+        self._drawing.linear_dimension(
+            a, b, offset=offset, layer=layer, text=text, text_height=text_height
+        )
+        return self
+
+    def aligned_dimension(
+        self,
+        a: Vec2 | tuple[float, float],
+        b: Vec2 | tuple[float, float],
+        *,
+        offset: float,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> Drawing2D:
+        self._drawing.aligned_dimension(
+            a, b, offset=offset, layer=layer, text=text, text_height=text_height
+        )
+        return self
+
+    def radius_dimension(
+        self,
+        centre: Vec2 | tuple[float, float],
+        radius: float,
+        *,
+        angle: float = 0.0,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> Drawing2D:
+        self._drawing.radius_dimension(
+            centre, radius, angle=angle, layer=layer, text=text, text_height=text_height
+        )
+        return self
+
+    def diameter_dimension(
+        self,
+        centre: Vec2 | tuple[float, float],
+        radius: float,
+        *,
+        angle: float = 0.0,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> Drawing2D:
+        self._drawing.diameter_dimension(
+            centre, radius, angle=angle, layer=layer, text=text, text_height=text_height
+        )
+        return self
+
     def to_dxf_drawing(self) -> DxfDrawing:
         return self._drawing
 
@@ -239,6 +299,8 @@ class Model:
                     )
             for text in dxf.texts:
                 drawing.add_text(text.text, text.at, text.height, text.layer)
+            for dimension in dxf.dimensions:
+                drawing.add_dimension_entity(dimension)
             for block in dxf.blocks.values():
                 if block.name in drawing.blocks:
                     raise SceneError(f"duplicate block name across model drawings: {block.name}")

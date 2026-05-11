@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from cad.errors import WriteError
+from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
-from cad.scene.dxf import DxfDrawing
+from cad.scene.dxf import DimensionEntity, DxfDrawing
 from cad.write.dxf.blocks import blocks_section_body, insert_entity
+from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
 from cad.write.dxf.entities import mtext_entity, shape_entities
 from cad.write.dxf.hatch import hatch_entity
@@ -48,6 +50,8 @@ def _entities(drawing: DxfDrawing) -> list[str]:
         body.extend(hatch_entity(hatch))
     for insert in drawing.inserts:
         body.extend(insert_entity(insert))
+    for dimension in drawing.dimensions:
+        body.extend(dimension_entities(dimension))
     return section("ENTITIES", body)
 
 
@@ -64,8 +68,25 @@ def _bounds(drawing: DxfDrawing) -> tuple[Vec2, Vec2]:
         points.extend((mn, mx))
     for insert in drawing.inserts:
         points.append(insert.at)
+    for dimension in drawing.dimensions:
+        mn, mx = _dimension_bounds(dimension)
+        points.extend((mn, mx))
     if not points:
         return (Vec2(0, 0), Vec2(0, 0))
+    return (
+        Vec2(min(point.x for point in points), min(point.y for point in points)),
+        Vec2(max(point.x for point in points), max(point.y for point in points)),
+    )
+
+
+def _dimension_bounds(dimension: DimensionEntity) -> tuple[Vec2, Vec2]:
+    points = [dimension.a, dimension.b]
+    if dimension.kind in {"linear", "aligned"}:
+        offset = perpendicular(dimension.b - dimension.a) * dimension.offset
+        points.extend((dimension.a + offset, dimension.b + offset))
+    elif dimension.kind == "diameter":
+        radius = dimension.b - dimension.a
+        points.append(dimension.a - radius)
     return (
         Vec2(min(point.x for point in points), min(point.y for point in points)),
         Vec2(max(point.x for point in points), max(point.y for point in points)),
@@ -79,6 +100,7 @@ def _entity_count(drawing: DxfDrawing) -> int:
         + len(drawing.hatches)
         + len(drawing.blocks)
         + len(drawing.inserts)
+        + len(drawing.dimensions)
     )
 
 

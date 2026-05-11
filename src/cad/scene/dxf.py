@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import cos, sin
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from cad.errors import SceneError
 from cad.geom.base import Shape2D
@@ -24,6 +25,24 @@ class TextEntity:
     at: Vec2
     height: float
     layer: str
+
+
+DimensionKind = Literal["linear", "aligned", "radius", "diameter"]
+
+
+def _format_measurement(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+@dataclass(slots=True)
+class DimensionEntity:
+    kind: DimensionKind
+    a: Vec2
+    b: Vec2
+    offset: float
+    layer: str
+    text: str
+    text_height: float
 
 
 @dataclass(slots=True)
@@ -71,7 +90,7 @@ class Layer:
         if not boundary.closed:
             raise SceneError("DXF hatch boundary must be closed")
         if pattern.upper() != "ANSI31":
-            raise SceneError("only ANSI31 hatch pattern is supported in Stage 3")
+            raise SceneError("only ANSI31 hatch pattern is supported")
         if scale <= 0:
             raise SceneError("hatch scale must be positive")
         self.hatches.append(HatchEntity(boundary, self.name, "ANSI31", float(angle), float(scale)))
@@ -121,6 +140,7 @@ class DxfDrawing:
     texts: list[TextEntity] = field(default_factory=list[TextEntity])
     blocks: dict[str, BlockDefinition] = field(default_factory=dict[str, BlockDefinition])
     inserts: list[InsertEntity] = field(default_factory=list[InsertEntity])
+    dimensions: list[DimensionEntity] = field(default_factory=list[DimensionEntity])
 
     @property
     def hatches(self) -> list[HatchEntity]:
@@ -180,8 +200,113 @@ class DxfDrawing:
         self.inserts.append(InsertEntity(name, promote2(at), layer, float(scale), float(rotation)))
         return self
 
-    def add_dimension(self, *args: object, **kwargs: object) -> None:
-        raise NotImplementedError("DXF dimensions are reserved for Stage 4")
+    def linear_dimension(
+        self,
+        a: Vec2 | tuple[float, float],
+        b: Vec2 | tuple[float, float],
+        *,
+        offset: float,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> DxfDrawing:
+        start = promote2(a)
+        end = promote2(b)
+        if start == end:
+            raise SceneError("dimension points must differ")
+        if start.x != end.x and start.y != end.y:
+            raise SceneError("linear dimensions require horizontal or vertical points; use aligned")
+        return self._dimension("linear", start, end, offset, layer, text, text_height)
+
+    def aligned_dimension(
+        self,
+        a: Vec2 | tuple[float, float],
+        b: Vec2 | tuple[float, float],
+        *,
+        offset: float,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> DxfDrawing:
+        start = promote2(a)
+        end = promote2(b)
+        if start == end:
+            raise SceneError("dimension points must differ")
+        return self._dimension("aligned", start, end, offset, layer, text, text_height)
+
+    def radius_dimension(
+        self,
+        centre: Vec2 | tuple[float, float],
+        radius: float,
+        *,
+        angle: float = 0.0,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> DxfDrawing:
+        if radius <= 0:
+            raise SceneError("dimension radius must be positive")
+        start = promote2(centre)
+        end = Vec2(start.x + float(radius) * cos(angle), start.y + float(radius) * sin(angle))
+        label = text if text is not None else f"R{_format_measurement(float(radius))}"
+        return self._dimension("radius", start, end, 0.0, layer, label, text_height)
+
+    def diameter_dimension(
+        self,
+        centre: Vec2 | tuple[float, float],
+        radius: float,
+        *,
+        angle: float = 0.0,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> DxfDrawing:
+        if radius <= 0:
+            raise SceneError("dimension radius must be positive")
+        start = promote2(centre)
+        end = Vec2(start.x + float(radius) * cos(angle), start.y + float(radius) * sin(angle))
+        label = text if text is not None else f"DIA {_format_measurement(float(radius) * 2)}"
+        return self._dimension("diameter", start, end, 0.0, layer, label, text_height)
+
+    def add_dimension(
+        self,
+        a: Vec2 | tuple[float, float],
+        b: Vec2 | tuple[float, float],
+        *,
+        offset: float,
+        layer: str = "DIMENSIONS",
+        text: str | None = None,
+        text_height: float = 0.025,
+    ) -> DxfDrawing:
+        return self.aligned_dimension(
+            a, b, offset=offset, layer=layer, text=text, text_height=text_height
+        )
+
+    def add_dimension_entity(self, dimension: DimensionEntity) -> DxfDrawing:
+        self.layer(dimension.layer)
+        self.dimensions.append(dimension)
+        return self
+
+    def _dimension(
+        self,
+        kind: DimensionKind,
+        a: Vec2,
+        b: Vec2,
+        offset: float,
+        layer: str,
+        text: str | None,
+        text_height: float,
+    ) -> DxfDrawing:
+        if not layer:
+            raise SceneError("dimension layer cannot be empty")
+        if text_height <= 0:
+            raise SceneError("dimension text height must be positive")
+        self.layer(layer)
+        label = text if text is not None else _format_measurement((b - a).length())
+        self.dimensions.append(
+            DimensionEntity(kind, a, b, float(offset), layer, label, text_height)
+        )
+        return self
 
     def write(self, path: str | Path) -> DxfDrawing:
         from cad.write.dxf.sections import write_dxf

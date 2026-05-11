@@ -124,6 +124,8 @@ Acceptance:
 
 ### Stage 4 — Dimensions and Drawing Helpers
 
+**Status:** implemented 2026-05-11.
+
 **Goal:** Add enough dimension output and construction helpers for practical 2D
 engineering drawings.
 

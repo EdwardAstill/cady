@@ -200,19 +200,30 @@
       "area": "model-dxf-production-export",
       "set_at": "2026-05-11T00:00:00+08:00",
       "value": "Model.write_dxf preserves hatches, linetypes, block definitions, and inserts from Drawing2D scenes; duplicate block names across drawings raise SceneError"
+    },
+    {
+      "area": "dxf-dimensions-stage-4",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Stage 4 dimensions are self-rendered as LINE and MTEXT primitives, not native DXF DIMENSION entities"
+    },
+    {
+      "area": "dxf-hatch-islands-stage-4",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "HATCH supports one-level profile holes/islands through Shape2D.inner_loops"
+    },
+    {
+      "area": "geom-helpers-stage-4",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "cad.geom.helpers exposes midpoint, perpendicular, and offset_point for drawing helper placement"
     }
   ],
   "deferred": [
     {
-      "item": "DIMENSION rendering (linear/aligned/angular/radius) \u2014 Stage 4 spec, AutoCAD-anonymous vs computed-block strategy decided then",
+      "item": "Native DXF DIMENSION entities \u2014 deferred until editable CAD dimensions are worth the compatibility risk",
       "reason": ""
     },
     {
-      "item": "HATCH (weld hatching) \u2014 Stage 3; ANSI31 pattern minimum",
-      "reason": ""
-    },
-    {
-      "item": "INSERT/BLOCK references for shackle/bolt/weld symbol reuse \u2014 Stage 3",
+      "item": "Angular dimensions \u2014 deferred beyond Stage 4; linear/aligned/radius/diameter cover the production plate example",
       "reason": ""
     },
     {
@@ -264,7 +275,7 @@
       "reason": ""
     },
     {
-      "item": "Geometry helpers: midpoint(line), perpendicular(line, at), tangent_circle(c1,c2,r), offset_curve(curve, distance) \u2014 Stage 3 alongside DIMENSION (which needs midpoint and perpendicular). cad.geom.helpers module.",
+      "item": "Advanced geometry helpers: tangent_circle(c1,c2,r), offset_curve(curve, distance), split/intersect helpers \u2014 deferred beyond the Stage 4 minimum",
       "reason": ""
     },
     {

@@ -12,8 +12,8 @@
 
 **Recommended MCPs:** none
 
-**Status:** draft
-**Refinement passes:** 0
+**Status:** implemented
+**Refinement passes:** 1
 
 ## Draft Task Headings
 
@@ -23,9 +23,18 @@
 4. Emit linear dimension DXF through the chosen strategy.
 5. Add aligned dimension support.
 6. Add radial or diameter dimension support.
-7. Add angular dimension support if still inside approved Stage 4 scope.
+7. Add hatch holes/islands for profiles with `inner_loops`.
 8. Add model-first dimension example.
 9. Update README, preference locks, and Stage 5 STEP planning artifacts.
+
+## Implementation Result
+
+- Implemented self-rendered linear, aligned, radius, and diameter dimensions.
+- Implemented one-level HATCH holes/islands for shapes with `inner_loops`.
+- Added small geometry helpers for midpoint, perpendicular normal, and
+  perpendicular offset points.
+- Updated the production DXF example and regenerated the gallery DXF.
+- Deferred angular dimensions and native DXF `DIMENSION` entities.
 
 ## Draft Acceptance Commands
 

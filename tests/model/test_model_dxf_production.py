@@ -38,6 +38,22 @@ def test_model_write_dxf_preserves_hatch_blocks_inserts_and_linetypes(tmp_path) 
     assert sum(1 for entity in doc.modelspace() if entity.dxftype() == "INSERT") == 1
 
 
+def test_model_write_dxf_preserves_dimensions(tmp_path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    path = tmp_path / "dimensions.dxf"
+    model = Model("demo", created_at="2026-05-08T00:00:00Z")
+    drawing = model.drawing("front")
+    drawing.linear_dimension((0, 0), (1, 0), offset=0.1)
+    drawing.radius_dimension((0.5, 0.5), 0.2)
+
+    model.write_dxf(path)
+    doc = ezdxf.readfile(path)
+    audit = doc.audit()
+
+    assert not audit.errors
+    assert sum(1 for entity in doc.modelspace() if entity.dxftype() == "MTEXT") == 2
+
+
 def test_model_write_dxf_rejects_duplicate_block_names_across_drawings(tmp_path) -> None:
     model = Model("demo", created_at="2026-05-08T00:00:00Z")
     model.drawing("front").block("PIN_MARK")

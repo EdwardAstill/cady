@@ -19,4 +19,7 @@ def test_production_dxf_example(tmp_path) -> None:
         text=True,
     )
     assert result.stdout == ""
-    assert (tmp_path / "production_plate.dxf").stat().st_size > 0
+    text = (tmp_path / "production_plate.dxf").read_text(encoding="ascii")
+    assert "DIA 0.24" in text
+    assert "R0.12" in text
+    assert text.count("\n0\nHATCH\n") == 1

@@ -2,7 +2,9 @@
 
 `scripts/` contains runnable example programs.
 
-`gallery/` contains generated DXF and STL products from those scripts.
+`gallery/` contains generated DXF and STL products from those scripts. The
+production DXF gallery file demonstrates hatch holes/islands and self-rendered
+dimensions.
 
 Run all gallery examples from the repository root:
 

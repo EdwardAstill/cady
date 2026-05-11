@@ -17,8 +17,21 @@ def hatch_boundary_points(boundary: Shape2D) -> tuple[Vec2, ...]:
     return points
 
 
+def _boundary_path(points: tuple[Vec2, ...], flags: int) -> list[tuple[int, object]]:
+    items: list[tuple[int, object]] = [
+        (92, flags),
+        (72, 0),
+        (73, 1),
+        (93, len(points)),
+    ]
+    for vertex in points:
+        items.extend(((X, vertex.x), (Y, vertex.y)))
+    items.append((97, 0))
+    return items
+
+
 def hatch_entity(hatch: HatchEntity) -> list[str]:
-    vertices = hatch_boundary_points(hatch.boundary)
+    loops = (hatch.boundary, *hatch.boundary.inner_loops)
     items: list[tuple[int, object]] = [
         (0, "HATCH"),
         (100, "AcDbEntity"),
@@ -33,17 +46,12 @@ def hatch_entity(hatch: HatchEntity) -> list[str]:
         (2, hatch.pattern),
         (70, 0),
         (71, 0),
-        (91, 1),
-        (92, 3),
-        (72, 0),
-        (73, 1),
-        (93, len(vertices)),
+        (91, len(loops)),
     ]
-    for vertex in vertices:
-        items.extend(((X, vertex.x), (Y, vertex.y)))
+    for index, loop in enumerate(loops):
+        items.extend(_boundary_path(hatch_boundary_points(loop), 3 if index == 0 else 18))
     items.extend(
         (
-            (97, 0),
             (75, 1),
             (76, 1),
             (52, hatch.angle),

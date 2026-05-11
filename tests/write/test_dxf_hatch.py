@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import DxfDrawing, SceneError, line, rectangle
+from cad import DxfDrawing, SceneError, circle, line, rectangle
 from cad.write.dxf.sections import render_dxf
 
 
@@ -55,3 +55,19 @@ def test_hatch_round_trip_with_ezdxf(tmp_path) -> None:
 
     assert not audit.errors
     assert counts["HATCH"] == 1
+
+
+def test_hatch_with_hole_emits_multiple_boundary_paths(tmp_path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    path = tmp_path / "hatch-hole.dxf"
+    profile = rectangle((0, 0), (1, 1)).with_hole(circle((0.5, 0.5), 0.2))
+    drawing = DxfDrawing()
+    drawing.layer("SECTION").hatch(profile, pattern="ANSI31", scale=0.025)
+    drawing.write(path)
+
+    doc = ezdxf.readfile(path)
+    audit = doc.audit()
+    hatch = next(entity for entity in doc.modelspace() if entity.dxftype() == "HATCH")
+
+    assert not audit.errors
+    assert len(hatch.paths) == 2

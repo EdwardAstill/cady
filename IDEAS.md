@@ -2,7 +2,8 @@
 
 > Status note (2026-05-11): This is historical ideation. Current roadmap
 > artifacts live under `.warden/specs/` and `.warden/plans/`. Stage 1, Stage 2,
-> and Stage 3 production DXF are implemented; Stage 4 dimensions is next.
+> Stage 3 production DXF, and Stage 4 self-rendered dimensions are implemented;
+> Stage 5 STEP is next.
 
 A pure-Python CAD writer library for 2D engineering drawings (DXF) and
 3D solids (STEP), shaped for use by `pyseas-yard` and other pyseas-*

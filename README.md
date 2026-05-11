@@ -3,12 +3,13 @@
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018 or STL.
 
-pyseas-cad is currently at **Stage 3**:
+pyseas-cad is currently at **Stage 4**:
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
 - production DXF helpers for `HATCH`, `BLOCK`, `INSERT`, and built-in
   linetypes,
+- self-rendered DXF dimensions and hatch holes/islands,
 - binary and ASCII STL writer,
 - model layer for named drawings, parts, assemblies, and metadata,
 - end-to-end plate-with-hole example.
@@ -48,9 +49,9 @@ Run the production DXF example:
 PYTHONPATH=src python examples/scripts/production_dxf.py
 ```
 
-This writes `examples/gallery/production_plate.dxf` with hatching, centerlines,
-a reusable block, and two inserts. Pass `--out <dir>` to any example script to
-write somewhere else.
+This writes `examples/gallery/production_plate.dxf` with hatching, hatch holes,
+centerlines, dimensions, a reusable block, and two inserts. Pass `--out <dir>`
+to any example script to write somewhere else.
 
 ## Current API
 
@@ -92,16 +93,24 @@ Production DXF features:
 from cad import Model, circle, line, rectangle
 
 outline = rectangle((0, 0), (1.0, 0.6))
+hole = circle((0.5, 0.3), 0.12)
+profile = outline.with_hole(hole)
 
 model = Model("production_plate")
 front = model.drawing("front")
-front.layer("PLATE").add(outline)
-front.layer("SECTION").hatch(outline, pattern="ANSI31", scale=0.025)
+front.layer("PLATE").add(outline).add(hole)
+front.layer("SECTION").hatch(profile, pattern="ANSI31", scale=0.025)
 front.layer("CENTER", linetype="CENTER").add(line((0.5, 0.05), (0.5, 0.55)))
 front.block("PIN_MARK").layer("SYMBOL").add(circle((0, 0), 0.025))
 front.insert("PIN_MARK", at=(0.5, 0.3), layer="SYMBOL")
+front.linear_dimension((0, 0), (1.0, 0), offset=-0.08)
+front.diameter_dimension((0.5, 0.3), 0.12)
 model.write_dxf("production_plate.dxf")
 ```
+
+Dimensions are self-rendered as standard `LINE` and `MTEXT` primitives instead
+of native DXF `DIMENSION` entities. This keeps generated DXF small and auditable,
+but it does not create editable CAD dimension objects.
 
 ## Target v1 API
 
@@ -137,7 +146,7 @@ Current sequence:
 1. Stage 1: geometry, DXF basics, STL — implemented
 2. Stage 2: `cad.model` layer — implemented
 3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — implemented
-4. Stage 4: dimensions and drawing helpers — next
+4. Stage 4: dimensions and drawing helpers — implemented
 5. Stage 5: STEP MVP and v1 hardening
 
 ## Development
