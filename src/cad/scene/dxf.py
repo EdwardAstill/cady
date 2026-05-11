@@ -30,6 +30,15 @@ class DimStyle:
             raise ValueError("DimStyle: name must be non-empty")
         if self.decimal_places < 0:
             raise ValueError("DimStyle: decimal_places must be non-negative")
+        for field_name in (
+            "text_height",
+            "arrow_size",
+            "extension_offset",
+            "extension_extend",
+            "text_gap",
+        ):
+            if getattr(self, field_name) <= 0:
+                raise ValueError(f"DimStyle: {field_name} must be positive")
 
 
 def _normalise_linetype(linetype: str) -> str:
@@ -359,9 +368,16 @@ class DxfDrawing:
         layer: str = "DIMENSIONS",
         text: str | None = None,
         text_height: float = 0.025,
+        dimstyle: str = "Standard",
     ) -> DxfDrawing:
         return self.aligned_dimension(
-            a, b, offset=offset, layer=layer, text=text, text_height=text_height
+            a,
+            b,
+            offset=offset,
+            layer=layer,
+            text=text,
+            text_height=text_height,
+            dimstyle=dimstyle,
         )
 
     def angular_dimension(

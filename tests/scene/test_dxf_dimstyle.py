@@ -54,6 +54,21 @@ def test_drawing_rejects_dimension_for_unknown_dimstyle() -> None:
         )
 
 
+def test_dimstyle_rejects_non_positive_text_height() -> None:
+    with pytest.raises(ValueError, match="text_height must be positive"):
+        DimStyle(name="X", text_height=0.0)
+
+
+def test_dimstyle_rejects_negative_arrow_size() -> None:
+    with pytest.raises(ValueError, match="arrow_size must be positive"):
+        DimStyle(name="X", arrow_size=-0.1)
+
+
+def test_dimstyle_rejects_zero_text_gap() -> None:
+    with pytest.raises(ValueError, match="text_gap must be positive"):
+        DimStyle(name="X", text_gap=0.0)
+
+
 def test_add_dimension_entity_rejects_unknown_dimstyle() -> None:
     from cad.scene.dxf import AngularDimensionEntity
 
