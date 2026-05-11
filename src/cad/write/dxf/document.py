@@ -86,9 +86,9 @@ def _dimension_bounds(
     dimension: DimensionEntity | AngularDimensionEntity,
 ) -> tuple[Vec2, Vec2]:
     if isinstance(dimension, AngularDimensionEntity):
-        from cad.write.dxf.dimensions import _angular_dim_arc_point
+        from cad.write.dxf.dimensions import angular_dim_arc_point
 
-        arc_pt = _angular_dim_arc_point(dimension)
+        arc_pt = angular_dim_arc_point(dimension)
         pts = [
             Vec2(dimension.center[0], dimension.center[1]),
             Vec2(dimension.p1[0], dimension.p1[1]),

@@ -85,7 +85,7 @@ def _diameter_dimension(dimension: DimensionEntity, block_name: str) -> list[str
     return pairs(items)
 
 
-def _angular_dim_arc_point(dim: AngularDimensionEntity) -> tuple[float, float]:
+def angular_dim_arc_point(dim: AngularDimensionEntity) -> tuple[float, float]:
     v1 = (dim.p1[0] - dim.center[0], dim.p1[1] - dim.center[1])
     v2 = (dim.p2[0] - dim.center[0], dim.p2[1] - dim.center[1])
     mag1 = math.hypot(*v1)
@@ -105,7 +105,7 @@ def _angular_dim_arc_point(dim: AngularDimensionEntity) -> tuple[float, float]:
 
 
 def _angular_dimension(dim: AngularDimensionEntity, block_name: str) -> list[str]:
-    arc_pt = _angular_dim_arc_point(dim)
+    arc_pt = angular_dim_arc_point(dim)
     items: list[tuple[int, object]] = [
         (0, "DIMENSION"),
         (100, "AcDbEntity"),
