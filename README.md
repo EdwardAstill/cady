@@ -147,7 +147,9 @@ Current sequence:
 2. Stage 2: `cad.model` layer — implemented
 3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — implemented
 4. Stage 4: dimensions and drawing helpers — implemented
-5. Stage 5: STEP MVP and v1 hardening
+5. Stage 4.6: DXF writer hardening — next
+6. Stage 5: STEP MVP
+7. Stage 6: v1 product hardening
 
 ## Development
 

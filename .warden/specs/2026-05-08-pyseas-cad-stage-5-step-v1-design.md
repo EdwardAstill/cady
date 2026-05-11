@@ -1,9 +1,9 @@
-# pyseas-cad Stage 5 - STEP MVP and v1 Hardening
+# pyseas-cad Stage 5 - STEP MVP
 
 **Status:** draft.
 **Date:** 2026-05-11.
-**Purpose:** Design the first viewer-loadable STEP writer after Stage 4 drawing
-usability.
+**Purpose:** Design the first viewer-loadable STEP writer after DXF writer
+hardening.
 
 ## Goal
 
@@ -22,11 +22,13 @@ runtime pure-stdlib and the geometry API domain-blind.
 - Keep STL as the mesh preview/export path; STEP should carry editable CAD
   geometry where feasible.
 - Add viewer/audit smoke checks that do not introduce runtime dependencies.
+- Defer v1 product polish to Stage 6.
 
 ## Inputs From Stage 4
 
 - `Model` is the preferred export facade.
 - Drawing output is useful enough for DXF workflows.
+- Stage 4.6 hardens DXF writer section orchestration before STEP starts.
 - 3D geometry remains descriptive (`Extrusion`, `Revolution`, `Prism`), not a
   full boolean B-rep kernel.
 
@@ -45,3 +47,4 @@ runtime pure-stdlib and the geometry API domain-blind.
 - Fillets, blends, swept surfaces, and NURBS.
 - GD&T/product manufacturing information beyond minimal product structure.
 - Replacing STL for mesh workflows.
+- Final v1 packaging/docs hardening; that is Stage 6.

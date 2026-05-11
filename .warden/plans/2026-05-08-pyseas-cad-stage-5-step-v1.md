@@ -22,7 +22,8 @@ viewer/checker tools available locally.
 4. Add model-level STEP aggregation and error handling.
 5. Add tests and one gallery STEP product.
 6. Document supported/unsupported solids and verification limitations.
-7. Run full gates and fill the Stage 5 post-implementation review.
+7. Refine Stage 6 product-hardening artifacts from what actually shipped.
+8. Run full gates and fill the Stage 5 post-implementation review.
 
 ## Draft Acceptance Commands
 

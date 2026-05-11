@@ -145,12 +145,45 @@ Acceptance:
   available.
 - pyseas-yard-style 2D drawing recipe can be expressed without raw DXF calls.
 - Docs explain dimension compatibility limitations honestly.
-- Stage 5 STEP spec/plan are updated.
+- Stage 4.6 DXF writer hardening spec/plan are updated.
 
-### Stage 5 — STEP MVP and v1 Hardening
+### Stage 4.6 — DXF Writer Hardening
+
+**Status:** next.
+
+**Goal:** Make the DXF writer architecture explicit before adding another
+complex exporter.
+
+Why this comes before STEP:
+
+- Native dimensions now coordinate `TABLES`, `BLOCKS`, and `ENTITIES`.
+- Dimension block naming is deterministic but still derived in multiple
+  section emitters.
+- STEP will need its own ID allocation and section orchestration; the DXF
+  hardening pass gives us a small proven pattern without creating a premature
+  universal writer framework.
+
+Deliverables:
+
+- A `DxfRenderPlan` or equivalent render context built once per document.
+- Dimension anonymous block names allocated in that plan and reused by
+  `BLOCKS` and `ENTITIES`.
+- Section emitters receive explicit context instead of recomputing shared
+  writer state.
+- Tests prove every native `DIMENSION` references an existing anonymous block.
+- No public API changes.
+
+Acceptance:
+
+- Generated DXF output is byte-stable or intentionally regenerated in goldens
+  and gallery artifacts.
+- `ezdxf.audit()` still reports zero errors for production examples.
+- Full test/type/lint suite passes.
+
+### Stage 5 — STEP MVP
 
 **Goal:** Produce viewer-loadable 3D interchange files from the model layer and
-package pyseas-cad v1 as a usable library.
+prove the smallest useful STEP path.
 
 Deliverables:
 
@@ -166,8 +199,8 @@ Deliverables:
   - or documented multi-body/visual-review-only output if analytic holes are
     too expensive.
 - Viewer smoke files under `examples/` or `artifacts/`.
-- Final README/API docs.
-- Compatibility matrix for DXF/STL/STEP viewers tested.
+- One gallery STEP artifact.
+- Initial compatibility notes for STEP viewers/checkers tested.
 
 Out of v1 unless separately approved:
 
@@ -177,16 +210,54 @@ Out of v1 unless separately approved:
 - NURBS surfaces.
 - STEP GD&T.
 - STEP parser.
+- Broad v1 packaging polish; that is Stage 6.
 
 Acceptance:
 
 - `Model(...).write_step(path)` creates a `.step` file that loads in at least
   one accessible STEP viewer.
-- Stage 1 STL and DXF examples still pass.
+- Stage 1-4 DXF/STL examples still pass.
 - Full test/type/lint suite passes.
-- README documents install, quickstart, examples, and limitations.
-- `IDEAS.md` no longer contains stale stage guidance.
-- Post-v1 backlog is explicit and separated from v1 scope.
+- README documents STEP support and limitations honestly.
+- Stage 6 product-hardening spec/plan are updated from what STEP actually
+  shipped.
+
+### Stage 6 — v1 Product Hardening
+
+**Goal:** Make pyseas-cad boring to install, evaluate, and adopt.
+
+Deliverables:
+
+- Compatibility matrix for DXF/STL/STEP viewers tested.
+- Final README/API docs and gallery index.
+- Versioning/release checklist.
+- Packaging metadata review.
+- pyseas-yard integration notes or adapter sketch.
+- Stale `IDEAS.md` guidance either removed or clearly marked historical.
+- Post-v1 backlog split from v1 scope.
+
+Acceptance:
+
+- A new user can install editable, run examples, inspect gallery products, and
+  understand limitations from README alone.
+- Every gallery artifact is regenerated from `examples/scripts`.
+- Full test/type/lint suite passes.
+- Runtime dependency check stays empty.
+
+### Stage 7+ — Advanced CAD Capability Backlog
+
+**Goal:** Add capabilities only when real pyseas-yard/product use demands them.
+
+Candidates:
+
+- General boolean operations.
+- TRIM/split/intersection editing tools.
+- Sweep solids.
+- Fillets/chamfers/blends.
+- Sheet/title-block composition.
+- SVG writer.
+- R12 DXF fallback.
+- Richer STEP metadata and GD&T.
 
 ## Mandatory End-Of-Stage Gate
 

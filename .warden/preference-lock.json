@@ -220,6 +220,11 @@
       "area": "geom-helpers-stage-4",
       "set_at": "2026-05-11T00:00:00+08:00",
       "value": "cad.geom.helpers exposes midpoint, perpendicular, and offset_point for drawing helper placement"
+    },
+    {
+      "area": "roadmap-stage-sequencing",
+      "set_at": "2026-05-11T00:00:00+08:00",
+      "value": "Insert Stage 4.6 DXF writer hardening before STEP; split Stage 5 STEP MVP from Stage 6 v1 product hardening; keep advanced CAD kernel work in Stage 7+ backlog"
     }
   ],
   "deferred": [
@@ -232,7 +237,7 @@
       "reason": ""
     },
     {
-      "item": "Boolean cut for STEP \u2014 Stage 6; emit-two-solids vs CSG-on-mesh decided then",
+      "item": "Boolean cut for STEP \u2014 Stage 7+ backlog; Stage 5 must avoid depending on a general boolean kernel",
       "reason": ""
     },
     {
@@ -256,19 +261,19 @@
       "reason": ""
     },
     {
-      "item": "TRIM operation \u2014 Stage 4 spec; given a coordinate near intersecting entities, cut at intersections and remove the closest sub-entity. Requires pairwise intersection algorithms (line/line, line/arc, line/circle, etc.) plus split_at and closest-entity search. Estimated ~2-3 weeks.",
+      "item": "TRIM operation \u2014 Stage 7+ backlog; given a coordinate near intersecting entities, cut at intersections and remove the closest sub-entity. Requires pairwise intersection algorithms (line/line, line/arc, line/circle, etc.) plus split_at and closest-entity search. Estimated ~2-3 weeks.",
       "reason": ""
     },
     {
-      "item": "Sweep type \u2014 Stage 5+ alongside STEP work; sweep a 2D cross-section along a 3D path. Required for shackle bodies, U-bolts, pipe elbows. Currently no path equivalent of Polyline in 3D \u2014 would need Polyline3D or equivalent.",
+      "item": "Sweep type \u2014 Stage 7+ backlog, not required for STEP MVP; sweep a 2D cross-section along a 3D path. Required for shackle bodies, U-bolts, pipe elbows. Currently no path equivalent of Polyline in 3D \u2014 would need Polyline3D or equivalent.",
       "reason": ""
     },
     {
-      "item": "split_at(t) method on Line/Arc/Circle/Spline \u2014 Stage 1.5 or alongside TRIM in Stage 4; cut a 2D segment at parameter t in [0,1] returning two sub-entities. Cheapest precursor for trim/edit operations. Standalone useful for recipes that need to break long curves into pieces.",
+      "item": "split_at(t) method on Line/Arc/Circle/Spline \u2014 Stage 7+ backlog unless a near-term recipe requires it; cut a 2D segment at parameter t in [0,1] returning two sub-entities.",
       "reason": ""
     },
     {
-      "item": "intersect(a, b) function for 2D entity pairs \u2014 Stage 4 alongside TRIM. Pairwise: line/line, line/arc, line/circle minimum; full matrix is ~10 algorithms. Returns 0..N intersection points. Required by TRIM but standalone useful.",
+      "item": "intersect(a, b) function for 2D entity pairs \u2014 Stage 7+ backlog alongside TRIM. Pairwise: line/line, line/arc, line/circle minimum; full matrix is ~10 algorithms.",
       "reason": ""
     },
     {
@@ -280,7 +285,7 @@
       "reason": ""
     },
     {
-      "item": "3D fillet/chamfer/blend operations on extruded edges \u2014 Stage 6+ alongside boolean kernel. 2D chamfers are workable today by building 45-degree segments into the outline.",
+      "item": "3D fillet/chamfer/blend operations on extruded edges \u2014 Stage 7+ alongside boolean kernel. 2D chamfers are workable today by building 45-degree segments into the outline.",
       "reason": ""
     },
     {

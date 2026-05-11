@@ -25,7 +25,7 @@
 6. Add radial or diameter dimension support.
 7. Add hatch holes/islands for profiles with `inner_loops`.
 8. Add model-first dimension example.
-9. Update README, preference locks, and Stage 5 STEP planning artifacts.
+9. Update README, preference locks, and Stage 4.6 DXF hardening planning artifacts.
 
 ## Implementation Result
 

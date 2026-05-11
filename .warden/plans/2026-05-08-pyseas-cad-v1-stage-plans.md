@@ -9,8 +9,9 @@
 DXF drawings, STL previews, and basic viewer-loadable STEP files.
 
 **Architecture:** Stage 2 introduces the model layer that all later exporters
-consume. Stages 3-5 build output capability on that model instead of growing
-separate writer-specific scene APIs.
+consume. Stages 3-4 complete practical DXF. Stage 4.6 hardens DXF writer
+orchestration before Stage 5 adds STEP. Stage 6 turns the result into a v1
+product.
 
 **Tech Stack:** Python 3.11+, stdlib runtime, pytest, pyright strict via
 `pyproject.toml`, ruff, ezdxf for DXF verification.
@@ -221,7 +222,7 @@ engineering drawing rather than just geometry.
 - Update `IDEAS.md` with dimension strategy decision.
 - Update preference locks for dimension strategy and helper APIs.
 - Fill Stage 4 post-implementation review.
-- Create/refine Stage 5 STEP spec and plan.
+- Create/refine Stage 4.6 DXF writer hardening spec and plan.
 
 **Exit Criteria:**
 
@@ -229,10 +230,35 @@ engineering drawing rather than just geometry.
   DXF calls.
 - Dimension limitations are explicit and tested.
 
-## Stage 5 Plan — STEP MVP and v1 Hardening
+## Stage 4.6 Plan — DXF Writer Hardening
 
-**Purpose:** Produce basic viewer-loadable STEP from model parts and finish v1
-as a usable product.
+**Purpose:** Make DXF writer shared state explicit before STEP work starts.
+
+**Design Spec To Create:**
+
+- `.warden/specs/2026-05-11-pyseas-cad-stage-4-6-dxf-writer-hardening-design.md`
+
+**Implementation Plan To Create After Spec Approval:**
+
+- `.warden/plans/2026-05-11-pyseas-cad-stage-4-6-dxf-writer-hardening.md`
+
+**Major Work Units:**
+
+1. Test native dimension block reference consistency.
+2. Add a small `DxfRenderPlan`/context.
+3. Pass that plan into DXF section emitters that need shared state.
+4. Preserve public APIs and gallery behavior.
+5. Run full gates.
+
+**Exit Criteria:**
+
+- DXF output remains valid and native dimensions remain editable.
+- Shared writer state is allocated once per render.
+
+## Stage 5 Plan — STEP MVP
+
+**Purpose:** Produce basic viewer-loadable STEP from model parts. Do not bundle
+general product polish into this stage.
 
 **Design Spec To Create:**
 
@@ -258,12 +284,9 @@ as a usable product.
 6. Decide and implement first hole strategy:
    - analytic circular-hole topology for common extruded plate case, or
    - documented multi-body/visual review limitation.
-7. Add viewer smoke artifacts/examples.
-8. Build compatibility matrix:
-   - online STEP viewer
-   - local viewer if available
-   - parser/viewer notes
-9. Harden packaging/docs for v1.
+7. Add one gallery STEP artifact.
+8. Record initial viewer/checker notes.
+9. Update Stage 6 hardening plan from what actually shipped.
 
 **Acceptance Commands:**
 
@@ -277,18 +300,44 @@ as a usable product.
 
 **End Gate:**
 
-- Update README as v1 documentation.
-- Remove stale roadmap guidance from `IDEAS.md`.
+- Update README with STEP MVP support and limitations.
 - Update preference locks for STEP scope and limitations.
 - Fill Stage 5 post-implementation review.
-- Create post-v1 backlog spec if needed.
+- Refine Stage 6 v1 product-hardening spec/plan.
 
 **Exit Criteria:**
 
 - A user can call `Model(...).write_step(path)` and load the result in at
   least one accessible STEP viewer.
 - DXF and STL examples still pass.
-- v1 limitations are honest and visible.
+- STEP MVP limitations are honest and visible.
+
+## Stage 6 Plan — v1 Product Hardening
+
+**Purpose:** Make pyseas-cad adoptable after the core exporters exist.
+
+**Design Spec To Create:**
+
+- `.warden/specs/2026-05-11-pyseas-cad-stage-6-v1-product-hardening-design.md`
+
+**Implementation Plan To Create After Spec Approval:**
+
+- `.warden/plans/2026-05-11-pyseas-cad-stage-6-v1-product-hardening.md`
+
+**Major Work Units:**
+
+1. Audit and update README/API docs.
+2. Add a gallery index and regeneration workflow.
+3. Build DXF/STL/STEP compatibility matrix.
+4. Review package metadata, versioning, and dependency guarantees.
+5. Add pyseas-yard integration notes.
+6. Split the post-v1 backlog into clear candidate specs.
+
+**Exit Criteria:**
+
+- A fresh user can install, run examples, inspect artifacts, and understand
+  limitations from README and examples alone.
+- v1 is ready to tag/release or consciously defer.
 
 ## Cross-Stage Documentation Rule
 
