@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from cad import Model, WriteError, prism
-from cad.write.step.ids import IdAllocator
+from cad.model.core import Part
 from cad.write.step.document import render_step
+from cad.write.step.ids import IdAllocator
 
 
 def test_id_allocator_returns_sequential_ids() -> None:
@@ -28,7 +31,6 @@ def test_render_step_contains_iso_header() -> None:
 
 
 def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
-    from cad.model.core import Part
     part = Part("box")
     part.add(prism((0, 0, 0), (1, 1, 1)))
     text = render_step([part], "box_model")
@@ -40,14 +42,10 @@ def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
 
 def test_render_step_rejects_sphere_solid() -> None:
     from cad import sphere
-    from cad.model.core import Part
     part = Part("bad")
     part.add(sphere((0, 0, 0), 1.0))
-    try:
+    with pytest.raises(WriteError, match="Sphere"):
         render_step([part], "bad")
-        assert False, "expected WriteError"
-    except WriteError:
-        pass
 
 
 def test_model_write_step_produces_file(tmp_path) -> None:
