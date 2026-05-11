@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from cad.geom.shapes3d import Prism
+import math
+
+from cad.errors import WriteError
+from cad.geom.base import axis_vector
+from cad.geom.shapes2d import Circle, Polyline
+from cad.geom.shapes3d import Extrusion, Prism
 from cad.write.step.ids import IdAllocator
 
 
@@ -114,6 +119,135 @@ def prism_brep(ids: IdAllocator, solid: Prism) -> int:
         el_id = _el(ids, oe_ids)
         fob_id = _fob(ids, el_id)
         plane_id = _plane(ids, coords[ov], normal, ref)
+        af_ids.append(_af(ids, fob_id, plane_id))
+
+    shell_refs = ",".join(f"#{i}" for i in af_ids)
+    cs_id = ids.add(f"CLOSED_SHELL('',({shell_refs}))")
+    return ids.add(f"MANIFOLD_SOLID_BREP('',#{cs_id})")
+
+
+def _profile_points(profile: Polyline | Circle, segments: int = 32) -> list[tuple[float, float]]:
+    """Return a deduplicated list of XY points for *profile*.
+
+    Circles are discretised into *segments* vertices.
+    For Polyline the closing vertex is dropped.
+    """
+    if isinstance(profile, Circle):
+        cx, cy = profile.centre.x, profile.centre.y
+        r = profile.radius
+        return [
+            (cx + r * math.cos(2 * math.pi * i / segments),
+             cy + r * math.sin(2 * math.pi * i / segments))
+            for i in range(segments)
+        ]
+    pts = list(profile.points())
+    if pts and pts[0] == pts[-1]:
+        pts = pts[:-1]
+    return [(p.x, p.y) for p in pts]
+
+
+def extrusion_brep(ids: IdAllocator, solid: Extrusion) -> int:
+    """Emit all entities for a polygonal extrusion MANIFOLD_SOLID_BREP; return its entity ID.
+
+    Only +z and -z axis strings and unit Vec3 directions within 1e-9 of those are supported.
+    The profile must be a closed Polyline or Circle.
+    """
+    if not isinstance(solid.profile, (Polyline, Circle)):
+        raise WriteError(
+            f"STEP Extrusion only supports Polyline or Circle profiles; "
+            f"got {type(solid.profile).__name__}"
+        )
+
+    axis_vec = axis_vector(solid.axis)
+    ax, ay, az = axis_vec.x, axis_vec.y, axis_vec.z
+    if abs(ax) > 1e-9 or abs(ay) > 1e-9:
+        raise WriteError("STEP Extrusion only supports +z / -z axis directions")
+
+    ox, oy, oz = solid.offset.x, solid.offset.y, solid.offset.z
+    d = solid.distance
+    sign = 1.0 if az > 0 else -1.0
+    z_bot = oz
+    z_top = oz + sign * d
+
+    xy_pts = _profile_points(solid.profile)
+    n = len(xy_pts)
+    if n < 3:
+        raise WriteError("Extrusion profile must have at least 3 vertices")
+
+    bot = [(x + ox, y + oy, z_bot) for x, y in xy_pts]
+    top = [(x + ox, y + oy, z_top) for x, y in xy_pts]
+
+    # Cartesian points + vertex points
+    cp_bot = [_cp(ids, *p) for p in bot]
+    cp_top = [_cp(ids, *p) for p in top]
+    vp_bot = [_vp(ids, cp) for cp in cp_bot]
+    vp_top = [_vp(ids, cp) for cp in cp_top]
+
+    # Bottom edges: bot[i] → bot[(i+1)%n]
+    ec_bot: list[int] = []
+    for i in range(n):
+        j = (i + 1) % n
+        dx = bot[j][0] - bot[i][0]
+        dy = bot[j][1] - bot[i][1]
+        length = math.hypot(dx, dy)
+        dir_id = _dir(ids, dx / length, dy / length, 0.0)
+        ec_bot.append(_ec(ids, vp_bot[i], vp_bot[j], _line(ids, cp_bot[i], dir_id)))
+
+    # Top edges: top[i] → top[(i+1)%n]
+    ec_top: list[int] = []
+    for i in range(n):
+        j = (i + 1) % n
+        dx = top[j][0] - top[i][0]
+        dy = top[j][1] - top[i][1]
+        length = math.hypot(dx, dy)
+        dir_id = _dir(ids, dx / length, dy / length, 0.0)
+        ec_top.append(_ec(ids, vp_top[i], vp_top[j], _line(ids, cp_top[i], dir_id)))
+
+    # Vertical edges: bot[i] → top[i]
+    ec_vert: list[int] = []
+    for i in range(n):
+        dz = z_top - z_bot
+        dir_id = _dir(ids, 0.0, 0.0, 1.0 if dz > 0 else -1.0)
+        ec_vert.append(_ec(ids, vp_bot[i], vp_top[i], _line(ids, cp_bot[i], dir_id)))
+
+    af_ids: list[int] = []
+
+    # Bottom face: normal (0,0,-1) if +z extrusion, normal (0,0,+1) if -z
+    # For outward normal, bottom face normal points away from the solid
+    bot_normal = (0.0, 0.0, -sign)
+    ref_dir = (1.0, 0.0, 0.0) if abs(xy_pts[0][0] - xy_pts[1][0]) > 1e-9 else (0.0, 1.0, 0.0)
+    # Bottom loop: reverse order for outward normal
+    oe_bot = [_oe(ids, ec_bot[(n - 1 - i) % n], False) for i in range(n)]
+    el_bot = _el(ids, oe_bot)
+    fob_bot = _fob(ids, el_bot)
+    plane_bot = _plane(ids, bot[0], bot_normal, ref_dir)
+    af_ids.append(_af(ids, fob_bot, plane_bot))
+
+    # Top face: normal (0,0,+sign)
+    top_normal = (0.0, 0.0, sign)
+    oe_top = [_oe(ids, ec_top[i], True) for i in range(n)]
+    el_top = _el(ids, oe_top)
+    fob_top = _fob(ids, el_top)
+    plane_top = _plane(ids, top[0], top_normal, ref_dir)
+    af_ids.append(_af(ids, fob_top, plane_top))
+
+    # Side faces: quad for each edge
+    for i in range(n):
+        j = (i + 1) % n
+        dx = xy_pts[j][0] - xy_pts[i][0]
+        dy = xy_pts[j][1] - xy_pts[i][1]
+        length = math.hypot(dx, dy)
+        outward_normal = (dy / length, -dx / length, 0.0)
+
+        oe_ids = [
+            _oe(ids, ec_bot[i], True),
+            _oe(ids, ec_vert[j], True),
+            _oe(ids, ec_top[i], False),
+            _oe(ids, ec_vert[i], False),
+        ]
+        el_id = _el(ids, oe_ids)
+        fob_id = _fob(ids, el_id)
+        plane_id = _plane(ids, bot[i], outward_normal, (0.0, 0.0, 1.0))
         af_ids.append(_af(ids, fob_id, plane_id))
 
     shell_refs = ",".join(f"#{i}" for i in af_ids)

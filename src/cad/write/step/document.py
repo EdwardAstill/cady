@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from cad.errors import WriteError
-from cad.geom.shapes3d import Prism
-from cad.write.step.brep import prism_brep
+from cad.geom.shapes3d import Extrusion, Prism
+from cad.write.step.brep import extrusion_brep, prism_brep
 from cad.write.step.ids import IdAllocator
 
 if TYPE_CHECKING:
@@ -73,10 +73,12 @@ def render_step(parts: list[Part], model_name: str, *, timestamp: str | None = N
         for solid in part.solids:
             if isinstance(solid, Prism):
                 solid_ids.append(prism_brep(ids, solid))
+            elif isinstance(solid, Extrusion):
+                solid_ids.append(extrusion_brep(ids, solid))
             else:
                 raise WriteError(
                     f"STEP export does not support {type(solid).__name__}; "
-                    f"only Prism is supported"
+                    f"only Prism and Extrusion are supported"
                 )
 
         any_solid = True
