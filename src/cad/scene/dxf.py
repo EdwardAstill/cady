@@ -225,6 +225,23 @@ class DxfDrawing:
     def set_header(self, name: str, value: int | float | str) -> DxfDrawing:
         if name not in HEADER_VARS:
             raise ValueError(f"unknown HEADER variable {name!r}")
+        group_code = HEADER_VARS[name]
+        # Group codes per AutoCAD DXF reference:
+        #   1–9     string
+        #   10–59   double
+        #   60–79   int16
+        #   90–99   int32
+        if 1 <= group_code <= 9:
+            if not isinstance(value, str):
+                raise TypeError(f"HEADER variable {name} requires a str value")
+        elif 10 <= group_code <= 59:
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise TypeError(f"HEADER variable {name} requires a numeric value")
+        elif (60 <= group_code <= 79) or (90 <= group_code <= 99):
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(f"HEADER variable {name} requires an int value")
+        else:
+            raise TypeError(f"HEADER variable {name} has unsupported group code {group_code}")
         self._header[name] = value
         return self
 

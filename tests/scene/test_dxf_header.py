@@ -26,3 +26,9 @@ def test_set_header_returns_self_for_chaining() -> None:
     drawing = DxfDrawing()
     result = drawing.set_header("$INSUNITS", 4)
     assert result is drawing
+
+
+def test_set_header_rejects_string_for_int_var() -> None:
+    drawing = DxfDrawing()
+    with pytest.raises(TypeError, match=r"\$INSUNITS requires an int value"):
+        drawing.set_header("$INSUNITS", "6")

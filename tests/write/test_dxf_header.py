@@ -20,3 +20,14 @@ def test_header_section_default_insunits_when_unset() -> None:
     drawing.layer("L").add(line((0.0, 0.0), (1.0, 0.0)))
     out = render_dxf(drawing)
     assert "$INSUNITS\n70\n6\n" in out
+
+
+def test_header_section_emits_non_insunits_vars() -> None:
+    """Variables other than $INSUNITS must also be written to the HEADER section."""
+    drawing = DxfDrawing()
+    drawing.set_header("$MEASUREMENT", 1)
+    drawing.set_header("$LUNITS", 2)
+    drawing.layer("L").add(line((0.0, 0.0), (1.0, 0.0)))
+    out = render_dxf(drawing)
+    assert "$MEASUREMENT\n70\n1\n" in out
+    assert "$LUNITS\n70\n2\n" in out
