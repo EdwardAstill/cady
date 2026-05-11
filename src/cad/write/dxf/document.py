@@ -3,7 +3,7 @@ from __future__ import annotations
 from cad.errors import WriteError
 from cad.geom.helpers import perpendicular
 from cad.geom.vec import Vec2
-from cad.scene.dxf import _HEADER_VARS, AngularDimensionEntity, DimensionEntity, DxfDrawing
+from cad.scene.dxf import HEADER_VARS, AngularDimensionEntity, DimensionEntity, DxfDrawing
 from cad.write.dxf.blocks import blocks_section_body, insert_entity
 from cad.write.dxf.dimensions import dimension_entities
 from cad.write.dxf.emit import pairs
@@ -31,7 +31,7 @@ def _header(bounds: tuple[Vec2, Vec2], drawing: DxfDrawing) -> list[str]:
     for var_name, var_value in user.items():
         if var_name == "$INSUNITS":
             continue
-        group_code = _HEADER_VARS[var_name]
+        group_code = HEADER_VARS[var_name]
         fixed.append((9, var_name))
         fixed.append((group_code, var_value))
     fixed += [

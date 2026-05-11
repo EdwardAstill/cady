@@ -192,7 +192,7 @@ class BlockDefinition:
 
 
 # Group code per header variable. Extend this map as variables are added.
-_HEADER_VARS: dict[str, int] = {
+HEADER_VARS: dict[str, int] = {
     "$INSUNITS": 70,
     "$MEASUREMENT": 70,
     "$LUNITS": 70,
@@ -214,14 +214,16 @@ class DxfDrawing:
         default_factory=list[DimensionEntity | AngularDimensionEntity]
     )
     _dimstyles: dict[str, DimStyle] = field(default_factory=_default_dimstyles, repr=False)
-    _header: dict[str, int | float | str] = field(default_factory=dict, repr=False)
+    _header: dict[str, int | float | str] = field(
+        default_factory=dict[str, int | float | str], repr=False
+    )
 
     @property
     def header(self) -> dict[str, int | float | str]:
         return dict(self._header)
 
     def set_header(self, name: str, value: int | float | str) -> DxfDrawing:
-        if name not in _HEADER_VARS:
+        if name not in HEADER_VARS:
             raise ValueError(f"unknown HEADER variable {name!r}")
         self._header[name] = value
         return self
