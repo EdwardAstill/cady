@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Small write-only CAD geometry package for DXF, STL, and AP214 STEP output."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "steputils>=0.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cad"]
@@ -27,3 +29,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 include = ["src/cad"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
