@@ -28,6 +28,7 @@ from cad.geom import (
     spline,
 )
 from cad.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
+from cad.read.extrude import ExtrudedMember, ExtrudedSection, extract_members_from_faces
 from cad.scene import AngularDimensionEntity, DimStyle, DxfDrawing, Layer, StlMesh
 
 __all__ = [
@@ -39,6 +40,8 @@ __all__ = [
     "DimStyle",
     "Drawing2D",
     "DxfDrawing",
+    "ExtrudedMember",
+    "ExtrudedSection",
     "Extrusion",
     "Layer",
     "Line",
@@ -62,6 +65,7 @@ __all__ = [
     "WriteError",
     "arc",
     "circle",
+    "extract_members_from_faces",
     "line",
     "midpoint",
     "offset_point",

@@ -148,6 +148,38 @@ class Vec3:
     def tuple(self) -> tuple[float, float, float]:
         return (self.x, self.y, self.z)
 
+    def is_parallel(self, other: Vec3, *, tol: float = 1e-6) -> bool:
+        """Check if this vector is parallel to *other* (same or opposite direction).
+
+        Assumes both vectors are unit-length direction vectors. Uses the
+        cross-product magnitude.
+        """
+        c = self.cross(other)
+        return c.dot(c) < tol * tol
+
+    def distance_to_line(
+        self, line_point: Vec3, line_dir: Vec3
+    ) -> float:
+        """Shortest distance from this point to an infinite line.
+
+        Args:
+            line_point: A point on the line.
+            line_dir: Direction vector of the line (need not be normalised).
+        """
+        d = self - line_point
+        c = d.cross(line_dir)
+        return c.length() / line_dir.length()
+
+    def project_onto_line(
+        self, line_point: Vec3, line_dir: Vec3
+    ) -> float:
+        """Project this point onto a line; return the parameter *t* along *line_dir*.
+
+        The projected point is ``line_point + t * line_dir``.
+        """
+        d = self - line_point
+        return d.dot(line_dir) / line_dir.dot(line_dir)
+
 
 def promote2(value: Vec2 | tuple[float, float]) -> Vec2:
     return Vec2.from_xy(value)
