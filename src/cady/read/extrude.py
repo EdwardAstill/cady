@@ -23,6 +23,14 @@ from cady.geom.vec import Vec3
 from cady.read.step import StepFace
 
 
+def _empty_dimensions() -> dict[str, float]:
+    return {}
+
+
+def _empty_faces() -> list[StepFace]:
+    return []
+
+
 # ── Data types ──────────────────────────────────────────────────────────────
 
 
@@ -37,7 +45,7 @@ class ExtrudedSection:
     """
 
     section_type: str
-    dimensions: dict[str, float] = field(default_factory=dict)
+    dimensions: dict[str, float] = field(default_factory=_empty_dimensions)
 
 
 @dataclass
@@ -56,7 +64,7 @@ class ExtrudedMember:
     axis_start: tuple[float, float, float]
     axis_end: tuple[float, float, float]
     section: ExtrudedSection
-    faces: list[StepFace] = field(default_factory=list)
+    faces: list[StepFace] = field(default_factory=_empty_faces)
 
 
 # ── End-cap detection ───────────────────────────────────────────────────────
@@ -259,7 +267,9 @@ def group_cylinders_into_members(
             continue
 
         cyl = cylinders[i]
-        axis = Vec3.from_xyz(cyl.cylinder_axis)  # type: ignore[arg-type]
+        if cyl.cylinder_axis is None or cyl.cylinder_radius is None:
+            continue
+        axis = Vec3.from_xyz(cyl.cylinder_axis)
         radius = cyl.cylinder_radius
         axis_pt = Vec3.from_xyz(cyl.centroid)
 
@@ -272,7 +282,9 @@ def group_cylinders_into_members(
             other = cylinders[j]
             if abs((other.cylinder_radius or 0) - (radius or 0)) > radius_tol:
                 continue
-            other_axis = Vec3.from_xyz(other.cylinder_axis)  # type: ignore[arg-type]
+            if other.cylinder_axis is None:
+                continue
+            other_axis = Vec3.from_xyz(other.cylinder_axis)
             if axis.is_parallel(other_axis, tol=axis_tol):
                 group.append(other)
                 assigned.add(j)
@@ -305,7 +317,7 @@ def group_cylinders_into_members(
                 axis_end=end,
                 section=ExtrudedSection(
                     section_type="tubular",
-                    dimensions={"diameter": (radius or 0.0) * 2},
+                    dimensions={"diameter": radius * 2},
                 ),
                 faces=group,
             )

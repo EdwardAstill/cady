@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import math
+from typing import TypeAlias, TypedDict
 
 from cady.errors import WriteError
 from cady.geom.base import axis_vector
 from cady.geom.shapes2d import Circle, Polyline
 from cady.geom.shapes3d import Extrusion, Prism
 from cady.write.step.ids import IdAllocator
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
+
+
+class _Loop(TypedDict):
+    n: int
+    bot: list[Point3]
+    top: list[Point3]
+    ec_bot: list[int]
+    ec_top: list[int]
+    ec_vert: list[int]
 
 
 def _f(v: float) -> str:
@@ -135,7 +148,7 @@ def prism_brep(ids: IdAllocator, solid: Prism) -> int:
     return ids.add(f"MANIFOLD_SOLID_BREP('',#{cs_id})")
 
 
-def _profile_points(profile: Polyline | Circle, segments: int = 32) -> list[tuple[float, float]]:
+def _profile_points(profile: Polyline | Circle, segments: int = 32) -> list[Point2]:
     """Return a deduplicated list of XY points for *profile*.
 
     Circles are discretised into *segments* vertices.
@@ -184,7 +197,7 @@ def extrusion_brep(ids: IdAllocator, solid: Extrusion) -> int:
         raise WriteError("Extrusion profile must have at least 3 vertices")
 
     inner_loops = getattr(solid.profile, "inner_loops", ())
-    inner_xy_pts: list[list[tuple[float, float]]] = []
+    inner_xy_pts: list[list[Point2]] = []
     for loop in inner_loops:
         if not isinstance(loop, (Polyline, Circle)):
             raise WriteError(
@@ -238,7 +251,7 @@ def extrusion_brep(ids: IdAllocator, solid: Extrusion) -> int:
     # Outer side faces: quad per edge, outward normal points away from solid
     _emit_side_faces(ids, af_ids, outer, xy_pts, outward=True)
     # Inner side faces: outward normal points into the hole (away from solid)
-    for inner, ipts in zip(inners, inner_xy_pts):
+    for inner, ipts in zip(inners, inner_xy_pts, strict=True):
         _emit_side_faces(ids, af_ids, inner, ipts, outward=False)
 
     shell_refs = ",".join(f"#{i}" for i in af_ids)
@@ -248,12 +261,12 @@ def extrusion_brep(ids: IdAllocator, solid: Extrusion) -> int:
 
 def _build_loop(
     ids: IdAllocator,
-    xy_pts: list[tuple[float, float]],
+    xy_pts: list[Point2],
     z_bot: float,
     z_top: float,
     ox: float,
     oy: float,
-) -> dict:
+) -> _Loop:
     """Build cartesian points, vertices and edges for one closed XY loop at z_bot and z_top."""
     n = len(xy_pts)
     bot = [(x + ox, y + oy, z_bot) for x, y in xy_pts]
@@ -300,8 +313,8 @@ def _build_loop(
 def _emit_side_faces(
     ids: IdAllocator,
     af_ids: list[int],
-    loop: dict,
-    xy_pts: list[tuple[float, float]],
+    loop: _Loop,
+    xy_pts: list[Point2],
     outward: bool,
 ) -> None:
     """Emit one quad ADVANCED_FACE per edge segment of a loop.

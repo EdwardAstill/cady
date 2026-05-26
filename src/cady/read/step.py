@@ -20,9 +20,11 @@ Usage::
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 
 @dataclass
@@ -42,6 +44,11 @@ class StepFace:
     cone_semi_angle: float | None
 
 
+class _P21Module(Protocol):
+    def readfile(self, path: str) -> Any:
+        """Read an ISO 10303-21 file."""
+
+
 def read_step(path: str | Path) -> list[StepFace]:
     """Read a STEP file and return all faces with resolved geometry.
 
@@ -51,7 +58,7 @@ def read_step(path: str | Path) -> list[StepFace]:
     Returns:
         List of StepFace objects, one per ADVANCED_FACE entity found.
     """
-    import steputils.p21 as p21
+    p21 = cast(_P21Module, import_module("steputils.p21"))
 
     sf = p21.readfile(str(path))
     if not sf.data:
@@ -142,7 +149,6 @@ def _axis2_placement(entity: Any) -> tuple[
         (origin, axis, ref_direction) where all are (x, y, z) tuples.
         If optional ref_direction is missing, returns (1,0,0) as default.
     """
-    resolver = None  # We resolve inline
     # params: (name, cartesian_point_ref, axis_ref, [ref_direction_ref])
     origin_entity = _resolve_ref_in_context(entity, entity.params[1])
     axis_entity = _resolve_ref_in_context(entity, entity.params[2])
@@ -197,7 +203,7 @@ def _extract_faces(data_section: Any, resolver: _EntityResolver):
     _set_global_resolver(resolver)
 
     # Walk: MANIFOLD_SOLID_BREP → CLOSED_SHELL → ADVANCED_FACE
-    for ref, inst in data_section.instances.items():
+    for inst in data_section.instances.values():
         entity = inst.entity
         if entity.name == "ADVANCED_FACE":
             face = _extract_advanced_face(entity, resolver)
@@ -326,7 +332,6 @@ def _extract_cone(
 ) -> StepFace:
     """CONICAL_SURFACE: params[1]=AXIS2_PLACEMENT_3D, params[2]=radius, params[3]=semi_angle."""
     axis_ref = surface_entity.params[1]
-    radius = float(surface_entity.params[2])
     semi_angle = float(surface_entity.params[3])
     axis_entity = resolver.resolve_entity(str(axis_ref)) if isinstance(axis_ref, str) else None
 
@@ -495,14 +500,14 @@ def _collect_face_vertices(
 
         # EDGE_LOOP: find the param that contains the oriented edge list.
         # Schema position varies; search for a ParameterList or Reference.
-        edge_list = None
+        edge_list: Iterable[object] | None = None
         for param in loop_entity.params:
             if param is not None and param != "" and param != "*":
                 if isinstance(param, str) and param.startswith("#"):
                     edge_list = [param]  # Single edge: wrap in list
                     break
                 elif hasattr(param, "__iter__") and not isinstance(param, str):
-                    edge_list = param
+                    edge_list = cast(Iterable[object], param)
                     break
 
         if edge_list is None:
@@ -510,7 +515,7 @@ def _collect_face_vertices(
 
         for edge_ref in edge_list:
             if isinstance(edge_ref, tuple):
-                edge_ref = edge_ref[0]
+                edge_ref = cast(tuple[object, ...], edge_ref)[0]
             if not isinstance(edge_ref, str) or not edge_ref.startswith("#"):
                 continue
 

@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from cady.read.extrude import (
-    ExtrudedMember,
-    ExtrudedSection,
     classify_section_from_faces,
     extract_members_from_faces,
     find_end_caps,
     group_cylinders_into_members,
 )
 from cady.read.step import StepFace
-
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from cady.read.step import read_step, StepFace
-
+from cady.read.step import read_step
 
 # ---------------------------------------------------------------------------
 # A minimal valid STEP file with one cylindrical surface

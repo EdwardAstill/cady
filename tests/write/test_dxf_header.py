@@ -15,7 +15,7 @@ def test_header_section_includes_insunits_when_set() -> None:
 
 
 def test_header_section_default_insunits_when_unset() -> None:
-    """When the user does not set $INSUNITS, the emitter preserves its existing default (6 = meters)."""
+    """Preserve the existing default $INSUNITS value when the user does not set it."""
     drawing = DxfDrawing()
     drawing.layer("L").add(line((0.0, 0.0), (1.0, 0.0)))
     out = render_dxf(drawing)
