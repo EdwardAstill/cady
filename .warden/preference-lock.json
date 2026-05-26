@@ -14,7 +14,7 @@
     {
       "area": "triangulation",
       "set_at": "2026-05-08T07:26:50.864128+00:00",
-      "value": "vendor pure-Python mapbox-earcut at cad/_vendor/earcut.py, MIT, NOTICE attribution"
+      "value": "vendor pure-Python mapbox-earcut at cady/_vendor/earcut.py, MIT, NOTICE attribution"
     },
     {
       "area": "annotations-placement",
@@ -219,7 +219,7 @@
     {
       "area": "geom-helpers-stage-4",
       "set_at": "2026-05-11T00:00:00+08:00",
-      "value": "cad.geom.helpers exposes midpoint, perpendicular, and offset_point for drawing helper placement"
+      "value": "cady.geom.helpers exposes midpoint, perpendicular, and offset_point for drawing helper placement"
     },
     {
       "area": "roadmap-stage-sequencing",
@@ -289,7 +289,7 @@
       "reason": ""
     },
     {
-      "item": "Sheet type hosting multiple 2D views \u2014 out of scope for pyseas-cad; layout belongs in pyseas-yard or a separate sheet-composition package.",
+      "item": "Sheet type hosting multiple 2D views \u2014 out of scope for cady; layout belongs in pyseas-yard or a separate sheet-composition package.",
       "reason": ""
     }
   ]

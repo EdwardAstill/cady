@@ -1,9 +1,9 @@
-# pyseas-cad Stage 2 - Model Layer
+# cady Stage 2 - Model Layer
 
 **Status:** approved planning contract.
 **Date:** 2026-05-08.
 **Author:** Edward Astill, with Codex as planning partner.
-**Scope:** Stage 2 of pyseas-cad. Add a domain-blind model layer that lets one
+**Scope:** Stage 2 of cady. Add a domain-blind model layer that lets one
 caller-owned model organize named drawings, parts, assemblies, and metadata,
 then export DXF and STL through the Stage 1 writers.
 
@@ -11,10 +11,10 @@ then export DXF and STL through the Stage 1 writers.
 
 ## 1. Goal
 
-Stage 2 introduces `cad.model` and the preferred v1 API:
+Stage 2 introduces `cady.model` and the preferred v1 API:
 
 ```python
-from cad import Model, circle, rectangle
+from cady import Model, circle, rectangle
 
 plate = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -31,7 +31,7 @@ model.write_stl("padeye_plate.stl")
 
 ## 2. Constraints
 
-pyseas-cad remains a small pure-stdlib runtime package. Existing Stage 1
+cady remains a small pure-stdlib runtime package. Existing Stage 1
 geometry, `DxfDrawing`, and `StlMesh` APIs continue to work. The model layer is
 an organizer and export facade; it does not replace immutable geometry values or
 teach the core about pyseas-yard objects such as padeyes, shackles, welds, or
@@ -58,7 +58,7 @@ part/drawing metadata while preserving the Stage 1 scene writers.
 
 ### 4.1 Exports
 
-`cad.__init__` exports:
+`cady.__init__` exports:
 
 - `Model`
 - `Drawing2D`
@@ -67,7 +67,7 @@ part/drawing metadata while preserving the Stage 1 scene writers.
 - `Assembly`
 - `ModelMetadata`
 
-`cad.model` exports the same names.
+`cady.model` exports the same names.
 
 ### 4.2 Model
 
@@ -173,13 +173,13 @@ scene APIs working.
 | Part facade delegates to STL | High | Integration | pytest + struct | model STL has expected triangle count bytes |
 | Direct Stage 1 APIs remain | High | Regression | pytest existing suites | existing tests still pass |
 | Wrong dimensionality rejected | Medium | Unit | pytest | SceneError from model facade |
-| Public exports available | Medium | Unit + pyright | pytest, pyright | `from cad import Model` works and strict source passes |
+| Public exports available | Medium | Unit + pyright | pytest, pyright | `from cady import Model` works and strict source passes |
 | STEP reserved behavior | Low | Unit | pytest | NotImplementedError message names Stage 5 |
 | Docs and examples match API | Medium | Smoke | pytest examples | model-first example writes files |
 
 ## 6. Acceptance Criteria
 
-- `from cad import Model` works.
+- `from cady import Model` works.
 - `Model(...).drawing(...).layer(...).add(shape2d).write_dxf(path)` emits a DXF
   accepted by `ezdxf.readfile(path)` with no audit errors.
 - `Model(...).part(...).add(shape3d).write_stl(path)` emits the same binary STL
@@ -188,7 +188,7 @@ scene APIs working.
 - `Model.write_step(path)` raises `NotImplementedError` with "Stage 5" in the
   message.
 - Runtime package metadata still has no dependencies.
-- `pytest -q`, `pyright src/cad`, and `ruff check src/cad tests` pass.
+- `pytest -q`, `pyright src/cady`, and `ruff check src/cady tests` pass.
 - README and examples show the model-first API.
 - Stage 3 DXF spec/plan stubs are created or updated from the shipped Stage 2
   API.
@@ -214,9 +214,9 @@ Filled 2026-05-11.
     `ezdxf`/`pyparsing` deprecations.
   - `pytest -q` -> 65 passed, 8 warnings from `ezdxf`/`pyparsing`
     deprecations.
-  - `pyright src/cad` -> 0 errors.
-  - `ruff check src/cad tests` -> all checks passed.
-  - `python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> exits 0.
+  - `pyright src/cady` -> 0 errors.
+  - `ruff check src/cady tests` -> all checks passed.
+  - `python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"` -> exits 0.
 - Known limitations:
   - `Model.write_dxf` flattens all named drawings into one DXF modelspace.
   - `Model.write_stl` aggregates all parts into one STL triangle soup.
@@ -224,9 +224,9 @@ Filled 2026-05-11.
   - `Model.write_step` raises `NotImplementedError` until Stage 5.
 - Stage 3 plan updates made:
   - Created
-    `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`.
+    `.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`.
   - Created
-    `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md`.
+    `.warden/plans/2026-05-08-cady-stage-3-dxf-production.md`.
 - Preference-lock decisions added:
   - `model-layer`
   - `model-dxf-export`

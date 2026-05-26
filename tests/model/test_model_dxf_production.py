@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, SceneError, circle, rectangle
+from cady import Model, SceneError, circle, rectangle
 
 
 def test_model_layer_hatch_delegates() -> None:

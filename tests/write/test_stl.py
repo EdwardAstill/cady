@@ -5,9 +5,9 @@ from math import isclose
 
 import pytest
 
-from cad import StlMesh, WriteError, prism, rectangle, sphere
-from cad.write.stl.ascii import write_ascii_stl
-from cad.write.stl.binary import write_binary_stl
+from cady import StlMesh, WriteError, prism, rectangle, sphere
+from cady.write.stl.ascii import write_ascii_stl
+from cady.write.stl.binary import write_binary_stl
 
 
 def test_binary_prism_invariants(tmp_path) -> None:
@@ -45,7 +45,7 @@ def test_stl_empty_writeerror(tmp_path) -> None:
 
 
 def test_self_intersecting_profile_writeerror() -> None:
-    from cad import polyline
+    from cady import polyline
 
     bad = polyline([(0, 0), (1, 1), (0, 1), (1, 0)], closed=True)
     with pytest.raises(WriteError, match="first 3 points"):

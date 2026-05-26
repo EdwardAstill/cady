@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cad.geom import midpoint, offset_point, perpendicular
-from cad.geom.vec import Vec2
+from cady.geom import midpoint, offset_point, perpendicular
+from cady.geom.vec import Vec2
 
 
 def test_midpoint_returns_average_point() -> None:

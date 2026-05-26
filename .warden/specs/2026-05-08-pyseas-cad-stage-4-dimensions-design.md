@@ -1,4 +1,4 @@
-# pyseas-cad Stage 4 - Dimensions and Drawing Helpers
+# cady Stage 4 - Dimensions and Drawing Helpers
 
 **Status:** implemented.
 **Date:** 2026-05-11.
@@ -58,7 +58,7 @@ Filled 2026-05-11.
   - `DxfDrawing.aligned_dimension(...)` and `Drawing2D.aligned_dimension(...)`.
   - `DxfDrawing.radius_dimension(...)` / `diameter_dimension(...)` plus model
     equivalents.
-  - `cad.geom.helpers.midpoint`, `perpendicular`, and `offset_point`.
+  - `cady.geom.helpers.midpoint`, `perpendicular`, and `offset_point`.
 - Strategy decision:
   - Stage 4 initially used self-rendered `LINE`/`MTEXT` dimensions.
   - Stage 4.5 replaced that renderer with native DXF `DIMENSION` entities and
@@ -73,6 +73,6 @@ Filled 2026-05-11.
     hole test, model dimension preservation test, and production example test.
   - `PYTHONPATH=src .venv/bin/pytest -q` -> 102 passed, 70 dependency warnings
     after the native-dimension follow-up.
-  - `PYTHONPATH=src .venv/bin/ruff check src/cad tests examples/scripts` -> pass.
-  - `PYTHONPATH=src .venv/bin/pyright src/cad` -> 0 errors, 0 warnings.
-  - `PYTHONPATH=src .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> pass.
+  - `PYTHONPATH=src .venv/bin/ruff check src/cady tests examples/scripts` -> pass.
+  - `PYTHONPATH=src .venv/bin/pyright src/cady` -> 0 errors, 0 warnings.
+  - `PYTHONPATH=src .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"` -> pass.

@@ -1,8 +1,8 @@
-# pyseas-cad Stage 2 Model Layer Implementation Plan
+# cady Stage 2 Model Layer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task when tasks are independent. For same-session manual execution, follow this plan directly. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the `cad.model` layer so one domain-blind model can organize drawings, parts, assemblies, metadata, and export DXF/STL through existing Stage 1 writers.
+**Goal:** Add the `cady.model` layer so one domain-blind model can organize drawings, parts, assemblies, metadata, and export DXF/STL through existing Stage 1 writers.
 
 **Architecture:** Implement a thin facade over `DxfDrawing` and `StlMesh`; do not rewrite DXF/STL writers. `Model` owns named `Drawing2D`, `Part`, and `Assembly` objects plus metadata. Exports aggregate model containers into Stage 1 scenes, preserving direct `DxfDrawing` and `StlMesh` APIs.
 
@@ -18,21 +18,21 @@
 ## Bootstrap Context
 
 This plan was created in `.worktrees/stage-2-model/` on branch `stage-2-model`.
-The controlling design is `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`.
+The controlling design is `.warden/specs/2026-05-08-cady-stage-2-model-design.md`.
 
 ## Assumptions
 
 - `A1` — Stage 2 model layer should be a facade over existing `DxfDrawing` and `StlMesh`, not a writer refactor.
   Type: architectural
   Source: v1 roadmap Stage 2 and Stage 2 design spec §3
-  Check: implementation keeps `src/cad/write/**` behavior unchanged except imports if needed.
+  Check: implementation keeps `src/cady/write/**` behavior unchanged except imports if needed.
   If false: stop and redesign Stage 2 around a shared writer contract before implementation.
   Owner: Task 3 and Task 5.
 
 - `A2` — Runtime remains pure stdlib.
   Type: policy
   Source: README boundaries and v1 roadmap product principles
-  Check: `python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+  Check: `python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"`
   If false: remove dependency or record explicit architecture decision before continuing.
   Owner: Task 10.
 
@@ -62,7 +62,7 @@ The controlling design is `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-des
 ## File Structure
 
 ```
-src/cad/
+src/cady/
 ├── __init__.py                  # add model-layer public re-exports
 └── model/
     ├── __init__.py              # re-export model public types
@@ -82,9 +82,9 @@ examples/
 └── model_plate.py               # model-first DXF/STL example
 
 .warden/
-├── specs/2026-05-08-pyseas-cad-stage-2-model-design.md
-├── specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md
-└── plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md
+├── specs/2026-05-08-cady-stage-2-model-design.md
+├── specs/2026-05-08-cady-stage-3-dxf-production-design.md
+└── plans/2026-05-08-cady-stage-3-dxf-production.md
 ```
 
 ## Phase A - Model Core
@@ -92,11 +92,11 @@ examples/
 ### Task 1: model package scaffold and metadata
 
 **Files:**
-- Create: `src/cad/model/__init__.py`
-- Create: `src/cad/model/core.py`
+- Create: `src/cady/model/__init__.py`
+- Create: `src/cady/model/core.py`
 - Create: `tests/model/__init__.py`
 - Create: `tests/model/test_model_core.py`
-- Modify: `src/cad/__init__.py`
+- Modify: `src/cady/__init__.py`
 
 **Ownership:**
 - In scope: model package exports, `ModelMetadata`, `Model` constructor, named container placeholders.
@@ -117,7 +117,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from cad import Assembly, Drawing2D, Model, ModelMetadata, Part
+from cady import Assembly, Drawing2D, Model, ModelMetadata, Part
 
 
 def test_model_imports_from_top_level() -> None:
@@ -153,7 +153,7 @@ def test_named_containers_are_reused() -> None:
 - [ ] **Step 2: Run tests to verify failure**
 
 Run: `pytest tests/model/test_model_core.py -q`
-Expected: FAIL with missing `cad.Model` / `cad.model`.
+Expected: FAIL with missing `cady.Model` / `cady.model`.
 
 - [ ] **Step 3: Implement minimal model core**
 
@@ -173,7 +173,7 @@ Use placeholder container classes with `name` and `_model` fields.
 
 - [ ] **Step 4: Export public names**
 
-Update `src/cad/model/__init__.py` and top-level `src/cad/__init__.py` with:
+Update `src/cady/model/__init__.py` and top-level `src/cady/__init__.py` with:
 
 - `Model`
 - `Drawing2D`
@@ -187,20 +187,20 @@ Update `src/cad/model/__init__.py` and top-level `src/cad/__init__.py` with:
 Run: `pytest tests/model/test_model_core.py -q`
 Expected: PASS.
 
-Run: `pyright src/cad`
+Run: `pyright src/cady`
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/cad/__init__.py src/cad/model tests/model
+git add src/cady/__init__.py src/cady/model tests/model
 git commit -m "feat(model): add model core metadata"
 ```
 
 ### Task 2: debug representation
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Modify: `tests/model/test_model_core.py`
 
 **Ownership:**
@@ -259,7 +259,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_core.py
+git add src/cady/model/core.py tests/model/test_model_core.py
 git commit -m "feat(model): add debug representation"
 ```
 
@@ -268,7 +268,7 @@ git commit -m "feat(model): add debug representation"
 ### Task 3: drawing facade and layer delegation
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/model/test_model_dxf.py`
 
 **Ownership:**
@@ -286,8 +286,8 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, SceneError, circle, rectangle, sphere
-from cad.scene import DxfDrawing
+from cady import Model, SceneError, circle, rectangle, sphere
+from cady.scene import DxfDrawing
 
 
 def test_drawing_layer_delegates_to_dxf_drawing() -> None:
@@ -334,14 +334,14 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_dxf.py
+git add src/cady/model/core.py tests/model/test_model_dxf.py
 git commit -m "feat(model): add drawing facade"
 ```
 
 ### Task 4: model DXF export
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Modify: `tests/model/test_model_dxf.py`
 
 **Ownership:**
@@ -413,7 +413,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_dxf.py
+git add src/cady/model/core.py tests/model/test_model_dxf.py
 git commit -m "feat(model): add dxf export facade"
 ```
 
@@ -422,7 +422,7 @@ git commit -m "feat(model): add dxf export facade"
 ### Task 5: part facade and STL export
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/model/test_model_stl.py`
 
 **Ownership:**
@@ -442,8 +442,8 @@ import struct
 
 import pytest
 
-from cad import Model, SceneError, circle, prism, rectangle
-from cad.scene import StlMesh
+from cady import Model, SceneError, circle, prism, rectangle
+from cady.scene import StlMesh
 
 
 def test_part_add_delegates_to_stl_mesh() -> None:
@@ -494,14 +494,14 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_stl.py
+git add src/cady/model/core.py tests/model/test_model_stl.py
 git commit -m "feat(model): add stl export facade"
 ```
 
 ### Task 6: assembly metadata behavior
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Modify: `tests/model/test_model_core.py`
 
 **Ownership:**
@@ -553,7 +553,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_core.py
+git add src/cady/model/core.py tests/model/test_model_core.py
 git commit -m "feat(model): add assembly metadata"
 ```
 
@@ -562,7 +562,7 @@ git commit -m "feat(model): add assembly metadata"
 ### Task 7: reserved STEP behavior
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/model/test_model_step.py`
 
 **Ownership:**
@@ -578,7 +578,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model
+from cady import Model
 
 
 def test_write_step_is_reserved_for_stage_5(tmp_path) -> None:
@@ -608,7 +608,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_step.py
+git add src/cady/model/core.py tests/model/test_model_step.py
 git commit -m "feat(model): reserve step export"
 ```
 
@@ -658,7 +658,7 @@ Expected: FAIL because example does not exist.
 Create `examples/model_plate.py` using:
 
 ```python
-from cad import Model, circle, rectangle
+from cady import Model, circle, rectangle
 ```
 
 Build one profile, add it to `model.drawing("front")`, add extruded solid to
@@ -687,11 +687,11 @@ git commit -m "docs: add model-first example"
 ### Task 9: downstream roadmap artifacts
 
 **Files:**
-- Modify: `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`
-- Create: `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`
-- Create: `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md`
+- Modify: `.warden/specs/2026-05-08-cady-stage-2-model-design.md`
+- Create: `.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`
+- Create: `.warden/plans/2026-05-08-cady-stage-3-dxf-production.md`
 - Modify: `.warden/preference-lock.json`
-- Modify: `.warden/plans/2026-05-08-pyseas-cad-v1-stage-plans.md` if shipped API differs from current plan.
+- Modify: `.warden/plans/2026-05-08-cady-v1-stage-plans.md` if shipped API differs from current plan.
 
 **Ownership:**
 - In scope: stage-end docs and preference decisions.
@@ -723,13 +723,13 @@ Record at least:
 
 - [ ] **Step 3: Create Stage 3 spec stub**
 
-Create `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`
+Create `.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`
 with status `draft`, carrying Stage 3 scope from the roadmap and referencing the
 actual Stage 2 model API.
 
 - [ ] **Step 4: Create Stage 3 plan stub**
 
-Create `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md` with
+Create `.warden/plans/2026-05-08-cady-stage-3-dxf-production.md` with
 status `draft`, high-level TDD task headings for HATCH, BLOCK, INSERT, linetypes,
 model-first examples, and ezdxf audit tests. Do not mark it approved until Stage
 2 review is complete.
@@ -772,12 +772,12 @@ Expected: PASS.
 
 - [ ] **Step 3: Run type check**
 
-Run: `pyright src/cad`
+Run: `pyright src/cady`
 Expected: 0 errors.
 
 - [ ] **Step 4: Run lint**
 
-Run: `ruff check src/cad tests`
+Run: `ruff check src/cady tests`
 Expected: 0 violations.
 
 - [ ] **Step 5: Verify runtime dependencies**
@@ -785,7 +785,7 @@ Expected: 0 violations.
 Run:
 
 ```bash
-python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 ```
 
 Expected: exits 0.

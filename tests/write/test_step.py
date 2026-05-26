@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, WriteError, prism
-from cad.model.core import Part
-from cad.write.step.document import render_step
-from cad.write.step.ids import IdAllocator
+from cady import Model, WriteError, prism
+from cady.model.core import Part
+from cady.write.step.document import render_step
+from cady.write.step.ids import IdAllocator
 
 
 def test_id_allocator_returns_sequential_ids() -> None:
@@ -41,7 +41,7 @@ def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
 
 
 def test_render_step_rejects_sphere_solid() -> None:
-    from cad import sphere
+    from cady import sphere
     part = Part("bad")
     part.add(sphere((0, 0, 0), 1.0))
     with pytest.raises(WriteError, match="Sphere"):
@@ -57,7 +57,7 @@ def test_model_write_step_produces_file(tmp_path) -> None:
 
 
 def test_render_step_extrusion_with_inner_loop_emits_hole() -> None:
-    from cad import Extrusion, circle, polyline
+    from cady import Extrusion, circle, polyline
 
     outline = polyline(
         [(-1, -1), (1, -1), (1, 1), (-1, 1)], closed=True
@@ -78,8 +78,8 @@ def test_render_step_extrusion_with_inner_loop_emits_hole() -> None:
 def test_render_step_extrusion_rejects_non_polyline_inner_loop() -> None:
     from dataclasses import replace
 
-    from cad import Extrusion, Vec2, polyline
-    from cad.geom.shapes2d import Spline
+    from cady import Extrusion, Vec2, polyline
+    from cady.geom.shapes2d import Spline
 
     spline = Spline(
         control_points=(

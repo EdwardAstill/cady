@@ -1,10 +1,10 @@
-# pyseas-cad Stage 3 Production DXF Implementation Plan
+# cady Stage 3 Production DXF Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task when tasks are independent. For same-session manual execution, follow this plan directly. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add production DXF support for linetypes, ANSI31 hatches, block definitions, and inserts through the model-first API.
 
-**Architecture:** Extend `cad.scene.dxf` with explicit scene state for linetypes, hatches, blocks, and inserts. Keep `cad.write.dxf.sections.render_dxf` as the stable public writer wrapper while adding focused writer modules for HATCH, BLOCKS, INSERT, and LTYPE output. Expose model-first methods by delegating `Drawing2D` and `ModelLayer` to the underlying `DxfDrawing` scene.
+**Architecture:** Extend `cady.scene.dxf` with explicit scene state for linetypes, hatches, blocks, and inserts. Keep `cady.write.dxf.sections.render_dxf` as the stable public writer wrapper while adding focused writer modules for HATCH, BLOCKS, INSERT, and LTYPE output. Expose model-first methods by delegating `Drawing2D` and `ModelLayer` to the underlying `DxfDrawing` scene.
 
 **Tech Stack:** Python 3.11+, pure-stdlib runtime, pytest, pyright strict via `pyproject.toml`, ruff, ezdxf for DXF verification.
 
@@ -21,14 +21,14 @@ This plan was created in `.worktrees/stage-3-dxf-plan/` on branch
 `stage-3-dxf-plan`.
 
 Controlling design:
-`.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`.
+`.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`.
 
 ## Assumptions
 
 - `A1` — Runtime remains pure stdlib.
   Type: policy
   Source: README boundaries and roadmap product principles
-  Check: `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+  Check: `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"`
   If false: remove runtime dependency or record explicit architecture decision before continuing.
   Owner: Task 10.
 
@@ -65,7 +65,7 @@ Controlling design:
 ## File Structure
 
 ```
-src/cad/
+src/cady/
 ├── model/core.py                    # Drawing2D/ModelLayer delegates for hatches, blocks, inserts, linetypes
 ├── scene/dxf.py                     # Layer, DxfDrawing, HatchEntity, BlockDefinition, InsertEntity
 └── write/dxf/
@@ -93,8 +93,8 @@ examples/
 ### Task 1: scene linetype API
 
 **Files:**
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/write/test_dxf_linetypes.py`
 - Modify: `tests/scene/test_scene.py`
 - Modify: `tests/model/test_model_dxf.py`
@@ -116,7 +116,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import DxfDrawing, Model, SceneError
+from cady import DxfDrawing, Model, SceneError
 
 
 def test_dxf_layer_accepts_builtin_linetype() -> None:
@@ -143,7 +143,7 @@ Expected: FAIL because `DxfDrawing.layer` and `Drawing2D.layer` do not accept `l
 
 - [ ] **Step 3: Implement scene/model API**
 
-Add a local constant in `src/cad/scene/dxf.py`:
+Add a local constant in `src/cady/scene/dxf.py`:
 
 ```python
 SUPPORTED_LINETYPES = {"CONTINUOUS", "HIDDEN", "CENTER"}
@@ -161,15 +161,15 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/model/core.py tests/write/test_dxf_linetypes.py tests/scene/test_scene.py tests/model/test_model_dxf.py
+git add src/cady/scene/dxf.py src/cady/model/core.py tests/write/test_dxf_linetypes.py tests/scene/test_scene.py tests/model/test_model_dxf.py
 git commit -m "feat(dxf): add built-in linetype layer API"
 ```
 
 ### Task 2: LTYPE table writer
 
 **Files:**
-- Modify: `src/cad/write/dxf/tables.py`
-- Modify: `src/cad/write/dxf/document.py`
+- Modify: `src/cady/write/dxf/tables.py`
+- Modify: `src/cady/write/dxf/document.py`
 - Modify: `tests/write/test_dxf_linetypes.py`
 
 **Ownership:**
@@ -185,8 +185,8 @@ git commit -m "feat(dxf): add built-in linetype layer API"
 Add tests:
 
 ```python
-from cad import DxfDrawing, line
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing, line
+from cady.write.dxf.sections import render_dxf
 
 
 def test_ltype_table_emits_used_builtin_linetype() -> None:
@@ -220,7 +220,7 @@ Expected: FAIL because no `LTYPE` table is emitted.
 
 - [ ] **Step 3: Implement LTYPE table**
 
-Add built-in linetype records in `src/cad/write/dxf/tables.py`. Emit
+Add built-in linetype records in `src/cady/write/dxf/tables.py`. Emit
 `CONTINUOUS` plus non-continuous linetypes used by drawing layers before the
 LAYER table inside `TABLES`.
 
@@ -233,7 +233,7 @@ now contains an `LTYPE` table.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/tables.py src/cad/write/dxf/document.py tests/write/test_dxf_linetypes.py tests/write/goldens/smoke.dxf
+git add src/cady/write/dxf/tables.py src/cady/write/dxf/document.py tests/write/test_dxf_linetypes.py tests/write/goldens/smoke.dxf
 git commit -m "feat(dxf): emit linetype table"
 ```
 
@@ -242,8 +242,8 @@ git commit -m "feat(dxf): emit linetype table"
 ### Task 3: hatch scene API
 
 **Files:**
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/write/test_dxf_hatch.py`
 - Create: `tests/model/test_model_dxf_production.py`
 
@@ -260,7 +260,7 @@ Add tests:
 ```python
 import pytest
 
-from cad import DxfDrawing, Model, SceneError, line, rectangle
+from cady import DxfDrawing, Model, SceneError, line, rectangle
 
 
 def test_layer_hatch_records_closed_boundary() -> None:
@@ -289,7 +289,7 @@ Expected: FAIL because hatch APIs are missing.
 
 - [ ] **Step 3: Implement scene/model API**
 
-Add `HatchEntity` dataclass to `src/cad/scene/dxf.py` with boundary, layer,
+Add `HatchEntity` dataclass to `src/cady/scene/dxf.py` with boundary, layer,
 pattern, angle, and scale. Store `hatches: list[HatchEntity]` on `DxfDrawing`.
 Give `Layer` a `_drawing` back-reference or a narrow hatch callback so
 `Layer.hatch(...)` appends to the owning drawing.
@@ -302,16 +302,16 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/model/core.py tests/write/test_dxf_hatch.py tests/model/test_model_dxf_production.py
+git add src/cady/scene/dxf.py src/cady/model/core.py tests/write/test_dxf_hatch.py tests/model/test_model_dxf_production.py
 git commit -m "feat(dxf): add hatch scene API"
 ```
 
 ### Task 4: HATCH writer
 
 **Files:**
-- Create: `src/cad/write/dxf/hatch.py`
-- Modify: `src/cad/write/dxf/document.py`
-- Modify: `src/cad/write/dxf/entities.py`
+- Create: `src/cady/write/dxf/hatch.py`
+- Modify: `src/cady/write/dxf/document.py`
+- Modify: `src/cady/write/dxf/entities.py`
 - Modify: `tests/write/test_dxf_hatch.py`
 - Modify: `tests/write/goldens/smoke.dxf` if table changes affect golden output.
 
@@ -328,8 +328,8 @@ git commit -m "feat(dxf): add hatch scene API"
 Add tests:
 
 ```python
-from cad import DxfDrawing, rectangle
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing, rectangle
+from cady.write.dxf.sections import render_dxf
 
 
 def test_hatch_entity_emits_ansi31() -> None:
@@ -379,7 +379,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/hatch.py src/cad/write/dxf/document.py src/cad/write/dxf/entities.py tests/write/test_dxf_hatch.py tests/write/goldens/smoke.dxf
+git add src/cady/write/dxf/hatch.py src/cady/write/dxf/document.py src/cady/write/dxf/entities.py tests/write/test_dxf_hatch.py tests/write/goldens/smoke.dxf
 git commit -m "feat(dxf): emit ansi31 hatch"
 ```
 
@@ -388,8 +388,8 @@ git commit -m "feat(dxf): emit ansi31 hatch"
 ### Task 5: block and insert scene API
 
 **Files:**
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/model/core.py`
 - Create: `tests/write/test_dxf_blocks.py`
 - Modify: `tests/model/test_model_dxf_production.py`
 
@@ -408,7 +408,7 @@ Add tests:
 ```python
 import pytest
 
-from cad import DxfDrawing, Model, SceneError, circle
+from cady import DxfDrawing, Model, SceneError, circle
 
 
 def test_block_definition_records_entities() -> None:
@@ -449,16 +449,16 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/model/core.py tests/write/test_dxf_blocks.py tests/model/test_model_dxf_production.py
+git add src/cady/scene/dxf.py src/cady/model/core.py tests/write/test_dxf_blocks.py tests/model/test_model_dxf_production.py
 git commit -m "feat(dxf): add block and insert scene API"
 ```
 
 ### Task 6: BLOCKS and INSERT writer
 
 **Files:**
-- Create: `src/cad/write/dxf/blocks.py`
-- Modify: `src/cad/write/dxf/document.py`
-- Modify: `src/cad/write/dxf/entities.py`
+- Create: `src/cady/write/dxf/blocks.py`
+- Modify: `src/cady/write/dxf/document.py`
+- Modify: `src/cady/write/dxf/entities.py`
 - Modify: `tests/write/test_dxf_blocks.py`
 
 **Ownership:**
@@ -474,8 +474,8 @@ git commit -m "feat(dxf): add block and insert scene API"
 Add tests:
 
 ```python
-from cad import DxfDrawing, circle
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing, circle
+from cady.write.dxf.sections import render_dxf
 
 
 def test_block_and_insert_emit_dxf_tokens() -> None:
@@ -528,7 +528,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/blocks.py src/cad/write/dxf/document.py src/cad/write/dxf/entities.py tests/write/test_dxf_blocks.py
+git add src/cady/write/dxf/blocks.py src/cady/write/dxf/document.py src/cady/write/dxf/entities.py tests/write/test_dxf_blocks.py
 git commit -m "feat(dxf): emit blocks and inserts"
 ```
 
@@ -537,7 +537,7 @@ git commit -m "feat(dxf): emit blocks and inserts"
 ### Task 7: model export aggregation for production DXF state
 
 **Files:**
-- Modify: `src/cad/model/core.py`
+- Modify: `src/cady/model/core.py`
 - Modify: `tests/model/test_model_dxf_production.py`
 
 **Ownership:**
@@ -553,7 +553,7 @@ git commit -m "feat(dxf): emit blocks and inserts"
 Add tests:
 
 ```python
-from cad import Model, SceneError, circle, rectangle
+from cady import Model, SceneError, circle, rectangle
 
 
 def test_model_write_dxf_preserves_hatch_blocks_inserts_and_linetypes(tmp_path) -> None:
@@ -604,7 +604,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_dxf_production.py
+git add src/cady/model/core.py tests/model/test_model_dxf_production.py
 git commit -m "feat(model): preserve production dxf state"
 ```
 
@@ -675,11 +675,11 @@ git commit -m "docs: add production dxf example"
 ### Task 9: Stage 3 documentation and downstream artifacts
 
 **Files:**
-- Modify: `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`
+- Modify: `.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`
 - Modify: `.warden/preference-lock.json`
-- Modify: `.warden/plans/2026-05-08-pyseas-cad-v1-stage-plans.md`
-- Create: `.warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md`
-- Create: `.warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md`
+- Modify: `.warden/plans/2026-05-08-cady-v1-stage-plans.md`
+- Create: `.warden/specs/2026-05-08-cady-stage-4-dimensions-design.md`
+- Create: `.warden/plans/2026-05-08-cady-stage-4-dimensions.md`
 
 **Ownership:**
 - In scope: closeout review and next-stage planning artifacts.
@@ -704,12 +704,12 @@ Record:
 
 - [ ] **Step 3: Create Stage 4 dimensions design draft**
 
-Create `.warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md` with
+Create `.warden/specs/2026-05-08-cady-stage-4-dimensions-design.md` with
 status `draft`, carrying roadmap scope and actual Stage 3 API references.
 
 - [ ] **Step 4: Create Stage 4 dimensions plan draft**
 
-Create `.warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md` with status
+Create `.warden/plans/2026-05-08-cady-stage-4-dimensions.md` with status
 `draft`, headings for dimension strategy, linear/aligned/radial/angular
 dimensions, helper geometry, examples, and viewer smoke tests.
 
@@ -755,12 +755,12 @@ Expected: PASS.
 
 - [ ] **Step 4: Run type check**
 
-Run: `.venv/bin/pyright src/cad`
+Run: `.venv/bin/pyright src/cady`
 Expected: 0 errors.
 
 - [ ] **Step 5: Run lint**
 
-Run: `.venv/bin/ruff check src/cad tests`
+Run: `.venv/bin/ruff check src/cady tests`
 Expected: 0 violations.
 
 - [ ] **Step 6: Verify runtime dependencies**
@@ -768,7 +768,7 @@ Expected: 0 violations.
 Run:
 
 ```bash
-.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 ```
 
 Expected: exits 0.

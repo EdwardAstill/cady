@@ -1,4 +1,4 @@
-# pyseas-cad Stage 3 - Production DXF
+# cady Stage 3 - Production DXF
 
 **Status:** approved planning contract.
 **Date:** 2026-05-11.
@@ -15,7 +15,7 @@ drawings without starting the dimension engine.
 Target user flow:
 
 ```python
-from cad import Model, circle, line, rectangle
+from cady import Model, circle, line, rectangle
 
 outline = rectangle((0, 0), (1.0, 0.6))
 hole = circle((0.5, 0.3), 0.12)
@@ -37,8 +37,8 @@ model.write_dxf("production_plate.dxf")
 
 Runtime remains pure stdlib. Stage 1 direct APIs and Stage 2 `Model` APIs remain
 supported. DXF output stays R2018 (`AC1032`) and write-only. Geometry stays
-format-blind; hatch, block, insert, and linetype data live in `cad.scene.dxf`
-and model facade wrappers, not in `cad.geom`.
+format-blind; hatch, block, insert, and linetype data live in `cady.scene.dxf`
+and model facade wrappers, not in `cady.geom`.
 
 Stage 3 is not a full drafting system. Dimensions move to Stage 4. Sheet/title
 block layout remains outside core.
@@ -153,7 +153,7 @@ Rules:
 Keep public imports stable:
 
 ```python
-from cad.write.dxf.sections import render_dxf, write_dxf
+from cady.write.dxf.sections import render_dxf, write_dxf
 ```
 
 Internal writer modules:
@@ -193,7 +193,7 @@ linetype layer, then write a DXF that `ezdxf` opens and audits without errors.
 - `Model.write_dxf` preserves hatches, block definitions, inserts, and
   linetypes from `Drawing2D`.
 - `pytest tests/write -q -k dxf`, `pytest tests/model tests/examples -q`,
-  `pytest -q`, `pyright src/cad`, and `ruff check src/cad tests` pass.
+  `pytest -q`, `pyright src/cady`, and `ruff check src/cady tests` pass.
 - README includes one production-style DXF example.
 - Stage 4 dimensions spec and plan drafts are created or updated.
 
@@ -218,18 +218,18 @@ Filled 2026-05-11.
     `tests/write/test_dxf_linetypes.py`, `tests/write/test_dxf_hatch.py`,
     `tests/write/test_dxf_blocks.py`, and
     `tests/model/test_model_dxf_production.py`.
-  - `.venv/bin/ruff check src/cad tests` -> pass.
-  - `.venv/bin/pyright src/cad` -> 0 errors, 0 warnings.
+  - `.venv/bin/ruff check src/cady tests` -> pass.
+  - `.venv/bin/pyright src/cady` -> 0 errors, 0 warnings.
   - `.venv/bin/pytest -q` -> 88 passed, 28 dependency warnings.
-  - `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> pass.
+  - `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"` -> pass.
 - Known limitations:
   - HATCH supports ANSI31 with one closed flattened boundary.
   - Custom linetype registration is not implemented.
   - Nested block definitions and block attributes are not implemented.
   - Dimensions remain Stage 4.
 - Stage 4 plan updates made:
-  - Created `.warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md`.
-  - Created `.warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md`.
+  - Created `.warden/specs/2026-05-08-cady-stage-4-dimensions-design.md`.
+  - Created `.warden/plans/2026-05-08-cady-stage-4-dimensions.md`.
 - Preference-lock decisions added:
   - `dxf-linetypes-stage-3`
   - `dxf-hatch-api`

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import re
 
-from cad import DxfDrawing
-from cad.write.dxf.plan import DxfRenderPlan, make_render_plan
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing
+from cady.write.dxf.plan import DxfRenderPlan, make_render_plan
+from cady.write.dxf.sections import render_dxf
 
 
 def test_make_render_plan_allocates_dimension_block_names() -> None:
@@ -32,7 +32,7 @@ def test_render_plan_block_names_skip_existing_user_blocks() -> None:
 
 def test_render_plan_uses_dimstyle_false_when_no_dimensions() -> None:
     drawing = DxfDrawing()
-    from cad import circle
+    from cady import circle
 
     drawing.layer("A").add(circle((0, 0), 1))
     plan = make_render_plan(drawing)

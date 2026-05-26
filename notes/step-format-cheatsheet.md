@@ -23,13 +23,13 @@ literals. Strings use single quotes; doubled quotes escape.
 
 ```
 HEADER;
-FILE_DESCRIPTION (('pyseas-cad export'), '2;1');
+FILE_DESCRIPTION (('cady export'), '2;1');
 FILE_NAME (
   'padeye.step',
   '2026-05-08T14:30:00',
-  ('pyseas-cad'),
+  ('cady'),
   ('pyseas'),
-  'pyseas-cad v0.0.1',
+  'cady v0.0.1',
   '',
   ''
 );
@@ -157,7 +157,7 @@ but with subtle topology errors.
 - Free reference implementation surveys: https://github.com/stepcode/stepcode
 - A clear walkthrough by William Adams:
   https://williamadams.org/stepfiles.html (general explainer; use as
-  starting point only — pyseas-cad will need the AP242 spec for new
+  starting point only — cady will need the AP242 spec for new
   code).
 - CadQuery example outputs: open any `*.step` file CadQuery writes
   and read it as plain text; the output is excellent reference.

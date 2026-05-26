@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cad import DxfDrawing, SceneError
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing, SceneError
+from cady.write.dxf.sections import render_dxf
 
 
 def test_linear_dimension_records_horizontal_measurement() -> None:

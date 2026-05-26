@@ -1,11 +1,11 @@
-# pyseas-cad Stage 4.6 DXF Writer Hardening Plan
+# cady Stage 4.6 DXF Writer Hardening Plan
 
 > **For agentic workers:** Refine this draft with `writing-plans` before
 > execution.
 
 **Goal:** Make DXF writer shared state explicit before STEP MVP work.
 
-**Architecture:** Add a small DXF render plan/context local to `cad.write.dxf`.
+**Architecture:** Add a small DXF render plan/context local to `cady.write.dxf`.
 Do not introduce a cross-format writer framework.
 
 **Status:** complete
@@ -25,5 +25,5 @@ Do not introduce a cross-format writer framework.
 - `.venv/bin/pytest tests/write -q -k dimension`
 - `.venv/bin/pytest tests/examples/test_production_dxf.py -q`
 - `.venv/bin/pytest -q`
-- `.venv/bin/pyright src/cad`
-- `.venv/bin/ruff check src/cad tests examples/scripts`
+- `.venv/bin/pyright src/cady`
+- `.venv/bin/ruff check src/cady tests examples/scripts`

@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from cad import DxfDrawing
-from cad.scene.dxf import AngularDimensionEntity
+from cady import DxfDrawing
+from cady.scene.dxf import AngularDimensionEntity
 
 
 def test_angular_dimension_records_three_points_and_radius() -> None:

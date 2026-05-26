@@ -1,4 +1,4 @@
-from cad import circle, prism, rectangle
+from cady import circle, prism, rectangle
 
 rectangle((0, 0), (1, 1)).translate(2, 0)
 rectangle((0, 0), (1, 1)).translate(2, 0, 0)

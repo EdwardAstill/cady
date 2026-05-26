@@ -1,10 +1,10 @@
-# pyseas-cad Stage 1 Implementation Plan
+# cady Stage 1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task when tasks are independent. For same-session manual execution, follow this plan directly. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a pure-stdlib Python `cad` package that turns format-blind 2D and 3D geometric primitives into DXF (R2018) and STL (binary + ASCII) files, with the API surface locked in `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md`.
+**Goal:** Ship a pure-stdlib Python `cady` package that turns format-blind 2D and 3D geometric primitives into DXF (R2018) and STL (binary + ASCII) files, with the API surface locked in `.warden/specs/2026-05-08-cady-stage-1-design.md`.
 
-**Architecture:** Three layers with a one-way dependency `write/ → scene/ → geom/ → _vendor/`. `geom/` holds frozen-dataclass value types split into disjoint `Shape2D` and `Shape3D` hierarchies. `scene/` owns per-format scene state (`DxfDrawing`, `StlMesh`). `write/` emits ASCII DXF and binary/ASCII STL. The vendored `mapbox-earcut` Python port lives under `src/cad/_vendor/` and is the only third-party code in the runtime path.
+**Architecture:** Three layers with a one-way dependency `write/ → scene/ → geom/ → _vendor/`. `geom/` holds frozen-dataclass value types split into disjoint `Shape2D` and `Shape3D` hierarchies. `scene/` owns per-format scene state (`DxfDrawing`, `StlMesh`). `write/` emits ASCII DXF and binary/ASCII STL. The vendored `mapbox-earcut` Python port lives under `src/cady/_vendor/` and is the only third-party code in the runtime path.
 
 **Tech Stack:** Python 3.11+, stdlib only at runtime. Dev deps: `pytest`, `pyright` (strict), `ruff`, `ezdxf` (DXF round-trip verification), pure-Python `mapbox-earcut` port (vendored).
 
@@ -12,7 +12,7 @@
 
 **Recommended MCPs:** context7 (for ezdxf API and DXF group-code lookups; mapbox-earcut Python port discovery).
 
-**Machine plan:** 2026-05-08-pyseas-cad-stage-1.yaml
+**Machine plan:** 2026-05-08-cady-stage-1.yaml
 
 **Status:** approved
 **Refinement passes:** 1 (warden lint clean; plan-document-reviewer approved with one Medium finding addressed in Task 22 Step 3 clarification, and two advisory notes carried into the executing agent's awareness — see commit `8c54abd`).
@@ -21,7 +21,7 @@
 
 The repo was initialised by the `writing-plans` skill before plan tasks begin. State at plan-write time:
 
-- Branch `main` carries `IDEAS.md`, `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md`, `.warden/preference-lock.json`, `notes/dxf-format-cheatsheet.md`, `notes/step-format-cheatsheet.md`, `.gitignore`.
+- Branch `main` carries `IDEAS.md`, `.warden/specs/2026-05-08-cady-stage-1-design.md`, `.warden/preference-lock.json`, `notes/dxf-format-cheatsheet.md`, `notes/step-format-cheatsheet.md`, `.gitignore`.
 - Branch `stage-1` checked out at `.worktrees/stage-1/`. All plan tasks run inside that worktree.
 - Plan tasks 1..N each commit to `stage-1`. The final `merge-and-cleanup` task fast-forward-merges `stage-1` into `main` and removes the worktree.
 
@@ -64,7 +64,7 @@ The spec carries a `## Bootstrap exception` block that records this prior work; 
   If false: drop slots on the abstract base only and slot the concrete leaves; document why.
   Owner: Task 3 (`shape_base`).
 
-- `A6` — The `pyright --strict` static type checker, configured against `src/cad/`, can express the disjoint Shape2D/Shape3D arity invariant (Shape2D.translate(2 args), Shape3D.translate(3 args)) so that `rectangle((0,0),(1,1)).translate(2,0,0)` is reported as a type error, as required by spec acceptance criteria.
+- `A6` — The `pyright --strict` static type checker, configured against `src/cady/`, can express the disjoint Shape2D/Shape3D arity invariant (Shape2D.translate(2 args), Shape3D.translate(3 args)) so that `rectangle((0,0),(1,1)).translate(2,0,0)` is reported as a type error, as required by spec acceptance criteria.
   Type: design
   Source: spec acceptance lines 594–598.
   Check: `tests/geom/transform_typing.py` contains the named call patterns and `pyright --strict tests/geom/transform_typing.py` exits non-zero against the wrong-arity calls (verified with `# type: ignore[unused-ignore]` machinery or the dedicated `assert_type` pattern).
@@ -81,7 +81,7 @@ The spec carries a `## Bootstrap exception` block that records this prior work; 
 ├── README.md                                   # one-screen quickstart pointing at examples/
 ├── examples/
 │   └── plate_with_hole.py                      # end-to-end DXF + STL example, CLI --out
-├── src/cad/
+├── src/cady/
 │   ├── __init__.py                             # re-exports factory funcs, scenes, errors
 │   ├── errors.py                               # CadError, SceneError, WriteError
 │   ├── geom/
@@ -175,12 +175,12 @@ Deps live as: `geom/` imports only `_vendor` and stdlib. `scene/` imports `geom`
 ### Task 1: scaffold
 
 **Files:**
-- Create: `pyproject.toml`, `NOTICE`, `README.md`, `src/cad/__init__.py`, `src/cad/_vendor/__init__.py`, `tests/conftest.py`, `tests/__init__.py`
+- Create: `pyproject.toml`, `NOTICE`, `README.md`, `src/cady/__init__.py`, `src/cady/_vendor/__init__.py`, `tests/conftest.py`, `tests/__init__.py`
 - Create: `.python-version` (`3.11` or newer)
 
 **Ownership:**
 - In scope: every file listed above.
-- Out of scope: any `cad.geom`, `cad.scene`, `cad.write` source.
+- Out of scope: any `cady.geom`, `cady.scene`, `cady.write` source.
 
 **Assumption refs:** `A5`
 
@@ -192,12 +192,12 @@ Deps live as: `geom/` imports only `_vendor` and stdlib. `scene/` imports `geom`
 
 ```python
 def test_package_importable():
-    import cad
-    assert hasattr(cad, "__version__")
+    import cady
+    assert hasattr(cady, "__version__")
 
 def test_runtime_has_no_external_deps():
     import importlib.metadata as md
-    dist = md.distribution("pyseas-cad")
+    dist = md.distribution("cady")
     requires = dist.requires or []
     runtime = [r for r in requires if "; extra ==" not in r]
     assert runtime == [], f"runtime deps must be empty, got {runtime}"
@@ -206,7 +206,7 @@ def test_runtime_has_no_external_deps():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_smoke_import.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'cad'` or `PackageNotFoundError`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'cady'` or `PackageNotFoundError`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -218,7 +218,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyseas-cad"
+name = "cady"
 version = "0.1.0.dev0"
 description = "Pure-Python write-only CAD library producing DXF and STL from format-blind primitives."
 readme = "README.md"
@@ -236,7 +236,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cad"]
+packages = ["src/cady"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -244,8 +244,8 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.pyright]
-include = ["src/cad", "tests"]
-strict = ["src/cad"]
+include = ["src/cady", "tests"]
+strict = ["src/cady"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 
@@ -258,12 +258,12 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ```
 
-`src/cad/__init__.py`:
+`src/cady/__init__.py`:
 
 ```python
-"""pyseas-cad — write-only CAD library (DXF + STL).
+"""cady — write-only CAD library (DXF + STL).
 
-See `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md` for the contract.
+See `.warden/specs/2026-05-08-cady-stage-1-design.md` for the contract.
 """
 from __future__ import annotations
 
@@ -272,19 +272,19 @@ __version__ = "0.1.0.dev0"
 __all__: list[str] = []
 ```
 
-`src/cad/_vendor/__init__.py`: empty.
+`src/cady/_vendor/__init__.py`: empty.
 
 `NOTICE`:
 
 ```
-pyseas-cad
+cady
 ==========
 
 Copyright (c) 2026 Edward Astill.
 
-This product includes vendored third-party code (see src/cad/_vendor/).
+This product includes vendored third-party code (see src/cady/_vendor/).
 Each vendored module retains its upstream licence and attribution; see the
-top of each file under src/cad/_vendor/.
+top of each file under src/cady/_vendor/.
 ```
 
 `README.md`: one-paragraph summary describing scope and pointing at the spec.
@@ -325,14 +325,14 @@ Both exit 0 with version strings.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml NOTICE README.md src/cad/__init__.py src/cad/_vendor/__init__.py tests/conftest.py tests/__init__.py tests/test_smoke_import.py .python-version
-git commit -m "feat: scaffold pyseas-cad package (no runtime deps)"
+git add pyproject.toml NOTICE README.md src/cady/__init__.py src/cady/_vendor/__init__.py tests/conftest.py tests/__init__.py tests/test_smoke_import.py .python-version
+git commit -m "feat: scaffold cady package (no runtime deps)"
 ```
 
 **Acceptance for Task 1:**
 - `pytest tests/test_smoke_import.py -q` exits 0 with 2 passed.
-- `python -c "import cad; print(cad.__version__)"` prints `0.1.0.dev0`.
-- `pip show pyseas-cad` lists no runtime requires.
+- `python -c "import cady; print(cady.__version__)"` prints `0.1.0.dev0`.
+- `pip show cady` lists no runtime requires.
 
 ---
 
@@ -341,10 +341,10 @@ git commit -m "feat: scaffold pyseas-cad package (no runtime deps)"
 ### Task 2: vec_types
 
 **Files:**
-- Create: `src/cad/geom/__init__.py` (empty for now), `src/cad/geom/vec.py`, `tests/geom/__init__.py`, `tests/geom/test_vec.py`
+- Create: `src/cady/geom/__init__.py` (empty for now), `src/cady/geom/vec.py`, `tests/geom/__init__.py`, `tests/geom/test_vec.py`
 
 **Ownership:**
-- In scope: `src/cad/geom/vec.py`, the two new `__init__.py` files, `tests/geom/test_vec.py`.
+- In scope: `src/cady/geom/vec.py`, the two new `__init__.py` files, `tests/geom/test_vec.py`.
 - Out of scope: any concrete shape type.
 
 **Assumption refs:** `A5`
@@ -358,7 +358,7 @@ git commit -m "feat: scaffold pyseas-cad package (no runtime deps)"
 ```python
 import math
 import pytest
-from cad.geom.vec import Vec2, Vec3
+from cady.geom.vec import Vec2, Vec3
 
 def test_vec2_basic():
     a = Vec2(1.0, 2.0)
@@ -392,11 +392,11 @@ def test_vec_rejects_nan():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/geom/test_vec.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'cad.geom.vec'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'cady.geom.vec'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`src/cad/geom/vec.py`:
+`src/cady/geom/vec.py`:
 
 ```python
 from __future__ import annotations
@@ -467,13 +467,13 @@ Expected: 4 passed.
 
 - [ ] **Step 5: Type-check**
 
-Run: `pyright --strict src/cad/geom/vec.py`
+Run: `pyright --strict src/cady/geom/vec.py`
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/cad/geom/__init__.py src/cad/geom/vec.py tests/geom/__init__.py tests/geom/test_vec.py
+git add src/cady/geom/__init__.py src/cady/geom/vec.py tests/geom/__init__.py tests/geom/test_vec.py
 git commit -m "feat(geom): add immutable Vec2 / Vec3 with finite-coordinate validation"
 ```
 
@@ -482,10 +482,10 @@ git commit -m "feat(geom): add immutable Vec2 / Vec3 with finite-coordinate vali
 ### Task 3: shape_base
 
 **Files:**
-- Create: `src/cad/geom/base.py`, `tests/geom/test_shape_base.py`
+- Create: `src/cady/geom/base.py`, `tests/geom/test_shape_base.py`
 
 **Ownership:**
-- In scope: `src/cad/geom/base.py`, `tests/geom/test_shape_base.py`.
+- In scope: `src/cady/geom/base.py`, `tests/geom/test_shape_base.py`.
 - Out of scope: any concrete shape.
 
 **Assumption refs:** `A5`
@@ -498,8 +498,8 @@ git commit -m "feat(geom): add immutable Vec2 / Vec3 with finite-coordinate vali
 
 ```python
 import pytest
-from cad.geom.base import Shape2D, Shape3D, Axis, parse_axis
-from cad.geom.vec import Vec3
+from cady.geom.base import Shape2D, Shape3D, Axis, parse_axis
+from cady.geom.vec import Vec3
 
 def test_shape_classes_are_disjoint():
     assert not issubclass(Shape2D, Shape3D)
@@ -528,7 +528,7 @@ Expected: FAIL with `ImportError`.
 
 - [ ] **Step 3: Write the implementation**
 
-`src/cad/geom/base.py`:
+`src/cady/geom/base.py`:
 
 ```python
 from __future__ import annotations
@@ -536,7 +536,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import Literal, Union
 
-from cad.geom.vec import Vec3
+from cady.geom.vec import Vec3
 
 AxisString = Literal["+x", "-x", "+y", "-y", "+z", "-z"]
 Axis = Union[AxisString, Vec3]
@@ -580,7 +580,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/base.py tests/geom/test_shape_base.py
+git add src/cady/geom/base.py tests/geom/test_shape_base.py
 git commit -m "feat(geom): add Shape2D / Shape3D abstract bases and Axis parser"
 ```
 
@@ -589,7 +589,7 @@ git commit -m "feat(geom): add Shape2D / Shape3D abstract bases and Axis parser"
 ### Task 4: shape2d_line
 
 **Files:**
-- Create: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `tests/geom/test_line.py`
+- Create: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `tests/geom/test_line.py`
 
 **Ownership:**
 - In scope: only `Line` class plus `line()` factory plus tests.
@@ -603,9 +603,9 @@ git commit -m "feat(geom): add Shape2D / Shape3D abstract bases and Axis parser"
 
 ```python
 import pytest
-from cad import line
-from cad.geom.shapes2d import Line
-from cad.geom.vec import Vec2
+from cady import line
+from cady.geom.shapes2d import Line
+from cady.geom.vec import Vec2
 
 def test_line_factory_promotes_tuples():
     seg = line((0.0, 0.0), (1.0, 0.0))
@@ -628,19 +628,19 @@ def test_line_zero_length_rejected():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/geom/test_line.py -q`
-Expected: FAIL with `ImportError` (no `cad.line`).
+Expected: FAIL with `ImportError` (no `cady.line`).
 
 - [ ] **Step 3: Write the implementation**
 
-`src/cad/geom/shapes2d.py`:
+`src/cady/geom/shapes2d.py`:
 
 ```python
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cad.geom.base import Shape2D
-from cad.geom.vec import Vec2
+from cady.geom.base import Shape2D
+from cady.geom.vec import Vec2
 
 
 def _to_vec2(p: Vec2 | tuple[float, float]) -> Vec2:
@@ -666,23 +666,23 @@ class Line(Shape2D):
         return lo, hi
 ```
 
-`src/cad/geom/factories.py`:
+`src/cady/geom/factories.py`:
 
 ```python
 from __future__ import annotations
 
-from cad.geom.shapes2d import Line, _to_vec2
-from cad.geom.vec import Vec2
+from cady.geom.shapes2d import Line, _to_vec2
+from cady.geom.vec import Vec2
 
 
 def line(a: Vec2 | tuple[float, float], b: Vec2 | tuple[float, float]) -> Line:
     return Line(_to_vec2(a), _to_vec2(b))
 ```
 
-`src/cad/__init__.py` — append:
+`src/cady/__init__.py` — append:
 
 ```python
-from cad.geom.factories import line as line  # noqa: F401
+from cady.geom.factories import line as line  # noqa: F401
 
 __all__ = ["line"]
 ```
@@ -695,7 +695,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_line.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_line.py
 git commit -m "feat(geom): add Line + line() factory with zero-length rejection"
 ```
 
@@ -704,7 +704,7 @@ git commit -m "feat(geom): add Line + line() factory with zero-length rejection"
 ### Task 5: shape2d_arc
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_arc.py`
 
 **Ownership:**
@@ -720,9 +720,9 @@ git commit -m "feat(geom): add Line + line() factory with zero-length rejection"
 ```python
 import math
 import pytest
-from cad import arc
-from cad.geom.shapes2d import Arc
-from cad.geom.vec import Vec2
+from cady import arc
+from cady.geom.shapes2d import Arc
+from cady.geom.vec import Vec2
 
 def test_arc_factory_promotes_centre():
     a = arc((0.0, 0.0), 1.0, 0.0, math.pi)
@@ -751,11 +751,11 @@ def test_arc_bounds_half_circle_top():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/geom/test_arc.py -q`
-Expected: FAIL with `ImportError` (no `cad.arc`).
+Expected: FAIL with `ImportError` (no `cady.arc`).
 
 - [ ] **Step 3: Write the implementation**
 
-In `src/cad/geom/shapes2d.py` add:
+In `src/cady/geom/shapes2d.py` add:
 
 ```python
 import math
@@ -798,15 +798,15 @@ class Arc(Shape2D):
         return Vec2(min(xs), min(ys)), Vec2(max(xs), max(ys))
 ```
 
-In `src/cad/geom/factories.py` add:
+In `src/cady/geom/factories.py` add:
 
 ```python
 def arc(centre: Vec2 | tuple[float, float], radius: float, start: float, end: float):
-    from cad.geom.shapes2d import Arc
+    from cady.geom.shapes2d import Arc
     return Arc(_to_vec2(centre), float(radius), float(start), float(end))
 ```
 
-In `src/cad/__init__.py` re-export `arc` and append it to `__all__`.
+In `src/cady/__init__.py` re-export `arc` and append it to `__all__`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -816,7 +816,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_arc.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_arc.py
 git commit -m "feat(geom): add Arc + arc() factory with radius/sweep validation and bounds"
 ```
 
@@ -825,7 +825,7 @@ git commit -m "feat(geom): add Arc + arc() factory with radius/sweep validation 
 ### Task 6: shape2d_circle
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_circle.py`
 
 **Invoke skill:** `test-driven-development`.
@@ -835,9 +835,9 @@ git commit -m "feat(geom): add Arc + arc() factory with radius/sweep validation 
 ```python
 # tests/geom/test_circle.py
 import pytest
-from cad import circle
-from cad.geom.shapes2d import Circle
-from cad.geom.vec import Vec2
+from cady import circle
+from cady.geom.shapes2d import Circle
+from cady.geom.vec import Vec2
 
 def test_circle_is_always_closed():
     c = circle((0, 0), 1.0)
@@ -894,18 +894,18 @@ Append to `factories.py`:
 
 ```python
 def circle(centre: Vec2 | tuple[float, float], radius: float):
-    from cad.geom.shapes2d import Circle
+    from cady.geom.shapes2d import Circle
     return Circle(_to_vec2(centre), float(radius))
 ```
 
-Re-export `circle` in `cad/__init__.py`.
+Re-export `circle` in `cady/__init__.py`.
 
 - [ ] **Step 4: Run tests** → 4 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_circle.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_circle.py
 git commit -m "feat(geom): add Circle + circle() factory; always-closed invariant"
 ```
 
@@ -914,7 +914,7 @@ git commit -m "feat(geom): add Circle + circle() factory; always-closed invarian
 ### Task 7: shape2d_rectangle
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_rectangle.py`
 
 - [ ] **Step 1: Write failing test**
@@ -922,9 +922,9 @@ git commit -m "feat(geom): add Circle + circle() factory; always-closed invarian
 ```python
 # tests/geom/test_rectangle.py
 import pytest
-from cad import rectangle
-from cad.geom.shapes2d import Rectangle
-from cad.geom.vec import Vec2
+from cady import rectangle
+from cady.geom.shapes2d import Rectangle
+from cady.geom.vec import Vec2
 
 def test_rectangle_factory():
     r = rectangle((1, 2), (3, 4))
@@ -978,7 +978,7 @@ Append to `factories.py`:
 
 ```python
 def rectangle(corner: Vec2 | tuple[float, float], size: Vec2 | tuple[float, float]):
-    from cad.geom.shapes2d import Rectangle
+    from cady.geom.shapes2d import Rectangle
     return Rectangle(_to_vec2(corner), _to_vec2(size))
 ```
 
@@ -989,7 +989,7 @@ Re-export `rectangle`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_rectangle.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_rectangle.py
 git commit -m "feat(geom): add Rectangle + rectangle() factory"
 ```
 
@@ -998,7 +998,7 @@ git commit -m "feat(geom): add Rectangle + rectangle() factory"
 ### Task 8: shape2d_polyline
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_polyline.py`
 
 - [ ] **Step 1: Write failing test**
@@ -1006,9 +1006,9 @@ git commit -m "feat(geom): add Rectangle + rectangle() factory"
 ```python
 # tests/geom/test_polyline.py
 import pytest
-from cad import polyline
-from cad.geom.shapes2d import Polyline
-from cad.geom.vec import Vec2
+from cady import polyline
+from cady.geom.shapes2d import Polyline
+from cady.geom.vec import Vec2
 
 def test_polyline_open():
     pl = polyline([(0, 0), (1, 0), (1, 1)])
@@ -1069,7 +1069,7 @@ Append to `factories.py`:
 
 ```python
 def polyline(points: list[Vec2 | tuple[float, float]], closed: bool = False):
-    from cad.geom.shapes2d import Polyline
+    from cady.geom.shapes2d import Polyline
     return Polyline(tuple(_to_vec2(p) for p in points), closed)
 ```
 
@@ -1080,7 +1080,7 @@ Re-export `polyline`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_polyline.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_polyline.py
 git commit -m "feat(geom): add Polyline + polyline() factory with point-count validation"
 ```
 
@@ -1089,7 +1089,7 @@ git commit -m "feat(geom): add Polyline + polyline() factory with point-count va
 ### Task 9: shape2d_spline
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_spline.py`
 
 - [ ] **Step 1: Failing test**
@@ -1097,9 +1097,9 @@ git commit -m "feat(geom): add Polyline + polyline() factory with point-count va
 ```python
 # tests/geom/test_spline.py
 import pytest
-from cad import spline
-from cad.geom.shapes2d import Spline
-from cad.geom.vec import Vec2
+from cady import spline
+from cady.geom.shapes2d import Spline
+from cady.geom.vec import Vec2
 
 def test_spline_minimal_three_plus_one():
     s = spline([(0, 0), (1, 1), (2, -1), (3, 0)])  # one cubic Bezier (3*1+1 = 4 points)
@@ -1145,7 +1145,7 @@ Append to `factories.py`:
 
 ```python
 def spline(control_points: list[Vec2 | tuple[float, float]]):
-    from cad.geom.shapes2d import Spline
+    from cady.geom.shapes2d import Spline
     return Spline(tuple(_to_vec2(p) for p in control_points))
 ```
 
@@ -1156,7 +1156,7 @@ Re-export `spline`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_spline.py
+git add src/cady/geom/shapes2d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_spline.py
 git commit -m "feat(geom): add Spline + spline() factory; cubic-Bezier 3n+1 invariant"
 ```
 
@@ -1165,7 +1165,7 @@ git commit -m "feat(geom): add Spline + spline() factory; cubic-Bezier 3n+1 inva
 ### Task 10: shape2d_path
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py` (add `__add__` on `Shape2D`)
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/base.py` (add `__add__` on `Shape2D`)
 - Create: `tests/geom/test_path.py`
 
 **Notes:** The `+` operator on any Shape2D pair returns a `Path` whose `segments` is the flattened head-to-tail concatenation. Endpoints must match.
@@ -1176,8 +1176,8 @@ git commit -m "feat(geom): add Spline + spline() factory; cubic-Bezier 3n+1 inva
 # tests/geom/test_path.py
 import pytest
 import math
-from cad import line, arc
-from cad.geom.shapes2d import Path
+from cady import line, arc
+from cady.geom.shapes2d import Path
 
 def test_two_lines_compose_into_path():
     p = line((0, 0), (1, 0)) + line((1, 0), (1, 1))
@@ -1252,7 +1252,7 @@ In `base.py` add to `Shape2D`:
 class Shape2D(ABC):
     __slots__ = ()
     def __add__(self, other: "Shape2D") -> "Shape2D":
-        from cad.geom.shapes2d import Path
+        from cady.geom.shapes2d import Path
         left = self.segments if isinstance(self, Path) else (self,)
         right = other.segments if isinstance(other, Path) else (other,)
         return Path(tuple(left) + tuple(right))
@@ -1263,7 +1263,7 @@ class Shape2D(ABC):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/base.py tests/geom/test_path.py
+git add src/cady/geom/shapes2d.py src/cady/geom/base.py tests/geom/test_path.py
 git commit -m "feat(geom): add Path + Shape2D.__add__ head-to-tail composition"
 ```
 
@@ -1272,7 +1272,7 @@ git commit -m "feat(geom): add Path + Shape2D.__add__ head-to-tail composition"
 ### Task 11: shape2d_close
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py` (add `.close()` declaration)
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/base.py` (add `.close()` declaration)
 - Create: `tests/geom/test_close.py`
 
 - [ ] **Step 1: Failing test**
@@ -1280,8 +1280,8 @@ git commit -m "feat(geom): add Path + Shape2D.__add__ head-to-tail composition"
 ```python
 # tests/geom/test_close.py
 import math
-from cad import line, arc, polyline, circle, rectangle
-from cad.geom.shapes2d import Path, Polyline, Line
+from cady import line, arc, polyline, circle, rectangle
+from cady.geom.shapes2d import Path, Polyline, Line
 
 def test_open_path_closes_with_auto_segment():
     p = line((0, 0), (1, 0)) + line((1, 0), (1, 1)) + line((1, 1), (0, 1))
@@ -1354,7 +1354,7 @@ Add `Shape2D.close` abstractly so type-checkers see it on every `Shape2D`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/base.py tests/geom/test_close.py
+git add src/cady/geom/shapes2d.py src/cady/geom/base.py tests/geom/test_close.py
 git commit -m "feat(geom): add Shape2D.close() with auto-closing segment for Paths"
 ```
 
@@ -1363,7 +1363,7 @@ git commit -m "feat(geom): add Shape2D.close() with auto-closing segment for Pat
 ### Task 12: shape2d_with_hole
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/base.py`
 - Create: `tests/geom/test_with_hole.py`
 
 - [ ] **Step 1: Failing test**
@@ -1371,7 +1371,7 @@ git commit -m "feat(geom): add Shape2D.close() with auto-closing segment for Pat
 ```python
 # tests/geom/test_with_hole.py
 import pytest
-from cad import circle, rectangle, line
+from cady import circle, rectangle, line
 
 def test_closed_shape_can_attach_hole():
     plate = rectangle((0, 0), (1, 1)).with_hole(circle((0.5, 0.5), 0.2))
@@ -1427,7 +1427,7 @@ Expose abstract method on `Shape2D` so callers can call `.with_hole(...)` withou
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/base.py tests/geom/test_with_hole.py
+git add src/cady/geom/shapes2d.py src/cady/geom/base.py tests/geom/test_with_hole.py
 git commit -m "feat(geom): add Shape2D.with_hole / with_holes; closed-only invariant"
 ```
 
@@ -1436,7 +1436,7 @@ git commit -m "feat(geom): add Shape2D.with_hole / with_holes; closed-only invar
 ### Task 13: shape2d_transforms
 
 **Files:**
-- Modify: `src/cad/geom/shapes2d.py`, `src/cad/geom/base.py`
+- Modify: `src/cady/geom/shapes2d.py`, `src/cady/geom/base.py`
 - Create: `tests/geom/test_transforms_2d.py`
 
 **Notes:** Transforms are methods on every concrete type. `mirror(through=Line)` reflects across the line through the two given points. `rotate(centre, angle)` rotates about a 2D point.
@@ -1447,8 +1447,8 @@ git commit -m "feat(geom): add Shape2D.with_hole / with_holes; closed-only invar
 # tests/geom/test_transforms_2d.py
 import math
 import pytest
-from cad import rectangle, line, circle
-from cad.geom.vec import Vec2
+from cady import rectangle, line, circle
+from cady.geom.vec import Vec2
 
 def test_translate_returns_new_shape():
     r = rectangle((0, 0), (1, 1))
@@ -1495,7 +1495,7 @@ Add abstract declarations on `Shape2D` so `.translate(2, 3)` is statically resol
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes2d.py src/cad/geom/base.py tests/geom/test_transforms_2d.py
+git add src/cady/geom/shapes2d.py src/cady/geom/base.py tests/geom/test_transforms_2d.py
 git commit -m "feat(geom): add 2D transforms (translate, rotate, scale, mirror)"
 ```
 
@@ -1504,7 +1504,7 @@ git commit -m "feat(geom): add 2D transforms (translate, rotate, scale, mirror)"
 ### Task 14: shape2d_subtract_typeerror
 
 **Files:**
-- Modify: `src/cad/geom/base.py`
+- Modify: `src/cady/geom/base.py`
 - Create: `tests/geom/test_subtract_typeerror.py`
 
 - [ ] **Step 1: Failing test**
@@ -1512,7 +1512,7 @@ git commit -m "feat(geom): add 2D transforms (translate, rotate, scale, mirror)"
 ```python
 # tests/geom/test_subtract_typeerror.py
 import pytest
-from cad import circle
+from cady import circle
 
 def test_subtraction_points_at_with_hole():
     with pytest.raises(TypeError) as ei:
@@ -1542,7 +1542,7 @@ def __sub__(self, other: object) -> "Shape2D":
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/base.py tests/geom/test_subtract_typeerror.py
+git add src/cady/geom/base.py tests/geom/test_subtract_typeerror.py
 git commit -m "feat(geom): Shape2D.__sub__ raises TypeError pointing at with_hole and Stage 6"
 ```
 
@@ -1563,7 +1563,7 @@ git commit -m "feat(geom): Shape2D.__sub__ raises TypeError pointing at with_hol
 
 ```python
 """Static-typing fixture. pyright --strict on this file MUST flag the marked lines."""
-from cad import rectangle
+from cady import rectangle
 
 # OK: 2-arg translate on Shape2D
 ok_2d = rectangle((0, 0), (1, 1)).translate(2, 0)
@@ -1607,7 +1607,7 @@ def test_pyright_strict_flags_wrong_arity_2d():
 
 - [ ] **Step 3: Implementation**
 
-Audit `src/cad/geom/base.py` and `shapes2d.py` so every Shape2D `translate` is declared exactly as:
+Audit `src/cady/geom/base.py` and `shapes2d.py` so every Shape2D `translate` is declared exactly as:
 
 ```python
 def translate(self, dx: float, dy: float) -> "<concrete>": ...
@@ -1631,17 +1631,17 @@ git commit -m "test(geom): pyright-strict guard against wrong-arity Shape2D.tran
 ### Task 16: shape3d_sphere
 
 **Files:**
-- Create: `src/cad/geom/shapes3d.py`, `tests/geom/test_sphere.py`
-- Modify: `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Create: `src/cady/geom/shapes3d.py`, `tests/geom/test_sphere.py`
+- Modify: `src/cady/geom/factories.py`, `src/cady/__init__.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/geom/test_sphere.py
 import pytest
-from cad import sphere
-from cad.geom.shapes3d import Sphere
-from cad.geom.vec import Vec3
+from cady import sphere
+from cady.geom.shapes3d import Sphere
+from cady.geom.vec import Vec3
 
 def test_sphere_factory():
     s = sphere((0, 0, 0), 1.0)
@@ -1664,13 +1664,13 @@ def test_sphere_bounds():
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/geom/shapes3d.py`:
+`src/cady/geom/shapes3d.py`:
 
 ```python
 from __future__ import annotations
 from dataclasses import dataclass
-from cad.geom.base import Shape3D
-from cad.geom.vec import Vec3
+from cady.geom.base import Shape3D
+from cady.geom.vec import Vec3
 
 
 def _to_vec3(p: Vec3 | tuple[float, float, float]) -> Vec3:
@@ -1700,18 +1700,18 @@ In `factories.py`:
 
 ```python
 def sphere(centre, radius: float):
-    from cad.geom.shapes3d import Sphere, _to_vec3
+    from cady.geom.shapes3d import Sphere, _to_vec3
     return Sphere(_to_vec3(centre), float(radius))
 ```
 
-Re-export `sphere` in `cad/__init__.py`.
+Re-export `sphere` in `cady/__init__.py`.
 
 - [ ] **Step 4: Run** → 3 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes3d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_sphere.py
+git add src/cady/geom/shapes3d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_sphere.py
 git commit -m "feat(geom): add Sphere + sphere() factory"
 ```
 
@@ -1720,7 +1720,7 @@ git commit -m "feat(geom): add Sphere + sphere() factory"
 ### Task 17: shape3d_prism
 
 **Files:**
-- Modify: `src/cad/geom/shapes3d.py`, `src/cad/geom/factories.py`, `src/cad/__init__.py`
+- Modify: `src/cady/geom/shapes3d.py`, `src/cady/geom/factories.py`, `src/cady/__init__.py`
 - Create: `tests/geom/test_prism.py`
 
 - [ ] **Step 1: Failing test**
@@ -1728,9 +1728,9 @@ git commit -m "feat(geom): add Sphere + sphere() factory"
 ```python
 # tests/geom/test_prism.py
 import pytest
-from cad import prism
-from cad.geom.shapes3d import Prism
-from cad.geom.vec import Vec3
+from cady import prism
+from cady.geom.shapes3d import Prism
+from cady.geom.vec import Vec3
 
 def test_prism_factory_and_bounds():
     p = prism((0, 0, 0), (2, 2, 1))
@@ -1776,7 +1776,7 @@ In `factories.py`:
 
 ```python
 def prism(origin, size):
-    from cad.geom.shapes3d import Prism, _to_vec3
+    from cady.geom.shapes3d import Prism, _to_vec3
     return Prism(_to_vec3(origin), _to_vec3(size))
 ```
 
@@ -1787,7 +1787,7 @@ Re-export.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes3d.py src/cad/geom/factories.py src/cad/__init__.py tests/geom/test_prism.py
+git add src/cady/geom/shapes3d.py src/cady/geom/factories.py src/cady/__init__.py tests/geom/test_prism.py
 git commit -m "feat(geom): add Prism + prism() factory"
 ```
 
@@ -1796,7 +1796,7 @@ git commit -m "feat(geom): add Prism + prism() factory"
 ### Task 18: shape3d_extrusion_value
 
 **Files:**
-- Modify: `src/cad/geom/shapes3d.py`
+- Modify: `src/cady/geom/shapes3d.py`
 - Create: `tests/geom/test_extrusion_value.py`
 
 **Notes:** This builds the `Extrusion` *value type* with validation. The `.extrude(...)` *method* on Shape2D arrives in Task 20.
@@ -1806,9 +1806,9 @@ git commit -m "feat(geom): add Prism + prism() factory"
 ```python
 # tests/geom/test_extrusion_value.py
 import pytest
-from cad import circle, line
-from cad.geom.shapes3d import Extrusion
-from cad.geom.vec import Vec3
+from cady import circle, line
+from cady.geom.shapes3d import Extrusion
+from cady.geom.vec import Vec3
 
 def test_extrusion_holds_intent_values():
     profile = circle((0, 0), 1.0)
@@ -1842,8 +1842,8 @@ def test_extrusion_bounds_axis_aligned_z():
 Append to `shapes3d.py`:
 
 ```python
-from cad.geom.base import Shape2D, Axis, parse_axis
-from cad.geom.vec import Vec2
+from cady.geom.base import Shape2D, Axis, parse_axis
+from cady.geom.vec import Vec2
 
 @dataclass(frozen=True, slots=True)
 class Extrusion(Shape3D):
@@ -1861,7 +1861,7 @@ class Extrusion(Shape3D):
     def bounds(self) -> tuple[Vec3, Vec3]:
         # Axis-aligned cases use the profile-plane convention from spec §3.4.
         # Default fallback: assume profile in XY world plane, sweep along axis vector.
-        from cad.geom.shapes3d import _profile_to_world
+        from cady.geom.shapes3d import _profile_to_world
         u_axis, v_axis, w_axis = _profile_to_world(self.axis)
         plo, phi = self.profile.bounds()
         # corners of the swept volume in world coords
@@ -1885,7 +1885,7 @@ For `Vec3.__mul__` returning a `Vec3` (already exists), and for the comprehensio
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes3d.py tests/geom/test_extrusion_value.py
+git add src/cady/geom/shapes3d.py tests/geom/test_extrusion_value.py
 git commit -m "feat(geom): add Extrusion intent value type with axis/profile validation"
 ```
 
@@ -1894,7 +1894,7 @@ git commit -m "feat(geom): add Extrusion intent value type with axis/profile val
 ### Task 19: shape3d_revolution_value
 
 **Files:**
-- Modify: `src/cad/geom/shapes3d.py`
+- Modify: `src/cady/geom/shapes3d.py`
 - Create: `tests/geom/test_revolution_value.py`
 
 - [ ] **Step 1: Failing test**
@@ -1903,9 +1903,9 @@ git commit -m "feat(geom): add Extrusion intent value type with axis/profile val
 # tests/geom/test_revolution_value.py
 import math
 import pytest
-from cad import rectangle
-from cad.geom.shapes3d import Revolution
-from cad.geom.vec import Vec3
+from cady import rectangle
+from cady.geom.shapes3d import Revolution
+from cady.geom.vec import Vec3
 
 def test_revolution_holds_intent():
     r = Revolution(
@@ -1962,7 +1962,7 @@ class Revolution(Shape3D):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes3d.py tests/geom/test_revolution_value.py
+git add src/cady/geom/shapes3d.py tests/geom/test_revolution_value.py
 git commit -m "feat(geom): add Revolution intent value type"
 ```
 
@@ -1971,7 +1971,7 @@ git commit -m "feat(geom): add Revolution intent value type"
 ### Task 20: shape2d_extrude_method
 
 **Files:**
-- Modify: `src/cad/geom/base.py` (add `Shape2D.extrude` declaration), `src/cad/geom/shapes2d.py` (concrete `extrude` per type)
+- Modify: `src/cady/geom/base.py` (add `Shape2D.extrude` declaration), `src/cady/geom/shapes2d.py` (concrete `extrude` per type)
 - Create: `tests/geom/test_extrude_method.py`
 
 - [ ] **Step 1: Failing test**
@@ -1979,8 +1979,8 @@ git commit -m "feat(geom): add Revolution intent value type"
 ```python
 # tests/geom/test_extrude_method.py
 import pytest
-from cad import circle, rectangle, line
-from cad.geom.shapes3d import Extrusion
+from cady import circle, rectangle, line
+from cady.geom.shapes3d import Extrusion
 
 def test_circle_extrudes_to_extrusion():
     e = circle((0, 0), 1.0).extrude(axis="+z", distance=0.04)
@@ -2009,7 +2009,7 @@ In `Shape2D` (base.py) add:
 
 ```python
 def extrude(self, axis, distance: float) -> "Shape3D":
-    from cad.geom.shapes3d import Extrusion
+    from cady.geom.shapes3d import Extrusion
     if not self.closed:
         raise ValueError("extrude requires a closed Shape2D; call .close() first")
     return Extrusion(profile=self, axis=axis, distance=float(distance))
@@ -2022,7 +2022,7 @@ def extrude(self, axis, distance: float) -> "Shape3D":
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/base.py tests/geom/test_extrude_method.py
+git add src/cady/geom/base.py tests/geom/test_extrude_method.py
 git commit -m "feat(geom): add Shape2D.extrude bridge to Extrusion"
 ```
 
@@ -2031,7 +2031,7 @@ git commit -m "feat(geom): add Shape2D.extrude bridge to Extrusion"
 ### Task 21: shape2d_revolve_method
 
 **Files:**
-- Modify: `src/cad/geom/base.py`
+- Modify: `src/cady/geom/base.py`
 - Create: `tests/geom/test_revolve_method.py`
 
 - [ ] **Step 1: Failing test**
@@ -2039,9 +2039,9 @@ git commit -m "feat(geom): add Shape2D.extrude bridge to Extrusion"
 ```python
 # tests/geom/test_revolve_method.py
 import math
-from cad import rectangle
-from cad.geom.shapes3d import Revolution
-from cad.geom.vec import Vec3
+from cady import rectangle
+from cady.geom.shapes3d import Revolution
+from cady.geom.vec import Vec3
 
 def test_rectangle_revolves_full_turn():
     r = rectangle((0.5, 0), (0.5, 1.0)).revolve(axis="+z")
@@ -2062,7 +2062,7 @@ In `Shape2D` (base.py):
 
 ```python
 def revolve(self, axis, angle: float = 2 * math.pi) -> "Shape3D":
-    from cad.geom.shapes3d import Revolution
+    from cady.geom.shapes3d import Revolution
     direction = parse_axis(axis)
     return Revolution(
         profile=self,
@@ -2079,7 +2079,7 @@ def revolve(self, axis, angle: float = 2 * math.pi) -> "Shape3D":
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/base.py tests/geom/test_revolve_method.py
+git add src/cady/geom/base.py tests/geom/test_revolve_method.py
 git commit -m "feat(geom): add Shape2D.revolve bridge to Revolution"
 ```
 
@@ -2088,7 +2088,7 @@ git commit -m "feat(geom): add Shape2D.revolve bridge to Revolution"
 ### Task 22: shape3d_transforms
 
 **Files:**
-- Modify: `src/cad/geom/shapes3d.py`, `src/cad/geom/base.py` (add `Shape3D` transform declarations)
+- Modify: `src/cady/geom/shapes3d.py`, `src/cady/geom/base.py` (add `Shape3D` transform declarations)
 - Create: `tests/geom/test_transforms_3d.py`
 
 - [ ] **Step 1: Failing test**
@@ -2097,8 +2097,8 @@ git commit -m "feat(geom): add Shape2D.revolve bridge to Revolution"
 # tests/geom/test_transforms_3d.py
 import math
 import pytest
-from cad import sphere, prism
-from cad.geom.vec import Vec3
+from cady import sphere, prism
+from cady.geom.vec import Vec3
 
 def test_translate_returns_new_shape():
     s = sphere((0, 0, 0), 1.0).translate(2, 3, 4)
@@ -2147,7 +2147,7 @@ Also add abstract methods on `Shape3D` so callers can call `.translate(...)` wit
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/shapes3d.py src/cad/geom/base.py tests/geom/test_transforms_3d.py
+git add src/cady/geom/shapes3d.py src/cady/geom/base.py tests/geom/test_transforms_3d.py
 git commit -m "feat(geom): add 3D transforms (translate, rotate, mirror) and Extrusion offset field"
 ```
 
@@ -2156,7 +2156,7 @@ git commit -m "feat(geom): add 3D transforms (translate, rotate, mirror) and Ext
 ### Task 23: shape3d_subtract_typeerror
 
 **Files:**
-- Modify: `src/cad/geom/base.py`
+- Modify: `src/cady/geom/base.py`
 - Create: `tests/geom/test_shape3d_subtract.py`
 
 - [ ] **Step 1: Failing test**
@@ -2164,7 +2164,7 @@ git commit -m "feat(geom): add 3D transforms (translate, rotate, mirror) and Ext
 ```python
 # tests/geom/test_shape3d_subtract.py
 import pytest
-from cad import prism
+from cady import prism
 
 def test_prism_subtract_points_at_stage6():
     with pytest.raises(TypeError) as ei:
@@ -2193,7 +2193,7 @@ def __sub__(self, other: object) -> "Shape3D":
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/base.py tests/geom/test_shape3d_subtract.py
+git add src/cady/geom/base.py tests/geom/test_shape3d_subtract.py
 git commit -m "feat(geom): Shape3D.__sub__ raises TypeError pointing at Stage 6"
 ```
 
@@ -2204,7 +2204,7 @@ git commit -m "feat(geom): Shape3D.__sub__ raises TypeError pointing at Stage 6"
 ### Task 24: vendor_earcut
 
 **Files:**
-- Create: `src/cad/_vendor/earcut.py`, `tests/geom/test_vendor_earcut.py`
+- Create: `src/cady/_vendor/earcut.py`, `tests/geom/test_vendor_earcut.py`
 - Modify: `NOTICE`
 
 **Assumption refs:** `A1`
@@ -2224,7 +2224,7 @@ Choose option 1 unless it has been deprecated; pin commit hash. If neither is ac
 ```python
 # tests/geom/test_vendor_earcut.py
 def test_earcut_imports_and_triangulates_square_with_hole():
-    from cad._vendor import earcut as ec
+    from cady._vendor import earcut as ec
     # outer square + inner square hole, flat coordinate list
     coords = [
         0.0, 0.0,  10.0, 0.0,  10.0, 10.0,  0.0, 10.0,   # outer (4 pts)
@@ -2254,11 +2254,11 @@ def test_earcut_imports_and_triangulates_square_with_hole():
 
 ```bash
 curl -L -o /tmp/earcut_src.py https://raw.githubusercontent.com/joshuaskelly/earcut-python/<COMMIT>/earcut/earcut.py
-# Inspect for licence header; copy into src/cad/_vendor/earcut.py with the original copyright
+# Inspect for licence header; copy into src/cady/_vendor/earcut.py with the original copyright
 # header preserved at the top.
 ```
 
-Prepend a vendor-stamp comment to `src/cad/_vendor/earcut.py`:
+Prepend a vendor-stamp comment to `src/cady/_vendor/earcut.py`:
 
 ```python
 # Vendored from https://github.com/joshuaskelly/earcut-python
@@ -2269,7 +2269,7 @@ Prepend a vendor-stamp comment to `src/cad/_vendor/earcut.py`:
 Update `NOTICE`:
 
 ```
-src/cad/_vendor/earcut.py
+src/cady/_vendor/earcut.py
   Origin: https://github.com/joshuaskelly/earcut-python
   Pinned commit: <COMMIT-HASH>
   Licence: MIT (see file header)
@@ -2282,7 +2282,7 @@ src/cad/_vendor/earcut.py
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/cad/_vendor/earcut.py NOTICE tests/geom/test_vendor_earcut.py
+git add src/cady/_vendor/earcut.py NOTICE tests/geom/test_vendor_earcut.py
 git commit -m "vendor: add mapbox-earcut Python port (joshuaskelly@<COMMIT>) under MIT"
 ```
 
@@ -2291,16 +2291,16 @@ git commit -m "vendor: add mapbox-earcut Python port (joshuaskelly@<COMMIT>) und
 ### Task 25: tessellate_curves_to_polyline
 
 **Files:**
-- Create: `src/cad/geom/tessellate.py`, `tests/geom/test_curves_to_polyline.py`
+- Create: `src/cady/geom/tessellate.py`, `tests/geom/test_curves_to_polyline.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/geom/test_curves_to_polyline.py
 import math
-from cad import circle, line, arc
-from cad.geom.shapes2d import Polyline
-from cad.geom.tessellate import curves_to_polyline
+from cady import circle, line, arc
+from cady.geom.shapes2d import Polyline
+from cady.geom.tessellate import curves_to_polyline
 
 def test_circle_flattens_below_chord_tolerance():
     c = circle((0, 0), 1.0)
@@ -2332,14 +2332,14 @@ def test_arc_chord_error_under_tolerance():
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/geom/tessellate.py`:
+`src/cady/geom/tessellate.py`:
 
 ```python
 from __future__ import annotations
 import math
-from cad.geom.base import Shape2D
-from cad.geom.shapes2d import Line, Arc, Circle, Rectangle, Polyline, Spline, Path
-from cad.geom.vec import Vec2
+from cady.geom.base import Shape2D
+from cady.geom.shapes2d import Line, Arc, Circle, Rectangle, Polyline, Spline, Path
+from cady.geom.vec import Vec2
 
 
 def _arc_segments_for_tolerance(radius: float, sweep: float, tolerance: float) -> int:
@@ -2421,7 +2421,7 @@ def curves_to_polyline(shape: Shape2D, *, tolerance: float) -> Polyline:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/tessellate.py tests/geom/test_curves_to_polyline.py
+git add src/cady/geom/tessellate.py tests/geom/test_curves_to_polyline.py
 git commit -m "feat(geom): add curves_to_polyline with chord-tolerance flattening"
 ```
 
@@ -2430,7 +2430,7 @@ git commit -m "feat(geom): add curves_to_polyline with chord-tolerance flattenin
 ### Task 26: tessellate_polygon_to_triangles
 
 **Files:**
-- Modify: `src/cad/geom/tessellate.py`
+- Modify: `src/cady/geom/tessellate.py`
 - Create: `tests/geom/test_polygon_to_triangles.py`
 
 - [ ] **Step 1: Failing test**
@@ -2439,8 +2439,8 @@ git commit -m "feat(geom): add curves_to_polyline with chord-tolerance flattenin
 # tests/geom/test_polygon_to_triangles.py
 import math
 import pytest
-from cad import rectangle, circle
-from cad.geom.tessellate import polygon_to_triangles
+from cady import rectangle, circle
+from cady.geom.tessellate import polygon_to_triangles
 
 def test_rectangle_with_hole_area_invariant():
     plate = rectangle((0, 0), (1, 1)).with_hole(circle((0.5, 0.5), 0.2))
@@ -2450,7 +2450,7 @@ def test_rectangle_with_hole_area_invariant():
     assert abs(total - expected) / expected < 0.01
 
 def test_polygon_to_triangles_rejects_open():
-    from cad import polyline
+    from cady import polyline
     with pytest.raises(ValueError):
         polygon_to_triangles(polyline([(0, 0), (1, 0), (1, 1)]), tolerance=1e-3)
 
@@ -2474,7 +2474,7 @@ In `tessellate.py` add:
 
 ```python
 from dataclasses import dataclass
-from cad._vendor import earcut as ec
+from cady._vendor import earcut as ec
 
 @dataclass(frozen=True, slots=True)
 class Triangle2:
@@ -2522,7 +2522,7 @@ def polygon_to_triangles(shape: Shape2D, *, tolerance: float) -> list[Triangle2]
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/tessellate.py tests/geom/test_polygon_to_triangles.py
+git add src/cady/geom/tessellate.py tests/geom/test_polygon_to_triangles.py
 git commit -m "feat(geom): add polygon_to_triangles with hole support via earcut"
 ```
 
@@ -2531,7 +2531,7 @@ git commit -m "feat(geom): add polygon_to_triangles with hole support via earcut
 ### Task 27: tessellate_extrusion_to_triangles
 
 **Files:**
-- Modify: `src/cad/geom/tessellate.py`
+- Modify: `src/cady/geom/tessellate.py`
 - Create: `tests/geom/test_extrusion_to_triangles.py`
 
 - [ ] **Step 1: Failing test**
@@ -2540,8 +2540,8 @@ git commit -m "feat(geom): add polygon_to_triangles with hole support via earcut
 # tests/geom/test_extrusion_to_triangles.py
 import math
 import pytest
-from cad import rectangle, circle
-from cad.geom.tessellate import extrusion_to_triangles
+from cady import rectangle, circle
+from cady.geom.tessellate import extrusion_to_triangles
 
 def test_unit_prism_via_rectangle_extrusion_has_12_triangles():
     e = rectangle((0, 0), (1, 1)).extrude(axis="+z", distance=1.0)
@@ -2570,7 +2570,7 @@ def _v_key(v):
 In `tessellate.py`:
 
 ```python
-from cad.geom.shapes3d import Extrusion, _profile_to_world
+from cady.geom.shapes3d import Extrusion, _profile_to_world
 
 @dataclass(frozen=True, slots=True)
 class Triangle3:
@@ -2627,7 +2627,7 @@ def extrusion_to_triangles(e: Extrusion, *, tolerance: float) -> list[Triangle3]
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/tessellate.py tests/geom/test_extrusion_to_triangles.py
+git add src/cady/geom/tessellate.py tests/geom/test_extrusion_to_triangles.py
 git commit -m "feat(geom): add extrusion_to_triangles (caps + side bands, watertight)"
 ```
 
@@ -2636,7 +2636,7 @@ git commit -m "feat(geom): add extrusion_to_triangles (caps + side bands, watert
 ### Task 28: tessellate_revolution_to_triangles
 
 **Files:**
-- Modify: `src/cad/geom/tessellate.py`
+- Modify: `src/cady/geom/tessellate.py`
 - Create: `tests/geom/test_revolution_to_triangles.py`
 
 - [ ] **Step 1: Failing test**
@@ -2644,8 +2644,8 @@ git commit -m "feat(geom): add extrusion_to_triangles (caps + side bands, watert
 ```python
 # tests/geom/test_revolution_to_triangles.py
 import math
-from cad import rectangle
-from cad.geom.tessellate import revolution_to_triangles
+from cady import rectangle
+from cady.geom.tessellate import revolution_to_triangles
 
 def test_unit_square_revolved_full_turn_watertight():
     r = rectangle((0.5, 0), (0.5, 1.0)).revolve(axis="+z")
@@ -2667,7 +2667,7 @@ def _k(v): return (round(v.x, 6), round(v.y, 6), round(v.z, 6))
 In `tessellate.py`:
 
 ```python
-from cad.geom.shapes3d import Revolution
+from cady.geom.shapes3d import Revolution
 
 def _angular_segments_for_tolerance(r_max: float, angle: float, tolerance: float) -> int:
     if tolerance >= r_max:
@@ -2715,7 +2715,7 @@ def revolution_to_triangles(r: Revolution, *, tolerance: float) -> list[Triangle
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/tessellate.py tests/geom/test_revolution_to_triangles.py
+git add src/cady/geom/tessellate.py tests/geom/test_revolution_to_triangles.py
 git commit -m "feat(geom): add revolution_to_triangles for full-turn +Z axis"
 ```
 
@@ -2726,16 +2726,16 @@ git commit -m "feat(geom): add revolution_to_triangles for full-turn +Z axis"
 ### Task 29: error_types
 
 **Files:**
-- Create: `src/cad/errors.py`, `tests/errors/__init__.py`, `tests/errors/test_error_tiers.py`
-- Modify: `src/cad/__init__.py` (re-export)
+- Create: `src/cady/errors.py`, `tests/errors/__init__.py`, `tests/errors/test_error_tiers.py`
+- Modify: `src/cady/__init__.py` (re-export)
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/errors/test_error_tiers.py
 import pytest
-from cad import circle, polyline
-from cad.errors import CadError, SceneError, WriteError
+from cady import circle, polyline
+from cady.errors import CadError, SceneError, WriteError
 
 def test_cad_error_is_root():
     assert issubclass(SceneError, CadError)
@@ -2761,11 +2761,11 @@ def test_write_error_can_be_raised_and_caught_as_cad_error():
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/errors.py`:
+`src/cady/errors.py`:
 
 ```python
 class CadError(Exception):
-    """Base class for cad library errors above Tier 1.
+    """Base class for cady library errors above Tier 1.
     Tier 1 (`ValueError`) stays plain to match dataclass conventions."""
 
 
@@ -2777,14 +2777,14 @@ class WriteError(CadError):
     """Raised during serialisation (e.g., empty drawing, self-intersecting profile)."""
 ```
 
-In `cad/__init__.py` re-export `CadError`, `SceneError`, `WriteError`.
+In `cady/__init__.py` re-export `CadError`, `SceneError`, `WriteError`.
 
 - [ ] **Step 4: Run** → 4 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/errors.py src/cad/__init__.py tests/errors/__init__.py tests/errors/test_error_tiers.py
+git add src/cady/errors.py src/cady/__init__.py tests/errors/__init__.py tests/errors/test_error_tiers.py
 git commit -m "feat(errors): add CadError / SceneError / WriteError hierarchy"
 ```
 
@@ -2795,16 +2795,16 @@ git commit -m "feat(errors): add CadError / SceneError / WriteError hierarchy"
 ### Task 30: scene_dxf_drawing_layers
 
 **Files:**
-- Create: `src/cad/scene/__init__.py`, `src/cad/scene/dxf.py`, `tests/scene/__init__.py`, `tests/scene/test_dxf_drawing.py`
-- Modify: `src/cad/__init__.py`
+- Create: `src/cady/scene/__init__.py`, `src/cady/scene/dxf.py`, `tests/scene/__init__.py`, `tests/scene/test_dxf_drawing.py`
+- Modify: `src/cady/__init__.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/scene/test_dxf_drawing.py
 import pytest
-from cad import DxfDrawing, line, sphere, circle
-from cad.errors import SceneError
+from cady import DxfDrawing, line, sphere, circle
+from cady.errors import SceneError
 
 def test_layer_creation_and_chaining():
     d = DxfDrawing()
@@ -2845,13 +2845,13 @@ def test_two_layers_two_colours():
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/scene/dxf.py`:
+`src/cady/scene/dxf.py`:
 
 ```python
 from __future__ import annotations
 from dataclasses import dataclass, field
-from cad.geom.base import Shape2D, Shape3D
-from cad.errors import SceneError
+from cady.geom.base import Shape2D, Shape3D
+from cady.errors import SceneError
 
 
 @dataclass
@@ -2884,18 +2884,18 @@ class DxfDrawing:
 
     def write(self, path) -> None:
         # implemented by Task 33+; raises until then.
-        from cad.write.dxf.sections import write_drawing
+        from cady.write.dxf.sections import write_drawing
         write_drawing(self, path)
 ```
 
-`src/cad/scene/__init__.py`: re-export `DxfDrawing`, `Layer`. Re-export `DxfDrawing` and `Layer` in `cad/__init__.py`.
+`src/cady/scene/__init__.py`: re-export `DxfDrawing`, `Layer`. Re-export `DxfDrawing` and `Layer` in `cady/__init__.py`.
 
 - [ ] **Step 4: Run** → 5 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/__init__.py src/cad/scene/dxf.py src/cad/__init__.py tests/scene/__init__.py tests/scene/test_dxf_drawing.py
+git add src/cady/scene/__init__.py src/cady/scene/dxf.py src/cady/__init__.py tests/scene/__init__.py tests/scene/test_dxf_drawing.py
 git commit -m "feat(scene): add DxfDrawing + Layer with chained add and SceneError on Shape3D"
 ```
 
@@ -2904,7 +2904,7 @@ git commit -m "feat(scene): add DxfDrawing + Layer with chained add and SceneErr
 ### Task 31: scene_dxf_text
 
 **Files:**
-- Modify: `src/cad/scene/dxf.py`
+- Modify: `src/cady/scene/dxf.py`
 - Create: `tests/scene/test_dxf_text.py`
 
 - [ ] **Step 1: Failing test**
@@ -2912,7 +2912,7 @@ git commit -m "feat(scene): add DxfDrawing + Layer with chained add and SceneErr
 ```python
 # tests/scene/test_dxf_text.py
 import pytest
-from cad import DxfDrawing
+from cady import DxfDrawing
 
 def test_add_text_records_intent():
     d = DxfDrawing()
@@ -2935,7 +2935,7 @@ def test_add_dimension_is_placeholder_not_implemented():
 
 - [ ] **Step 3: Implementation**
 
-In `src/cad/scene/dxf.py`:
+In `src/cady/scene/dxf.py`:
 
 ```python
 @dataclass
@@ -2963,7 +2963,7 @@ def add_dimension(self, **_: object) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py tests/scene/test_dxf_text.py
+git add src/cady/scene/dxf.py tests/scene/test_dxf_text.py
 git commit -m "feat(scene): add DxfDrawing.add_text and Stage-3 add_dimension placeholder"
 ```
 
@@ -2972,16 +2972,16 @@ git commit -m "feat(scene): add DxfDrawing.add_text and Stage-3 add_dimension pl
 ### Task 32: scene_stl_mesh
 
 **Files:**
-- Create: `src/cad/scene/stl.py`, `tests/scene/test_stl_mesh.py`
-- Modify: `src/cad/scene/__init__.py`, `src/cad/__init__.py`
+- Create: `src/cady/scene/stl.py`, `tests/scene/test_stl_mesh.py`
+- Modify: `src/cady/scene/__init__.py`, `src/cady/__init__.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/scene/test_stl_mesh.py
 import pytest
-from cad import StlMesh, prism, sphere, circle
-from cad.errors import SceneError
+from cady import StlMesh, prism, sphere, circle
+from cady.errors import SceneError
 
 def test_stl_mesh_default_tolerance():
     m = StlMesh()
@@ -3006,12 +3006,12 @@ def test_stl_mesh_tolerance_keyword_or_positional():
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/scene/stl.py`:
+`src/cady/scene/stl.py`:
 
 ```python
 from __future__ import annotations
-from cad.geom.base import Shape2D, Shape3D
-from cad.errors import SceneError
+from cady.geom.base import Shape2D, Shape3D
+from cady.errors import SceneError
 
 
 class StlMesh:
@@ -3029,22 +3029,22 @@ class StlMesh:
         return self
 
     def write(self, path, ascii: bool = False) -> None:
-        from cad.write.stl.binary import write_binary
-        from cad.write.stl.ascii import write_ascii
+        from cady.write.stl.binary import write_binary
+        from cady.write.stl.ascii import write_ascii
         if ascii:
             write_ascii(self, path)
         else:
             write_binary(self, path)
 ```
 
-Re-export `StlMesh` in `cad/scene/__init__.py` and `cad/__init__.py`.
+Re-export `StlMesh` in `cady/scene/__init__.py` and `cady/__init__.py`.
 
 - [ ] **Step 4: Run** → 4 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/scene/stl.py src/cad/scene/__init__.py src/cad/__init__.py tests/scene/test_stl_mesh.py
+git add src/cady/scene/stl.py src/cady/scene/__init__.py src/cady/__init__.py tests/scene/test_stl_mesh.py
 git commit -m "feat(scene): add StlMesh with variadic chained .add() and tolerance default 1e-3"
 ```
 
@@ -3055,7 +3055,7 @@ git commit -m "feat(scene): add StlMesh with variadic chained .add() and toleran
 ### Task 33: dxf_writer_skeleton
 
 **Files:**
-- Create: `src/cad/write/__init__.py`, `src/cad/write/dxf/__init__.py`, `src/cad/write/dxf/codes.py`, `src/cad/write/dxf/emit.py`, `src/cad/write/dxf/sections.py`, `tests/write/__init__.py`, `tests/write/test_dxf_skeleton.py`
+- Create: `src/cady/write/__init__.py`, `src/cady/write/dxf/__init__.py`, `src/cady/write/dxf/codes.py`, `src/cady/write/dxf/emit.py`, `src/cady/write/dxf/sections.py`, `tests/write/__init__.py`, `tests/write/test_dxf_skeleton.py`
 
 **Assumption refs:** `A2`
 
@@ -3065,7 +3065,7 @@ git commit -m "feat(scene): add StlMesh with variadic chained .add() and toleran
 # tests/write/test_dxf_skeleton.py
 import pytest
 import ezdxf
-from cad import DxfDrawing
+from cady import DxfDrawing
 
 def test_empty_drawing_opens_in_ezdxf(tmp_path):
     d = DxfDrawing()
@@ -3096,7 +3096,7 @@ def test_emit_sections_in_order(tmp_path):
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/write/dxf/codes.py`:
+`src/cady/write/dxf/codes.py`:
 
 ```python
 ENTITY_TYPE = 0
@@ -3113,7 +3113,7 @@ FLAGS = 70
 VERTEX_COUNT = 90
 ```
 
-`src/cad/write/dxf/emit.py`:
+`src/cady/write/dxf/emit.py`:
 
 ```python
 from __future__ import annotations
@@ -3137,13 +3137,13 @@ class DxfBuffer:
         return self._buf.getvalue()
 ```
 
-`src/cad/write/dxf/sections.py`:
+`src/cady/write/dxf/sections.py`:
 
 ```python
 from __future__ import annotations
 from pathlib import Path
-from cad.write.dxf.emit import DxfBuffer
-from cad.errors import WriteError
+from cady.write.dxf.emit import DxfBuffer
+from cady.errors import WriteError
 
 ACAD_VERSION = "AC1032"  # R2018
 INSUNITS_METRES = 6
@@ -3197,7 +3197,7 @@ def write_drawing(drawing, path) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/__init__.py src/cad/write/dxf/__init__.py src/cad/write/dxf/codes.py src/cad/write/dxf/emit.py src/cad/write/dxf/sections.py tests/write/__init__.py tests/write/test_dxf_skeleton.py
+git add src/cady/write/__init__.py src/cady/write/dxf/__init__.py src/cady/write/dxf/codes.py src/cady/write/dxf/emit.py src/cady/write/dxf/sections.py tests/write/__init__.py tests/write/test_dxf_skeleton.py
 git commit -m "feat(write/dxf): emit empty R2018 skeleton with HEADER/TABLES/BLOCKS/ENTITIES/OBJECTS/EOF"
 ```
 
@@ -3206,7 +3206,7 @@ git commit -m "feat(write/dxf): emit empty R2018 skeleton with HEADER/TABLES/BLO
 ### Task 34: dxf_writer_layers
 
 **Files:**
-- Modify: `src/cad/write/dxf/sections.py`
+- Modify: `src/cady/write/dxf/sections.py`
 - Create: `tests/write/test_dxf_layers.py`
 
 - [ ] **Step 1: Failing test**
@@ -3214,7 +3214,7 @@ git commit -m "feat(write/dxf): emit empty R2018 skeleton with HEADER/TABLES/BLO
 ```python
 # tests/write/test_dxf_layers.py
 import ezdxf
-from cad import DxfDrawing
+from cady import DxfDrawing
 
 def test_layers_emitted_with_colours(tmp_path):
     d = DxfDrawing()
@@ -3260,7 +3260,7 @@ def _emit_tables(buf, drawing):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/sections.py tests/write/test_dxf_layers.py
+git add src/cady/write/dxf/sections.py tests/write/test_dxf_layers.py
 git commit -m "feat(write/dxf): emit LAYER table with colours and linetype"
 ```
 
@@ -3269,8 +3269,8 @@ git commit -m "feat(write/dxf): emit LAYER table with colours and linetype"
 ### Task 35: dxf_writer_line
 
 **Files:**
-- Create: `src/cad/write/dxf/entities.py`, `tests/write/test_dxf_entities.py` (initial — populated by 35-39)
-- Modify: `src/cad/write/dxf/sections.py`
+- Create: `src/cady/write/dxf/entities.py`, `tests/write/test_dxf_entities.py` (initial — populated by 35-39)
+- Modify: `src/cady/write/dxf/sections.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -3278,7 +3278,7 @@ git commit -m "feat(write/dxf): emit LAYER table with colours and linetype"
 # tests/write/test_dxf_entities.py
 import ezdxf
 import pytest
-from cad import DxfDrawing, line
+from cady import DxfDrawing, line
 
 def test_emits_one_line(tmp_path):
     d = DxfDrawing()
@@ -3296,12 +3296,12 @@ def test_emits_one_line(tmp_path):
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/write/dxf/entities.py`:
+`src/cady/write/dxf/entities.py`:
 
 ```python
 from __future__ import annotations
-from cad.geom.shapes2d import Line, Arc, Circle, Rectangle, Polyline, Path
-from cad.write.dxf.emit import DxfBuffer
+from cady.geom.shapes2d import Line, Arc, Circle, Rectangle, Polyline, Path
+from cady.write.dxf.emit import DxfBuffer
 
 
 def emit_line(buf: DxfBuffer, layer: str, seg: Line) -> None:
@@ -3314,7 +3314,7 @@ def emit_line(buf: DxfBuffer, layer: str, seg: Line) -> None:
 In `_emit_entities` of `sections.py`:
 
 ```python
-from cad.write.dxf.entities import emit_line
+from cady.write.dxf.entities import emit_line
 def _emit_entities(buf, drawing):
     buf.section("ENTITIES")
     for layer in drawing.layers.values():
@@ -3330,7 +3330,7 @@ def _emit_entities(buf, drawing):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_entities.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_entities.py
 git commit -m "feat(write/dxf): emit LINE entities"
 ```
 
@@ -3339,13 +3339,13 @@ git commit -m "feat(write/dxf): emit LINE entities"
 ### Task 36: dxf_writer_lwpolyline
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `src/cad/write/dxf/sections.py`, `tests/write/test_dxf_entities.py`
+- Modify: `src/cady/write/dxf/entities.py`, `src/cady/write/dxf/sections.py`, `tests/write/test_dxf_entities.py`
 
 - [ ] **Step 1: Failing test (extend existing file)**
 
 ```python
 def test_emits_open_polyline(tmp_path):
-    from cad import polyline
+    from cady import polyline
     d = DxfDrawing()
     d.layer("X").add(polyline([(0, 0), (1, 0), (1, 1)]))
     out = tmp_path / "pl.dxf"; d.write(out)
@@ -3356,7 +3356,7 @@ def test_emits_open_polyline(tmp_path):
     assert list(pls[0].vertices()) == [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
 
 def test_emits_closed_polyline(tmp_path):
-    from cad import polyline
+    from cady import polyline
     d = DxfDrawing()
     d.layer("X").add(polyline([(0, 0), (1, 0), (1, 1)], closed=True))
     out = tmp_path / "pl_closed.dxf"; d.write(out)
@@ -3388,7 +3388,7 @@ Add `Polyline` and `Rectangle` (decompose to closed polyline of 4 corners) to th
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_entities.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_entities.py
 git commit -m "feat(write/dxf): emit LWPOLYLINE for Polyline and Rectangle"
 ```
 
@@ -3397,13 +3397,13 @@ git commit -m "feat(write/dxf): emit LWPOLYLINE for Polyline and Rectangle"
 ### Task 37: dxf_writer_circle
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
+- Modify: `src/cady/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 def test_emits_circle_round_trips(tmp_path):
-    from cad import circle
+    from cady import circle
     d = DxfDrawing()
     d.layer("X").add(circle((0.5, 0.5), 0.2))
     out = tmp_path / "c.dxf"; d.write(out)
@@ -3432,7 +3432,7 @@ Add to dispatch.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_entities.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_entities.py
 git commit -m "feat(write/dxf): emit CIRCLE"
 ```
 
@@ -3441,7 +3441,7 @@ git commit -m "feat(write/dxf): emit CIRCLE"
 ### Task 38: dxf_writer_arc
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
+- Modify: `src/cady/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -3449,7 +3449,7 @@ git commit -m "feat(write/dxf): emit CIRCLE"
 import math
 
 def test_emits_arc_with_degrees(tmp_path):
-    from cad import arc
+    from cady import arc
     d = DxfDrawing()
     d.layer("X").add(arc((0, 0), 1.0, 0.0, math.pi / 2))
     out = tmp_path / "a.dxf"; d.write(out)
@@ -3481,7 +3481,7 @@ Add to dispatch.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_entities.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_entities.py
 git commit -m "feat(write/dxf): emit ARC with degree angle conversion"
 ```
 
@@ -3490,7 +3490,7 @@ git commit -m "feat(write/dxf): emit ARC with degree angle conversion"
 ### Task 39: dxf_writer_mtext
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
+- Modify: `src/cady/write/dxf/entities.py`, `sections.py`, `tests/write/test_dxf_entities.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -3533,7 +3533,7 @@ for t in drawing.texts:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_entities.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_entities.py
 git commit -m "feat(write/dxf): emit MTEXT for add_text annotations"
 ```
 
@@ -3542,7 +3542,7 @@ git commit -m "feat(write/dxf): emit MTEXT for add_text annotations"
 ### Task 40: dxf_writer_path_decompose
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `src/cad/write/dxf/sections.py`
+- Modify: `src/cady/write/dxf/entities.py`, `src/cady/write/dxf/sections.py`
 - Create: `tests/write/test_dxf_path_decompose.py`
 
 - [ ] **Step 1: Failing test**
@@ -3551,7 +3551,7 @@ git commit -m "feat(write/dxf): emit MTEXT for add_text annotations"
 # tests/write/test_dxf_path_decompose.py
 import math
 import ezdxf
-from cad import DxfDrawing, line, arc
+from cady import DxfDrawing, line, arc
 
 def test_path_emits_individual_entities(tmp_path):
     d = DxfDrawing()
@@ -3579,7 +3579,7 @@ Add a `emit_path(buf, layer, path)` that walks `path.segments` and dispatches to
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_path_decompose.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_path_decompose.py
 git commit -m "feat(write/dxf): decompose Path into per-segment LINE/ARC/etc. entities"
 ```
 
@@ -3588,7 +3588,7 @@ git commit -m "feat(write/dxf): decompose Path into per-segment LINE/ARC/etc. en
 ### Task 41: dxf_writer_holes_decompose
 
 **Files:**
-- Modify: `src/cad/write/dxf/entities.py`, `sections.py`
+- Modify: `src/cady/write/dxf/entities.py`, `sections.py`
 - Create: `tests/write/test_dxf_holes_decompose.py`
 
 - [ ] **Step 1: Failing test**
@@ -3596,7 +3596,7 @@ git commit -m "feat(write/dxf): decompose Path into per-segment LINE/ARC/etc. en
 ```python
 # tests/write/test_dxf_holes_decompose.py
 import ezdxf
-from cad import DxfDrawing, rectangle, circle
+from cady import DxfDrawing, rectangle, circle
 
 def test_outer_and_inner_emitted_as_separate_entities(tmp_path):
     plate = rectangle((0, 0), (1, 1)).with_hole(circle((0.5, 0.5), 0.2))
@@ -3621,7 +3621,7 @@ Modify the per-entity emitters to additionally walk `inner_loops` of any closed 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/entities.py src/cad/write/dxf/sections.py tests/write/test_dxf_holes_decompose.py
+git add src/cady/write/dxf/entities.py src/cady/write/dxf/sections.py tests/write/test_dxf_holes_decompose.py
 git commit -m "feat(write/dxf): emit inner_loops as separate entities on the same layer"
 ```
 
@@ -3630,7 +3630,7 @@ git commit -m "feat(write/dxf): emit inner_loops as separate entities on the sam
 ### Task 42: dxf_writer_writeerror_and_golden
 
 **Files:**
-- Modify: `src/cad/write/dxf/sections.py`
+- Modify: `src/cady/write/dxf/sections.py`
 - Create: `tests/write/test_dxf_writeerror.py`, `tests/write/test_dxf_golden.py`, `tests/write/goldens/smoke.dxf`
 
 - [ ] **Step 1: Failing tests**
@@ -3638,8 +3638,8 @@ git commit -m "feat(write/dxf): emit inner_loops as separate entities on the sam
 ```python
 # tests/write/test_dxf_writeerror.py
 import pytest
-from cad import DxfDrawing
-from cad.errors import WriteError
+from cady import DxfDrawing
+from cady.errors import WriteError
 
 def test_empty_drawing_raises_writeerror(tmp_path):
     d = DxfDrawing()  # no layers, no entities
@@ -3651,7 +3651,7 @@ def test_empty_drawing_raises_writeerror(tmp_path):
 ```python
 # tests/write/test_dxf_golden.py
 import os
-from cad import DxfDrawing, line, circle, arc
+from cady import DxfDrawing, line, circle, arc
 from math import pi
 
 def _smoke_drawing():
@@ -3707,7 +3707,7 @@ Generate the initial golden by running with the flag, then commit the byte-exact
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/dxf/sections.py tests/conftest.py tests/write/test_dxf_writeerror.py tests/write/test_dxf_golden.py tests/write/goldens/smoke.dxf
+git add src/cady/write/dxf/sections.py tests/conftest.py tests/write/test_dxf_writeerror.py tests/write/test_dxf_golden.py tests/write/goldens/smoke.dxf
 git commit -m "feat(write/dxf): empty-drawing WriteError and byte-golden smoke test"
 ```
 
@@ -3718,7 +3718,7 @@ git commit -m "feat(write/dxf): empty-drawing WriteError and byte-golden smoke t
 ### Task 43: stl_writer_binary
 
 **Files:**
-- Create: `src/cad/write/stl/__init__.py`, `src/cad/write/stl/binary.py`, `tests/write/test_stl_binary.py`
+- Create: `src/cady/write/stl/__init__.py`, `src/cady/write/stl/binary.py`, `tests/write/test_stl_binary.py`
 
 **Assumption refs:** `A3`
 
@@ -3727,7 +3727,7 @@ git commit -m "feat(write/dxf): empty-drawing WriteError and byte-golden smoke t
 ```python
 # tests/write/test_stl_binary.py
 import struct
-from cad import StlMesh, prism
+from cady import StlMesh, prism
 
 def test_binary_prism_size_and_layout(tmp_path):
     m = StlMesh().add(prism((0, 0, 0), (2, 2, 1)))
@@ -3752,18 +3752,18 @@ def test_binary_prism_size_and_layout(tmp_path):
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/write/stl/binary.py`:
+`src/cady/write/stl/binary.py`:
 
 ```python
 from __future__ import annotations
 import struct
 from pathlib import Path
-from cad.geom.tessellate import (
+from cady.geom.tessellate import (
     Triangle3, extrusion_to_triangles, revolution_to_triangles,
 )
-from cad.geom.shapes3d import Sphere, Prism, Extrusion, Revolution
-from cad.geom.vec import Vec3
-from cad.errors import WriteError
+from cady.geom.shapes3d import Sphere, Prism, Extrusion, Revolution
+from cady.geom.vec import Vec3
+from cady.errors import WriteError
 
 
 def _normal(t: Triangle3) -> Vec3:
@@ -3865,7 +3865,7 @@ def write_binary(mesh, path) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/stl/__init__.py src/cad/write/stl/binary.py tests/write/test_stl_binary.py
+git add src/cady/write/stl/__init__.py src/cady/write/stl/binary.py tests/write/test_stl_binary.py
 git commit -m "feat(write/stl): emit binary STL with unit-norm facet normals"
 ```
 
@@ -3874,13 +3874,13 @@ git commit -m "feat(write/stl): emit binary STL with unit-norm facet normals"
 ### Task 44: stl_writer_ascii
 
 **Files:**
-- Create: `src/cad/write/stl/ascii.py`, `tests/write/test_stl_ascii.py`
+- Create: `src/cady/write/stl/ascii.py`, `tests/write/test_stl_ascii.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
 # tests/write/test_stl_ascii.py
-from cad import StlMesh, prism
+from cady import StlMesh, prism
 
 def test_ascii_prism(tmp_path):
     m = StlMesh().add(prism((0, 0, 0), (2, 2, 1)))
@@ -3888,7 +3888,7 @@ def test_ascii_prism(tmp_path):
     m.write(out, ascii=True)
     text = out.read_text()
     assert text.startswith("solid")
-    assert text.rstrip().endswith("endsolid pyseas-cad")
+    assert text.rstrip().endswith("endsolid cady")
     assert text.count("facet normal") == 12
     assert text.count("endloop") == 12
 ```
@@ -3897,13 +3897,13 @@ def test_ascii_prism(tmp_path):
 
 - [ ] **Step 3: Implementation**
 
-`src/cad/write/stl/ascii.py`:
+`src/cady/write/stl/ascii.py`:
 
 ```python
 from __future__ import annotations
 from pathlib import Path
-from cad.write.stl.binary import _solid_to_triangles, _normal
-from cad.errors import WriteError
+from cady.write.stl.binary import _solid_to_triangles, _normal
+from cady.errors import WriteError
 
 
 def write_ascii(mesh, path) -> None:
@@ -3912,7 +3912,7 @@ def write_ascii(mesh, path) -> None:
         tris.extend(_solid_to_triangles(s, mesh.tolerance))
     if not tris:
         raise WriteError("STL mesh contains no triangles")
-    lines = ["solid pyseas-cad"]
+    lines = ["solid cady"]
     for t in tris:
         n = _normal(t)
         lines.append(f"  facet normal {n.x:.8g} {n.y:.8g} {n.z:.8g}")
@@ -3921,7 +3921,7 @@ def write_ascii(mesh, path) -> None:
             lines.append(f"      vertex {v.x:.8g} {v.y:.8g} {v.z:.8g}")
         lines.append("    endloop")
         lines.append("  endfacet")
-    lines.append("endsolid pyseas-cad")
+    lines.append("endsolid cady")
     Path(path).write_text("\n".join(lines) + "\n")
 ```
 
@@ -3930,7 +3930,7 @@ def write_ascii(mesh, path) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/write/stl/ascii.py tests/write/test_stl_ascii.py
+git add src/cady/write/stl/ascii.py tests/write/test_stl_ascii.py
 git commit -m "feat(write/stl): emit ASCII STL with token format compliance"
 ```
 
@@ -3947,7 +3947,7 @@ git commit -m "feat(write/stl): emit ASCII STL with token format compliance"
 # tests/write/test_stl_dispatcher.py
 import math
 import struct
-from cad import StlMesh, circle, sphere
+from cady import StlMesh, circle, sphere
 
 def test_extrusion_dispatches_to_tessellator(tmp_path):
     e = circle((0, 0), 1.0).extrude(axis="+z", distance=1.0)
@@ -3986,7 +3986,7 @@ git commit -m "test(write/stl): integration coverage for solid → triangle disp
 ### Task 46: stl_writer_writeerror
 
 **Files:**
-- Modify: `src/cad/write/stl/binary.py`
+- Modify: `src/cady/write/stl/binary.py`
 - Create: `tests/write/test_stl_writeerror.py`
 
 - [ ] **Step 1: Failing test**
@@ -3994,8 +3994,8 @@ git commit -m "test(write/stl): integration coverage for solid → triangle disp
 ```python
 # tests/write/test_stl_writeerror.py
 import pytest
-from cad import StlMesh, polyline
-from cad.errors import WriteError
+from cady import StlMesh, polyline
+from cady.errors import WriteError
 
 def test_self_intersecting_profile_surfaces_writeerror(tmp_path):
     # bow-tie polygon — earcut rejects or returns garbage; we validate before passing.
@@ -4031,7 +4031,7 @@ if abs(got_area - abs(expected_area)) / max(abs(expected_area), 1e-9) > 0.01:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cad/geom/tessellate.py tests/write/test_stl_writeerror.py
+git add src/cady/geom/tessellate.py tests/write/test_stl_writeerror.py
 git commit -m "feat(write/stl): WriteError on self-intersecting profile with first-3-vertices in message"
 ```
 
@@ -4047,7 +4047,7 @@ git commit -m "feat(write/stl): WriteError on self-intersecting profile with fir
 ```python
 # tests/write/test_stl_invariants.py
 import struct
-from cad import StlMesh, prism
+from cady import StlMesh, prism
 
 def test_prism_2x2x1_is_684_bytes(tmp_path):
     out = tmp_path / "prism.stl"
@@ -4108,7 +4108,7 @@ import sys
 from pathlib import Path
 
 STDLIB = set(sys.stdlib_module_names)
-SRC = Path(__file__).parent.parent.parent / "src" / "cad"
+SRC = Path(__file__).parent.parent.parent / "src" / "cady"
 
 
 def test_no_external_imports_outside_vendor():
@@ -4124,7 +4124,7 @@ def test_no_external_imports_outside_vendor():
                 mod = node.names[0].name.split(".")[0]
             else:
                 continue
-            if mod in {"cad", ""}:
+            if mod in {"cady", ""}:
                 continue
             if mod not in STDLIB:
                 bad.append((str(py.relative_to(SRC)), mod))
@@ -4213,7 +4213,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cad import DxfDrawing, StlMesh, circle, rectangle
+from cady import DxfDrawing, StlMesh, circle, rectangle
 
 
 def build():
@@ -4272,13 +4272,13 @@ git commit -m "feat(examples): plate-with-hole end-to-end DXF + STL"
 ### Task 50 (final): merge-and-cleanup
 
 **Files:**
-- Modify: `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md` (fill `Known Limitations` and `Post-Implementation Review` blocks)
+- Modify: `.warden/specs/2026-05-08-cady-stage-1-design.md` (fill `Known Limitations` and `Post-Implementation Review` blocks)
 
 **Invoke skill:** `verification-before-completion` before starting.
 
 - [ ] **Step 1: Re-read the spec's Acceptance Criteria block**
 
-Open `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md`. Hold §"Acceptance Criteria" in context.
+Open `.warden/specs/2026-05-08-cady-stage-1-design.md`. Hold §"Acceptance Criteria" in context.
 
 - [ ] **Step 2: Run every acceptance item, fresh, in one batch**
 
@@ -4286,20 +4286,20 @@ For each item under §Acceptance Criteria, run the command, capture the output, 
 
 ```bash
 # Package shape
-python -c "import cad; from cad import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"
-python -c "from cad.errors import CadError, SceneError, WriteError"
-python -c "from cad.geom.base import Shape2D, Shape3D"
-test -f src/cad/_vendor/earcut.py
+python -c "import cady; from cady import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"
+python -c "from cady.errors import CadError, SceneError, WriteError"
+python -c "from cady.geom.base import Shape2D, Shape3D"
+test -f src/cady/_vendor/earcut.py
 test -f NOTICE && grep -q "earcut" NOTICE
 
 # Runtime dependency promise
-python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 
 # Geom layer correctness
 pytest tests/geom -q --no-header --tb=line  # ≥ 30 passing
-python -c "from cad import polyline; polyline([])" 2>&1 | grep ValueError
-python -c "from cad import polyline; polyline([(0,0)], closed=True)" 2>&1 | grep ValueError
-python -c "from cad import circle; circle((0,0), -1.0)" 2>&1 | grep ValueError
+python -c "from cady import polyline; polyline([])" 2>&1 | grep ValueError
+python -c "from cady import polyline; polyline([(0,0)], closed=True)" 2>&1 | grep ValueError
+python -c "from cady import circle; circle((0,0), -1.0)" 2>&1 | grep ValueError
 # (continue down the list)
 
 # Tessellation correctness
@@ -4319,8 +4319,8 @@ pytest tests/examples -q
 
 # Quality gates
 pytest -q
-pyright --strict src/cad
-ruff check src/cad tests
+pyright --strict src/cady
+ruff check src/cady tests
 pytest tests/conventions/test_stdlib_only.py -q
 ```
 
@@ -4334,7 +4334,7 @@ Never leave ❌ items.
 
 - [ ] **Step 4: Fill the Post-Implementation Review block in the spec**
 
-Three subsections in `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md`:
+Three subsections in `.warden/specs/2026-05-08-cady-stage-1-design.md`:
 - **Acceptance results** — paste verification output for each item.
 - **Scope drift** — list every change beyond spec. For each: justify or revert.
 - **Refactor proposals** — list noticed-but-not-executed improvements with trigger conditions.
@@ -4350,7 +4350,7 @@ If `.warden/research/` or `.warden/lessons/` exist (e.g., the earcut vendor rese
 - [ ] **Step 7: Commit spec review**
 
 ```bash
-git add .warden/specs/2026-05-08-pyseas-cad-stage-1-design.md
+git add .warden/specs/2026-05-08-cady-stage-1-design.md
 git commit -m "docs(spec): post-implementation review for Stage 1"
 ```
 
@@ -4365,7 +4365,7 @@ git push --set-upstream origin stage-1 2>/dev/null || true   # only if a remote 
 From the main repo (parent dir):
 
 ```bash
-cd /home/eastill/projects/pyseas-cad
+cd /home/eastill/projects/cady
 git checkout main
 git merge --ff-only stage-1
 ```
@@ -4375,7 +4375,7 @@ If the merge is not fast-forward, abort and investigate — the bootstrap commit
 - [ ] **Step 9: Worktree + branch cleanup**
 
 ```bash
-cd /home/eastill/projects/pyseas-cad
+cd /home/eastill/projects/cady
 git worktree remove .worktrees/stage-1
 git branch -d stage-1
 ```
@@ -4395,7 +4395,7 @@ If `warden` is not on PATH, skip the audit but verify manually that `.worktrees/
 Per the `writing-plans` lifecycle (status `done` → delete completed plan files):
 
 ```bash
-rm .warden/plans/2026-05-08-pyseas-cad-stage-1.md .warden/plans/2026-05-08-pyseas-cad-stage-1.yaml
+rm .warden/plans/2026-05-08-cady-stage-1.md .warden/plans/2026-05-08-cady-stage-1.yaml
 git add -A && git commit -m "chore(plan): remove completed Stage 1 plan; spec carries the contract"
 ```
 

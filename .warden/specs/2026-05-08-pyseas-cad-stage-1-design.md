@@ -1,9 +1,9 @@
-# pyseas-cad Stage 1 — DXF + STL writer
+# cady Stage 1 — DXF + STL writer
 
 **Status:** spec, awaiting plan.
 **Date:** 2026-05-08.
 **Author:** Edward Astill (with Claude as drafting partner).
-**Scope:** Stage 1 of pyseas-cad — a pure-Python, write-only CAD library that turns
+**Scope:** Stage 1 of cady — a pure-Python, write-only CAD library that turns
 format-blind geometry primitives into DXF (R2018) and STL (binary + ASCII) files.
 
 ---
@@ -41,7 +41,7 @@ separate spec from Stage 5 onward.
 
 ## 2. Why this scope
 
-Per `IDEAS.md`, pyseas-cad replaces ezdxf inside pyseas-yard once feature parity is
+Per `IDEAS.md`, cady replaces ezdxf inside pyseas-yard once feature parity is
 reached. Stage 1 picks the smallest end-to-end slice that proves the architecture
 works across two formats:
 
@@ -74,7 +74,7 @@ mirrored in `.warden/preference-lock.json` (see `warden preference list`).
 
 - Domain-blind primitives only. The library never imports from `pyseas-yard`
   and has no `Padeye`, `Shackle`, etc. Recipes ("how to draw a padeye") live in
-  pyseas-yard, which imports `cad.geom` and `cad.scene`.
+  pyseas-yard, which imports `cady.geom` and `cady.scene`.
 
 ### 3.3 Stage 1 deliverables
 
@@ -129,7 +129,7 @@ shape.with_hole(h)     # closed Shape2D with one inner hole (h must be closed Sh
 shape.with_holes([…])  # closed Shape2D with multiple inner holes
 shape.translate(dx, dy)
 shape.rotate(centre, angle)                   # centre = (x, y) tuple, angle in rad
-shape.mirror(through=Line)                    # mirror across a Line; pass via cad.line(a, b)
+shape.mirror(through=Line)                    # mirror across a Line; pass via cady.line(a, b)
 shape.bounds()         # → (Vec2, Vec2)
 shape.extrude(axis, distance)    # closed Shape2D → Extrusion (3D)
 shape.revolve(axis, angle=2*pi)  # any Shape2D → Revolution (3D); axis = Line in same XY plane as profile
@@ -259,7 +259,7 @@ for Stage 3.
 
 ### 3.7 Triangulation
 
-- Vendor the pure-Python port of mapbox-earcut at `src/cad/_vendor/earcut.py`,
+- Vendor the pure-Python port of mapbox-earcut at `src/cady/_vendor/earcut.py`,
   MIT licensed. Add a `NOTICE` file at the project root with attribution.
 - `tessellate.polygon_to_triangles(closed_shape2d)` is the single entry point;
   callers never reach into `_vendor` directly.
@@ -328,13 +328,13 @@ from one quad-as-two-tris band per profile edge.
   Catches empty/degenerate primitives, negative radii, zero direction
   vectors, holes on open Shape2D, NaN/inf coordinates, `+`-composition of
   segments whose endpoints don't match, malformed `axis` strings.
-- **Tier 2 — scene assembly:** `cad.SceneError` at `scene.add(...)`. Catches
+- **Tier 2 — scene assembly:** `cady.SceneError` at `scene.add(...)`. Catches
   type mismatches that escape the static checker (passing a `Sphere` to a
   `DxfDrawing`, passing a `Layer` from a different drawing).
-- **Tier 3 — writer:** `cad.WriteError` during serialisation. Catches empty
+- **Tier 3 — writer:** `cady.WriteError` during serialisation. Catches empty
   drawings, profiles earcut rejects (self-intersecting), and surfaces the
   offending entity in the message.
-- All three tiers (except Tier 1) derive from `cad.CadError` so callers can
+- All three tiers (except Tier 1) derive from `cady.CadError` so callers can
   `except CadError:` once. Tier 1 stays plain `ValueError` to match dataclass
   conventions.
 - **No silent recovery.** No auto-close, no NaN-replacement, no version
@@ -343,8 +343,8 @@ from one quad-as-two-tris band per profile edge.
 
 ### 3.13 Library direction
 
-- pyseas-cad is **write-only**. No DXF parser, no STL parser, no round-trip.
-  Tests use `ezdxf` to verify our output, but pyseas-cad ships no read path.
+- cady is **write-only**. No DXF parser, no STL parser, no round-trip.
+  Tests use `ezdxf` to verify our output, but cady ships no read path.
 
 ### 3.14 Worked example — padeye recipe
 
@@ -359,7 +359,7 @@ offsets, layer colours) is not part of the spec contract. Engineering
 correctness of the padeye geometry is pyseas-yard's responsibility.
 
 ```python
-from cad import line, arc, circle, DxfDrawing, StlMesh
+from cady import line, arc, circle, DxfDrawing, StlMesh
 from math import pi
 from dataclasses import dataclass
 
@@ -462,8 +462,8 @@ These are provisional. The plan must validate or escalate before locking.
   `doc.write_stl()`). Rejected because it forces awkward decisions about
   mismatched primitives (what does STL do with HATCH?). Per-format scenes
   (chosen option D) keep each format honest.
-- **Domain-aware parts in pyseas-cad** (Padeye, Shackle as first-class types).
-  Rejected because it collapses the boundary that makes pyseas-cad reusable
+- **Domain-aware parts in cady** (Padeye, Shackle as first-class types).
+  Rejected because it collapses the boundary that makes cady reusable
   outside lifting-gear and forces every other pyseas package to depend on
   lifting-gear vocabulary.
 - **Hand-rolled ear-clipping with holes.** Rejected as the default because
@@ -544,7 +544,7 @@ Out of scope for this spec (full list in `.warden/preference-lock.json`):
 - Construction-line helpers (`midpoint`, `perpendicular`, `tangent_circle`,
   `offset_curve`) — Stage 3 alongside DIMENSION (which needs midpoint and
   perpendicular).
-- `Sheet` type hosting multiple views — explicitly outside pyseas-cad's
+- `Sheet` type hosting multiple views — explicitly outside cady's
   scope; layout work belongs in pyseas-yard or a separate package.
 
 **Other:**
@@ -561,15 +561,15 @@ Mechanical, runnable checks every Stage-1 implementation must satisfy.
 
 ### Package shape
 
-- [ ] File `src/cad/__init__.py` exists and re-exports the lowercase factory
+- [ ] File `src/cady/__init__.py` exists and re-exports the lowercase factory
       functions (`line`, `arc`, `circle`, `rectangle`, `polyline`, `spline`,
       `sphere`, `prism`), the scene types (`DxfDrawing`, `StlMesh`, `Layer`),
       and the error types (`CadError`, `SceneError`, `WriteError`).
 - [ ] `Shape2D` and `Shape3D` abstract base classes live in
-      `src/cad/geom/base.py`; concrete shapes inherit from one and only one.
-- [ ] File `src/cad/_vendor/earcut.py` exists, contains MIT-licensed pure-Python
+      `src/cady/geom/base.py`; concrete shapes inherit from one and only one.
+- [ ] File `src/cady/_vendor/earcut.py` exists, contains MIT-licensed pure-Python
       earcut, and `NOTICE` at the repo root attributes its origin and commit.
-- [ ] `python -c "import cad; from cad import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"` exits 0 with no warnings.
+- [ ] `python -c "import cady; from cady import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"` exits 0 with no warnings.
 
 ### Runtime dependency promise
 
@@ -662,24 +662,24 @@ Mechanical, runnable checks every Stage-1 implementation must satisfy.
 - [ ] `examples/plate_with_hole.py` uses lowercase factory functions and
       method-chained writers — verified by a grep test that asserts no
       `Polyline(`, `Circle(`, `Vec2(`, or `Vec3(` constructor calls appear
-      in the example file (these belong only inside `cad/`).
+      in the example file (these belong only inside `cady/`).
 
 ### Quality gates
 
 - [ ] `pytest -q` exits 0 with all tests passing.
-- [ ] `pyright --strict src/cad` exits 0 with no errors and no warnings.
-- [ ] `ruff check src/cad tests` exits 0.
-- [ ] No file under `src/cad/` (excluding `_vendor`) imports from any external
+- [ ] `pyright --strict src/cady` exits 0 with no errors and no warnings.
+- [ ] `ruff check src/cady tests` exits 0.
+- [ ] No file under `src/cady/` (excluding `_vendor`) imports from any external
       package other than the stdlib (verify with a `grep` script in tests).
 
 ## Known Limitations
 
-- Vendored triangulation: `src/cad/_vendor/earcut.py` is an original
+- Vendored triangulation: `src/cady/_vendor/earcut.py` is an original
   pure-Python mapbox-earcut-compatible shim, not a copied upstream
   mapbox-earcut port pinned to an external commit. The public
   `polygon_to_triangles(...)` contract, including the Stage 1 rectangle with
   circular hole acceptance case, is implemented and tested in
-  `src/cad/geom/tessellate.py`.
+  `src/cady/geom/tessellate.py`.
 
 ## Post-Implementation Review
 
@@ -687,24 +687,24 @@ Implemented on branch `stage-1` in `.worktrees/stage-1`.
 
 ### Acceptance results
 
-- Package shape: `src/cad/__init__.py`, geometry bases, factories, scenes,
+- Package shape: `src/cady/__init__.py`, geometry bases, factories, scenes,
   errors, `_vendor/earcut.py`, and import smoke test are present. Evidence:
-  `PYTHONPATH=src .venv/bin/python -c "import cad; from cad import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"`
+  `PYTHONPATH=src .venv/bin/python -c "import cady; from cady import line, arc, circle, sphere, prism, DxfDrawing, StlMesh"`
   exited 0.
 - Runtime dependency promise: runtime metadata has no `Requires-Dist` entries.
   Evidence:
-  `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+  `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"`
   exited 0.
 - Geom, tessellation, scene, writer, error, and example acceptance: covered by
   `tests/geom/`, `tests/scene/`, `tests/write/`, `tests/errors/`, and
   `tests/examples/`. Evidence: `.venv/bin/pytest -q` reported
   `48 passed, 4 warnings`.
-- Static typing: `pyproject.toml` sets pyright strict mode for `src/cad`.
-  Evidence: `.venv/bin/pyright src/cad` reported
+- Static typing: `pyproject.toml` sets pyright strict mode for `src/cady`.
+  Evidence: `.venv/bin/pyright src/cady` reported
   `0 errors, 0 warnings, 0 informations`. The installed pyright CLI does not
   accept a `--strict` flag, so strictness is configured in project settings.
 - Lint and stdlib-only import gate: Evidence:
-  `.venv/bin/ruff check src/cad tests` reported `All checks passed!`; runtime
+  `.venv/bin/ruff check src/cady tests` reported `All checks passed!`; runtime
   import convention is also covered by `tests/conventions/test_stdlib_only.py`.
 
 ### Scope drift

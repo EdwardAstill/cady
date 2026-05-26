@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, WriteError, prism, sphere
+from cady import Model, WriteError, prism, sphere
 
 
 def test_write_step_prism_creates_file(tmp_path) -> None:

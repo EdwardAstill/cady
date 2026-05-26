@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, SceneError, circle, rectangle, sphere
-from cad.scene import DxfDrawing
+from cady import Model, SceneError, circle, rectangle, sphere
+from cady.scene import DxfDrawing
 
 
 def test_drawing_layer_delegates_to_dxf_drawing() -> None:

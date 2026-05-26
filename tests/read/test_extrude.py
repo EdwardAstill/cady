@@ -1,8 +1,8 @@
-"""Tests for cad.read.extrude — structural member reconstruction from faces."""
+"""Tests for cady.read.extrude — structural member reconstruction from faces."""
 
 from __future__ import annotations
 
-from cad.read.extrude import (
+from cady.read.extrude import (
     ExtrudedMember,
     ExtrudedSection,
     classify_section_from_faces,
@@ -10,7 +10,7 @@ from cad.read.extrude import (
     find_end_caps,
     group_cylinders_into_members,
 )
-from cad.read.step import StepFace
+from cady.read.step import StepFace
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────

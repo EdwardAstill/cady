@@ -4,8 +4,8 @@ import struct
 
 import pytest
 
-from cad import Model, SceneError, circle, prism, rectangle
-from cad.scene import StlMesh
+from cady import Model, SceneError, circle, prism, rectangle
+from cady.scene import StlMesh
 
 
 def test_part_add_delegates_to_stl_mesh() -> None:

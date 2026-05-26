@@ -1,4 +1,4 @@
-# pyseas-cad Stage 6 - v1 Product Hardening
+# cady Stage 6 - v1 Product Hardening
 
 **Status:** draft.
 **Date:** 2026-05-11.
@@ -6,7 +6,7 @@
 
 ## Goal
 
-Make pyseas-cad easy to install, inspect, verify, and integrate after STEP MVP
+Make cady easy to install, inspect, verify, and integrate after STEP MVP
 lands.
 
 ## Scope

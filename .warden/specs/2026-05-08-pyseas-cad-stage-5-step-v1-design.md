@@ -1,4 +1,4 @@
-# pyseas-cad Stage 5 - STEP MVP
+# cady Stage 5 - STEP MVP
 
 **Status:** draft.
 **Date:** 2026-05-11.

@@ -1,4 +1,4 @@
-# pyseas-cad — initial ideas
+# cady — initial ideas
 
 > Status note (2026-05-11): This is historical ideation. Current roadmap
 > artifacts live under `.warden/specs/` and `.warden/plans/`. Stage 1, Stage 2,
@@ -20,7 +20,7 @@ Reasons to roll a custom writer instead of long-term `ezdxf` + an
 imported STEP kernel:
 
 - **Single dependency tree.** ezdxf brings numpy + fontTools + pyparsing.
-  A pure-stdlib writer keeps pyseas-cad small and predictable.
+  A pure-stdlib writer keeps cady small and predictable.
 - **Tighter integration with pyseas geometry.** pyseas-yard already
   models padeye, shackle, sling, weld, bolt-group as typed dataclasses.
   A native writer can consume those domain types directly without an
@@ -37,16 +37,16 @@ Reasons to *not* DIY:
 - DXF DIMENSION rendering is fiddly — different CAD viewers interpret
   dimension blocks differently. ezdxf already solved this.
 - STEP (ISO 10303) is *enormous*. Even a minimal AP203 solid writer is
-  weeks of work. Real ROI only if pyseas-cad becomes a long-term
+  weeks of work. Real ROI only if cady becomes a long-term
   product.
 
-**Strategy:** ezdxf in pyseas-yard now. Build pyseas-cad in parallel,
+**Strategy:** ezdxf in pyseas-yard now. Build cady in parallel,
 behind a feature flag. Switch pyseas-yard's draw backend over once the
 custom writer reaches feature parity for the lifting-gear primitives.
 
 ---
 
-## Scope — what pyseas-cad needs to draw
+## Scope — what cady needs to draw
 
 Driven by pyseas-yard's domain:
 
@@ -80,8 +80,8 @@ Driven by pyseas-yard's domain:
 ## Architecture sketch
 
 ```
-pyseas-cad/
-  src/cad/
+cady/
+  src/cady/
     geom/              # core geometry types
       vec.py           # Vec2, Vec3
       polyline.py
@@ -151,7 +151,7 @@ viewers regenerate; some lighter viewers don't. ezdxf computes them.
 ### API sketch
 
 ```python
-from cad.write.dxf import DxfDocument, Layer
+from cady.write.dxf import DxfDocument, Layer
 
 doc = DxfDocument()
 plate = doc.layer("PLATE", color=7)
@@ -230,8 +230,8 @@ That's painful but bounded. AP242 is preferred over AP203 for new code
 ### API sketch
 
 ```python
-from cad.geom import Vec3, Polygon
-from cad.write.step import StepDocument
+from cady.geom import Vec3, Polygon
+from cady.write.step import StepDocument
 
 doc = StepDocument()
 plate = doc.extrude(
@@ -276,7 +276,7 @@ Both trivial. Defer until needed. ~50 lines each.
 The controlling v1 roadmap now lives at:
 
 ```text
-.warden/specs/2026-05-08-pyseas-cad-v1-roadmap.md
+.warden/specs/2026-05-08-cady-v1-roadmap.md
 ```
 
 That roadmap supersedes the older linear stage sketch. Stage 1 has already
@@ -286,7 +286,7 @@ model-first:
 | Stage | Deliverable | Why |
 |---|---|---|
 | 1 | Geometry, DXF basics, STL | Implemented foundation. |
-| 2 | `cad.model` layer | One source model feeds DXF, STL, STEP, and future exporters. |
+| 2 | `cady.model` layer | One source model feeds DXF, STL, STEP, and future exporters. |
 | 3 | Production DXF | HATCH, BLOCK, INSERT, linetypes, reusable symbols. |
 | 4 | Dimensions and drawing helpers | Practical 2D engineering drawings. |
 | 5 | STEP MVP and v1 hardening | Viewer-loadable 3D interchange plus docs and compatibility matrix. |
@@ -303,8 +303,8 @@ spec/plan.
 |---|---|---|---|---|---|
 | **ezdxf only** (Tier 1) | ~zero | MIT (vendored) | full | none | external lib |
 | **ezdxf + cadquery** (Tier 2) | small | Apache+MIT | manual via ezdxf | full | external libs |
-| **pyseas-cad DXF only** (stages 1–3) | medium | MIT (own) | own DIMENSION | none | ours |
-| **pyseas-cad DXF + STEP** (stages 1–6) | large | MIT (own) | own DIMENSION | own basic | ours, real |
+| **cady DXF only** (stages 1–3) | medium | MIT (own) | own DIMENSION | none | ours |
+| **cady DXF + STEP** (stages 1–6) | large | MIT (own) | own DIMENSION | own basic | ours, real |
 
 The middle option (own DXF only) is interesting: most of pyseas-yard's
 output value is 2D drawings, and STEP can stay on cadquery if we ever
@@ -315,11 +315,11 @@ need it. That's a reasonable long-term equilibrium.
 ## What lives where
 
 - `pyseas-yard` — calculation library. Domain types (Padeye, Shackle…).
-  Imports ezdxf today, eventually pyseas-cad.
-- `pyseas-cad` — drawing-format writers. Format-aware, geometry-aware,
+  Imports ezdxf today, eventually cady.
+- `cady` — drawing-format writers. Format-aware, geometry-aware,
   domain-blind.
 - Domain "how to draw a padeye" recipes live in `pyseas-yard`, using
-  `pyseas-cad` primitives. pyseas-cad does not know what a padeye is.
+  `cady` primitives. cady does not know what a padeye is.
 
 This boundary is the single most important architecture call. Keep
-pyseas-cad as a *generic CAD writer* — never let lifting-gear leak in.
+cady as a *generic CAD writer* — never let lifting-gear leak in.

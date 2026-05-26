@@ -1,10 +1,10 @@
-# pyseas-cad Stage 4 Dimensions Implementation Plan
+# cady Stage 4 Dimensions Implementation Plan
 
 > **For agentic workers:** This draft must be refined with `writing-plans` after the Stage 4 design spec is approved.
 
 **Goal:** Add model-first DXF dimensions and helper geometry for practical engineering drawings.
 
-**Architecture:** Build dimensions on top of the Stage 3 drawing model: layers, linetypes, hatch, blocks, and inserts. Keep geometry helpers format-blind in `cad.geom` only when they are useful outside DXF.
+**Architecture:** Build dimensions on top of the Stage 3 drawing model: layers, linetypes, hatch, blocks, and inserts. Keep geometry helpers format-blind in `cady.geom` only when they are useful outside DXF.
 
 **Tech Stack:** Python 3.11+, pure-stdlib runtime, pytest, pyright, ruff, ezdxf.
 
@@ -43,5 +43,5 @@
 - `.venv/bin/pytest tests/geom -q -k helpers`
 - `.venv/bin/pytest tests/examples -q`
 - `.venv/bin/pytest -q`
-- `.venv/bin/pyright src/cad`
-- `.venv/bin/ruff check src/cad tests`
+- `.venv/bin/pyright src/cady`
+- `.venv/bin/ruff check src/cady tests`

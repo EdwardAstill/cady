@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src" / "cad"
-ALLOWED = {"cad", "steputils"}
+SRC = ROOT / "src" / "cady"
+ALLOWED = {"cady", "steputils"}
 STDLIB = set(sys.stdlib_module_names)
 
 

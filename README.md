@@ -1,9 +1,9 @@
-# pyseas-cad
+# cady
 
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018, binary/ASCII STL, or AP214 STEP.
 
-pyseas-cad is at **v1** (Stages 1–6):
+cady is at **v1** (Stages 1–6):
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
@@ -18,7 +18,7 @@ pyseas-cad is at **v1** (Stages 1–6):
 ## Quickstart
 
 ```python
-from cad import Model, circle, rectangle
+from cady import Model, circle, rectangle
 
 profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -66,7 +66,7 @@ and pin stud) as a viewer-loadable AP214 STEP file.
 Geometry factories:
 
 ```python
-from cad import arc, circle, line, polyline, prism, rectangle, sphere, spline
+from cady import arc, circle, line, polyline, prism, rectangle, sphere, spline
 ```
 
 2D shapes:
@@ -89,7 +89,7 @@ from cad import arc, circle, line, polyline, prism, rectangle, sphere, spline
 Scenes and writers:
 
 ```python
-from cad import Assembly, Drawing2D, DxfDrawing, Model, Part, StlMesh
+from cady import Assembly, Drawing2D, DxfDrawing, Model, Part, StlMesh
 ```
 
 Use `Model` as the preferred organizing layer for named drawings and parts.
@@ -98,7 +98,7 @@ Use `DxfDrawing` and `StlMesh` directly for low-level or single-format output.
 Production DXF features:
 
 ```python
-from cad import Model, circle, line, rectangle
+from cady import Model, circle, line, rectangle
 
 outline = rectangle((0, 0), (1.0, 0.6))
 hole = circle((0.5, 0.3), 0.12)
@@ -125,7 +125,7 @@ plain lines and text.
 The roadmap moves toward one source model exporting DXF, STL, and STEP:
 
 ```python
-from cad import Model, circle, rectangle
+from cady import Model, circle, rectangle
 
 plate = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -147,13 +147,13 @@ currently supports `Prism` (box) solids only; `Extrusion`, `Revolution`, and
 The controlling roadmap is:
 
 ```text
-.warden/specs/2026-05-08-pyseas-cad-v1-roadmap.md
+.warden/specs/2026-05-08-cady-v1-roadmap.md
 ```
 
 Current sequence:
 
 1. Stage 1: geometry, DXF basics, STL — implemented
-2. Stage 2: `cad.model` layer — implemented
+2. Stage 2: `cady.model` layer — implemented
 3. Stage 3: production DXF: HATCH, BLOCK, INSERT, linetypes — implemented
 4. Stage 4: dimensions and drawing helpers — implemented
 5. Stage 4.6: DXF writer hardening — implemented
@@ -181,9 +181,9 @@ Run gates:
 
 ```bash
 .venv/bin/pytest -q
-.venv/bin/pyright src/cad
-.venv/bin/ruff check src/cad tests
-.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+.venv/bin/pyright src/cady
+.venv/bin/ruff check src/cady tests
+.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 ```
 
 Runtime package metadata must have no dependencies. Dev tools live in
@@ -192,7 +192,7 @@ Runtime package metadata must have no dependencies. Dev tools live in
 ## Boundaries
 
 - Runtime code stays pure stdlib.
-- pyseas-cad is write-only. It does not parse DXF, STL, or STEP.
-- pyseas-cad is domain-blind. It does not contain `Padeye`, `Shackle`, or other
+- cady is write-only. It does not parse DXF, STL, or STEP.
+- cady is domain-blind. It does not contain `Padeye`, `Shackle`, or other
   lifting-gear objects.
 - Domain recipes belong in pyseas-yard or examples.

@@ -1,8 +1,8 @@
-pyseas-cad includes a small pure-Python triangulation compatibility module at
-src/cad/_vendor/earcut.py.
+cady includes a small pure-Python triangulation compatibility module at
+src/cady/_vendor/earcut.py.
 
 The public API is intentionally compatible with the common mapbox-earcut
 `triangulate_float32(vertices, hole_indices, dimensions)` shape used by Python
 ports. The implementation in this repository is original Stage 1 code and is
-licensed under the same terms as pyseas-cad.
+licensed under the same terms as cady.
 

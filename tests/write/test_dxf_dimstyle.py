@@ -1,7 +1,7 @@
 """Emitter tests for DIMSTYLE table generation."""
 
-from cad import DimStyle, DxfDrawing
-from cad.write.dxf.sections import render_dxf
+from cady import DimStyle, DxfDrawing
+from cady.write.dxf.sections import render_dxf
 
 
 def test_dimstyle_table_includes_user_dimstyle() -> None:
@@ -39,7 +39,7 @@ def test_dimstyle_table_omits_user_styles_when_no_dimensions_use_them() -> None:
     drawing = DxfDrawing()
     drawing.dimstyle(DimStyle(name="UNUSED"))
     drawing.layer("L")
-    from cad.geom import line
+    from cady.geom import line
     drawing.layer("L").add(line((0.0, 0.0), (1.0, 0.0)))
     out = render_dxf(drawing)
     assert "UNUSED" not in out

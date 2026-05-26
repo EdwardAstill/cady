@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cad import DxfDrawing, SceneError, circle, line, rectangle
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing, SceneError, circle, line, rectangle
+from cady.write.dxf.sections import render_dxf
 
 
 def test_layer_hatch_records_closed_boundary() -> None:

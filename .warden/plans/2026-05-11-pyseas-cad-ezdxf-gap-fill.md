@@ -1,10 +1,10 @@
-# pyseas-cad ezdxf Gap-Fill Implementation Plan
+# cady ezdxf Gap-Fill Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the four feature gaps that prevent `pyseas-cad` from being a drop-in replacement for `ezdxf` in `pyseas-yard/src/yard/draw/`.
+**Goal:** Close the four feature gaps that prevent `cady` from being a drop-in replacement for `ezdxf` in `pyseas-yard/src/yard/draw/`.
 
-**Architecture:** Each gap is a self-contained addition to the existing DXF scene/writer layers — entities defined in `cad/scene/dxf.py`, emitted by `cad/write/dxf/*`, exposed through fluent methods on `DxfDrawing`. No changes to the existing public API; everything is additive.
+**Architecture:** Each gap is a self-contained addition to the existing DXF scene/writer layers — entities defined in `cady/scene/dxf.py`, emitted by `cady/write/dxf/*`, exposed through fluent methods on `DxfDrawing`. No changes to the existing public API; everything is additive.
 
 **Tech Stack:** Pure-stdlib Python, dataclasses, pytest, pyright strict.
 
@@ -12,7 +12,7 @@
 
 ## Audit — what `pyseas-yard/src/yard/draw/` actually uses from ezdxf
 
-| ezdxf API | pyseas-cad status | Gap task |
+| ezdxf API | cady status | Gap task |
 |---|---|---|
 | `msp.add_line` | ✅ | — |
 | `msp.add_circle` | ✅ | — |
@@ -37,12 +37,12 @@ Hatches and blocks are already covered (`HatchEntity`, `BlockDefinition`, `inser
 
 | File | Action |
 |---|---|
-| `src/cad/scene/dxf.py` | Modify — add `AngularDimensionEntity`, `DimStyle` dataclass, `header` field on `DxfDrawing`, `angular_dimension()` and `dimstyle()` methods, public `bounds` property |
-| `src/cad/write/dxf/dimensions.py` | Modify — emit angular dimension block + DIMENSION entity |
-| `src/cad/write/dxf/tables.py` | Modify — `dimstyle_table()` reads custom DimStyle settings, supports named non-Standard dimstyles |
-| `src/cad/write/dxf/document.py` | Modify — write user-supplied header vars; make `_bounds` public |
-| `src/cad/write/dxf/blocks.py` | Modify — include angular dim block names in `dimension_block_names()` |
-| `src/cad/__init__.py` | Modify — export `DimStyle`, `AngularDimensionEntity` |
+| `src/cady/scene/dxf.py` | Modify — add `AngularDimensionEntity`, `DimStyle` dataclass, `header` field on `DxfDrawing`, `angular_dimension()` and `dimstyle()` methods, public `bounds` property |
+| `src/cady/write/dxf/dimensions.py` | Modify — emit angular dimension block + DIMENSION entity |
+| `src/cady/write/dxf/tables.py` | Modify — `dimstyle_table()` reads custom DimStyle settings, supports named non-Standard dimstyles |
+| `src/cady/write/dxf/document.py` | Modify — write user-supplied header vars; make `_bounds` public |
+| `src/cady/write/dxf/blocks.py` | Modify — include angular dim block names in `dimension_block_names()` |
+| `src/cady/__init__.py` | Modify — export `DimStyle`, `AngularDimensionEntity` |
 | `tests/scene/test_dxf_angular_dim.py` | Create — unit tests for angular dimension scene API |
 | `tests/write/test_dxf_angular_dim.py` | Create — emitter tests for angular dim DXF output |
 | `tests/scene/test_dxf_dimstyle.py` | Create — unit tests for custom DimStyle |
@@ -58,9 +58,9 @@ Hatches and blocks are already covered (`HatchEntity`, `BlockDefinition`, `inser
 **Files:**
 - Create: `tests/scene/test_dxf_angular_dim.py`
 - Create: `tests/write/test_dxf_angular_dim.py`
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/write/dxf/dimensions.py`
-- Modify: `src/cad/write/dxf/blocks.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/write/dxf/dimensions.py`
+- Modify: `src/cady/write/dxf/blocks.py`
 
 - [ ] **Step 1: Write failing scene test**
 
@@ -73,8 +73,8 @@ import math
 
 import pytest
 
-from cad import DxfDrawing
-from cad.scene.dxf import AngularDimensionEntity
+from cady import DxfDrawing
+from cady.scene.dxf import AngularDimensionEntity
 
 
 def test_angular_dimension_records_three_points_and_radius() -> None:
@@ -132,7 +132,7 @@ Expected: FAIL — `AngularDimensionEntity` and `angular_dimension` don't exist.
 
 - [ ] **Step 3: Add AngularDimensionEntity dataclass and method**
 
-In `src/cad/scene/dxf.py`, after the existing `DimensionEntity` class, add:
+In `src/cady/scene/dxf.py`, after the existing `DimensionEntity` class, add:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -211,8 +211,8 @@ Create `tests/write/test_dxf_angular_dim.py`:
 ```python
 """Emitter tests for angular dimensions."""
 
-from cad import DxfDrawing
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing
+from cady.write.dxf.sections import render_dxf
 
 
 def test_angular_dimension_emits_dimension_entity() -> None:
@@ -257,7 +257,7 @@ Expected: FAIL — emitter doesn't know about angular dims yet.
 
 - [ ] **Step 7: Implement angular dim emitter**
 
-In `src/cad/write/dxf/dimensions.py`, add handling for `AngularDimensionEntity`. The DIMENSION entity has:
+In `src/cady/write/dxf/dimensions.py`, add handling for `AngularDimensionEntity`. The DIMENSION entity has:
 - group 100: `AcDbDimension`
 - group 100: `AcDb3PointAngularDimension`
 - group 70: 5 (3-point angular dimension type)
@@ -294,7 +294,7 @@ Update the dispatcher in this file to route `AngularDimensionEntity` to the new 
 
 - [ ] **Step 8: Wire the block name list**
 
-In `src/cad/write/dxf/blocks.py`, ensure `dimension_block_names(drawing)` iterates over `AngularDimensionEntity` instances too.
+In `src/cady/write/dxf/blocks.py`, ensure `dimension_block_names(drawing)` iterates over `AngularDimensionEntity` instances too.
 
 - [ ] **Step 9: Run all tests**
 
@@ -313,7 +313,7 @@ Expected: all tests pass.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/write/dxf/dimensions.py src/cad/write/dxf/blocks.py tests/scene/test_dxf_angular_dim.py tests/write/test_dxf_angular_dim.py
+git add src/cady/scene/dxf.py src/cady/write/dxf/dimensions.py src/cady/write/dxf/blocks.py tests/scene/test_dxf_angular_dim.py tests/write/test_dxf_angular_dim.py
 git commit -m "feat(dxf): add 3-point angular dimension"
 ```
 
@@ -324,9 +324,9 @@ git commit -m "feat(dxf): add 3-point angular dimension"
 **Files:**
 - Create: `tests/scene/test_dxf_dimstyle.py`
 - Create: `tests/write/test_dxf_dimstyle.py`
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/write/dxf/tables.py`
-- Modify: `src/cad/__init__.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/write/dxf/tables.py`
+- Modify: `src/cady/__init__.py`
 
 - [ ] **Step 1: Write failing scene test**
 
@@ -337,7 +337,7 @@ Create `tests/scene/test_dxf_dimstyle.py`:
 
 import pytest
 
-from cad import DimStyle, DxfDrawing
+from cady import DimStyle, DxfDrawing
 
 
 def test_dimstyle_defaults_match_existing_builtin() -> None:
@@ -398,7 +398,7 @@ Expected: FAIL — `DimStyle` not defined, `dimstyle()` method missing, layer-st
 
 - [ ] **Step 3: Add DimStyle and dimstyle registration**
 
-In `src/cad/scene/dxf.py`:
+In `src/cady/scene/dxf.py`:
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -442,9 +442,9 @@ In each `linear_dimension` / `radius_dimension` / `diameter_dimension` / `angula
 
 - [ ] **Step 4: Export DimStyle**
 
-In `src/cad/__init__.py`, add `DimStyle` to imports from `cad.scene` and to `__all__`.
+In `src/cady/__init__.py`, add `DimStyle` to imports from `cady.scene` and to `__all__`.
 
-In `src/cad/scene/__init__.py`, add `DimStyle` to the re-exports from `cad.scene.dxf`.
+In `src/cady/scene/__init__.py`, add `DimStyle` to the re-exports from `cady.scene.dxf`.
 
 - [ ] **Step 5: Run scene test**
 
@@ -460,8 +460,8 @@ Create `tests/write/test_dxf_dimstyle.py`:
 ```python
 """Emitter tests for DIMSTYLE table generation."""
 
-from cad import DimStyle, DxfDrawing
-from cad.write.dxf.sections import render_dxf
+from cady import DimStyle, DxfDrawing
+from cady.write.dxf.sections import render_dxf
 
 
 def test_dimstyle_table_includes_user_dimstyle() -> None:
@@ -512,7 +512,7 @@ Expected: FAIL — emitter still writes only the hard-coded `Standard` row.
 
 - [ ] **Step 8: Update tables emitter**
 
-In `src/cad/write/dxf/tables.py`, change `dimstyle_table` to accept the drawing's registered dimstyles and a set of dimstyle names actually referenced by dimensions in the drawing. Emit one DIMSTYLE record per referenced style, mapping fields:
+In `src/cady/write/dxf/tables.py`, change `dimstyle_table` to accept the drawing's registered dimstyles and a set of dimstyle names actually referenced by dimensions in the drawing. Emit one DIMSTYLE record per referenced style, mapping fields:
 
 | DimStyle field | DXF group code |
 |---|---|
@@ -526,7 +526,7 @@ In `src/cad/write/dxf/tables.py`, change `dimstyle_table` to accept the drawing'
 
 Keep the existing `Standard` record so unrelated DXF readers don't choke.
 
-Update the call site (likely in `src/cad/write/dxf/document.py` or `sections.py`) to pass the drawing's dimstyles list and the set of names referenced by `drawing.dimensions`.
+Update the call site (likely in `src/cady/write/dxf/document.py` or `sections.py`) to pass the drawing's dimstyles list and the set of names referenced by `drawing.dimensions`.
 
 - [ ] **Step 9: Run emitter test**
 
@@ -545,7 +545,7 @@ Expected: all tests pass.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/scene/__init__.py src/cad/__init__.py src/cad/write/dxf/tables.py src/cad/write/dxf/document.py tests/scene/test_dxf_dimstyle.py tests/write/test_dxf_dimstyle.py
+git add src/cady/scene/dxf.py src/cady/scene/__init__.py src/cady/__init__.py src/cady/write/dxf/tables.py src/cady/write/dxf/document.py tests/scene/test_dxf_dimstyle.py tests/write/test_dxf_dimstyle.py
 git commit -m "feat(dxf): support user-configurable DIMSTYLE"
 ```
 
@@ -556,8 +556,8 @@ git commit -m "feat(dxf): support user-configurable DIMSTYLE"
 **Files:**
 - Create: `tests/scene/test_dxf_header.py`
 - Create: `tests/write/test_dxf_header.py`
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/write/dxf/document.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/write/dxf/document.py`
 
 - [ ] **Step 1: Write failing scene test**
 
@@ -568,7 +568,7 @@ Create `tests/scene/test_dxf_header.py`:
 
 import pytest
 
-from cad import DxfDrawing
+from cady import DxfDrawing
 
 
 def test_header_starts_empty() -> None:
@@ -603,7 +603,7 @@ Expected: FAIL — no `header` or `set_header`.
 
 - [ ] **Step 3: Add header API**
 
-In `src/cad/scene/dxf.py`:
+In `src/cady/scene/dxf.py`:
 
 ```python
 # Group code per header variable. Extend this map as variables are added.
@@ -643,8 +643,8 @@ Create `tests/write/test_dxf_header.py`:
 ```python
 """Emitter tests for HEADER section."""
 
-from cad import DxfDrawing
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing
+from cady.write.dxf.sections import render_dxf
 
 
 def test_header_section_includes_insunits_when_set() -> None:
@@ -671,7 +671,7 @@ Expected: FAIL — `_header` in `document.py` doesn't read drawing.header.
 
 - [ ] **Step 7: Update header emitter**
 
-In `src/cad/write/dxf/document.py`, find `_header(bounds)` and extend it to accept the drawing (or its `_header` dict) and append a pair per user-set variable using the group code from `_HEADER_VARS`. Existing bound-derived $EXTMIN/$EXTMAX pairs stay unchanged.
+In `src/cady/write/dxf/document.py`, find `_header(bounds)` and extend it to accept the drawing (or its `_header` dict) and append a pair per user-set variable using the group code from `_HEADER_VARS`. Existing bound-derived $EXTMIN/$EXTMAX pairs stay unchanged.
 
 - [ ] **Step 8: Run emitter test**
 
@@ -690,7 +690,7 @@ Expected: all tests pass.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/write/dxf/document.py tests/scene/test_dxf_header.py tests/write/test_dxf_header.py
+git add src/cady/scene/dxf.py src/cady/write/dxf/document.py tests/scene/test_dxf_header.py tests/write/test_dxf_header.py
 git commit -m "feat(dxf): allow setting HEADER variables (\$INSUNITS et al)"
 ```
 
@@ -700,8 +700,8 @@ git commit -m "feat(dxf): allow setting HEADER variables (\$INSUNITS et al)"
 
 **Files:**
 - Create: `tests/scene/test_dxf_bounds.py`
-- Modify: `src/cad/scene/dxf.py`
-- Modify: `src/cad/write/dxf/document.py`
+- Modify: `src/cady/scene/dxf.py`
+- Modify: `src/cady/write/dxf/document.py`
 
 - [ ] **Step 1: Write failing test**
 
@@ -712,8 +712,8 @@ Create `tests/scene/test_dxf_bounds.py`:
 
 import pytest
 
-from cad import DxfDrawing
-from cad.geom import circle, line
+from cady import DxfDrawing
+from cady.geom import circle, line
 
 
 def test_bounds_for_empty_drawing_is_zero_zero() -> None:
@@ -742,14 +742,14 @@ Expected: FAIL — `bounds` not a public property.
 
 - [ ] **Step 3: Promote `_bounds` to a public `bounds` property**
 
-In `src/cad/write/dxf/document.py`, rename `_bounds(drawing)` to a module-level public function `bounds(drawing)` (keep `_bounds` as a thin alias to avoid touching the writer call sites in this task).
+In `src/cady/write/dxf/document.py`, rename `_bounds(drawing)` to a module-level public function `bounds(drawing)` (keep `_bounds` as a thin alias to avoid touching the writer call sites in this task).
 
-In `src/cad/scene/dxf.py`, on `DxfDrawing`:
+In `src/cady/scene/dxf.py`, on `DxfDrawing`:
 
 ```python
     @property
     def bounds(self) -> tuple[Vec2, Vec2]:
-        from cad.write.dxf.document import bounds as _compute_bounds
+        from cady.write.dxf.document import bounds as _compute_bounds
 
         return _compute_bounds(self)
 ```
@@ -771,7 +771,7 @@ Expected: all tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/cad/scene/dxf.py src/cad/write/dxf/document.py tests/scene/test_dxf_bounds.py
+git add src/cady/scene/dxf.py src/cady/write/dxf/document.py tests/scene/test_dxf_bounds.py
 git commit -m "feat(dxf): expose drawing.bounds as a public property"
 ```
 
@@ -799,7 +799,7 @@ Expected: 0 errors.
 
 ```bash
 uv run python - <<'PY'
-from cad import DxfDrawing, DimStyle
+from cady import DxfDrawing, DimStyle
 
 drawing = DxfDrawing()
 drawing.set_header("$INSUNITS", 4)
@@ -807,7 +807,7 @@ drawing.dimstyle(DimStyle(name="DETAIL", text_height=2.5, arrow_size=2.0, decima
 drawing.layer("OUTLINE", color=7)
 drawing.layer("DIMS", color=2)
 
-from cad.geom import line
+from cady.geom import line
 drawing.layer("OUTLINE").add(line((0.0, 0.0), (10.0, 0.0)))
 drawing.layer("OUTLINE").add(line((0.0, 0.0), (0.0, 10.0)))
 
@@ -815,7 +815,7 @@ drawing.angular_dimension(
     center=(0.0, 0.0), p1=(10.0, 0.0), p2=(0.0, 10.0),
     distance=5.0, layer="DIMS", dimstyle="DETAIL",
 )
-drawing.write("/tmp/pyseas-cad-ezdxf-gap.dxf")
+drawing.write("/tmp/cady-ezdxf-gap.dxf")
 print("bounds:", drawing.bounds)
 print("dimstyles:", [s.name for s in drawing.dimstyles])
 print("header:", drawing.header)
@@ -837,12 +837,12 @@ git commit --allow-empty -m "chore(dxf): ezdxf gap-fill complete (angular dim, d
 ```bash
 uv run pytest
 uv run pyright
-uv run python -c "from cad import DxfDrawing, DimStyle; print('ok')"
+uv run python -c "from cady import DxfDrawing, DimStyle; print('ok')"
 ```
 
 ## Notes for Implementer
 
-- **DXF group codes:** group 140 = DIMTXT (text height as double), group 41 = DIMASZ (arrow size as double), group 147 = DIMGAP, group 271 = DIMDEC (short int). Reference: `pyseas-cad/notes/step-format-cheatsheet.md` style reference exists for STEP; if there is no equivalent DXF cheatsheet, the AutoCAD DXF Reference (publicly available PDF) is authoritative.
+- **DXF group codes:** group 140 = DIMTXT (text height as double), group 41 = DIMASZ (arrow size as double), group 147 = DIMGAP, group 271 = DIMDEC (short int). Reference: `cady/notes/step-format-cheatsheet.md` style reference exists for STEP; if there is no equivalent DXF cheatsheet, the AutoCAD DXF Reference (publicly available PDF) is authoritative.
 - **3-point angular DIMENSION:** AutoLISP/ezdxf uses `AcDb3PointAngularDimension` subclass marker and dimtype 5 (group 70). Definition points are: 10 (vertex), 13 (ray 1 end), 14 (ray 2 end), 15 (repeat of vertex or arc-pass-through depending on dialect), 16 (arc-pass-through point on the bisector at the dimension radius). Verify against `ezdxf`'s output if a reference is needed: `ezdxf` lives in `~/.cache/uv/...` or can be inspected with `uv pip install ezdxf` in a scratch venv.
 - **Layer/dimstyle validation:** mirror the existing `_require_layer` pattern when adding `_require_dimstyle`. Apply it to all existing dimension methods so the policy is uniform.
 - **Backward compatibility:** the built-in `PYSEAS` dimstyle must remain the default when a dimension is added without specifying a dimstyle. Existing tests already assume this.
@@ -850,4 +850,4 @@ uv run python -c "from cad import DxfDrawing, DimStyle; print('ok')"
 
 ## Migration follow-up (not in this plan)
 
-Once these four tasks land, `pyseas-yard/src/yard/draw/_ezdxf.py` can be re-implemented on top of `pyseas-cad`. That migration is intentionally **not** part of this plan — it lives in pyseas-yard and is its own discrete piece of work after pyseas-cad's gaps are closed.
+Once these four tasks land, `pyseas-yard/src/yard/draw/_ezdxf.py` can be re-implemented on top of `cady`. That migration is intentionally **not** part of this plan — it lives in pyseas-yard and is its own discrete piece of work after cady's gaps are closed.

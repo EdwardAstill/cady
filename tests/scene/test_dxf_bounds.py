@@ -2,8 +2,8 @@
 
 import pytest
 
-from cad import DxfDrawing
-from cad.geom import circle, line
+from cady import DxfDrawing
+from cady.geom import circle, line
 
 
 def test_bounds_for_empty_drawing_is_zero_zero() -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cad import Model, circle, rectangle
+from cady import Model, circle, rectangle
 
 GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
 

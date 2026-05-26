@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cad import Model, prism
+from cady import Model, prism
 
 GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
 

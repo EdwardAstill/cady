@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import DxfDrawing, SceneError, StlMesh, circle, line, prism, sphere
+from cady import DxfDrawing, SceneError, StlMesh, circle, line, prism, sphere
 
 
 def test_dxf_layers_and_chaining() -> None:

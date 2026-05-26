@@ -1,14 +1,14 @@
-# pyseas-cad Handoff
+# cady Handoff
 
 **Date:** 2026-05-08.
 **Branch:** `main`.
-**Saved handoff commit:** `5c6f168 docs: save pyseas-cad handoff`.
+**Saved handoff commit:** `5c6f168 docs: save cady handoff`.
 
 ## Current State
 
 Stage 1 is implemented and merged:
 
-- Python package under `src/cad/`.
+- Python package under `src/cady/`.
 - Immutable geometry primitives.
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`.
 - STL binary and ASCII writer.
@@ -17,8 +17,8 @@ Stage 1 is implemented and merged:
 
 Roadmap and stage plans are recorded:
 
-- Roadmap: `.warden/specs/2026-05-08-pyseas-cad-v1-roadmap.md`
-- Cross-stage plan: `.warden/plans/2026-05-08-pyseas-cad-v1-stage-plans.md`
+- Roadmap: `.warden/specs/2026-05-08-cady-v1-roadmap.md`
+- Cross-stage plan: `.warden/plans/2026-05-08-cady-v1-stage-plans.md`
 
 Scratch/useful artifact:
 
@@ -27,7 +27,7 @@ Scratch/useful artifact:
 
 ## End Goal
 
-Build pyseas-cad into a Python package where callers build one domain-neutral
+Build cady into a Python package where callers build one domain-neutral
 model and export:
 
 - `*.dxf` for 2D drawings,
@@ -37,7 +37,7 @@ model and export:
 Target public API shape:
 
 ```python
-from cad import Model, rectangle, circle
+from cady import Model, rectangle, circle
 
 plate = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -57,14 +57,14 @@ Next work is **Stage 2: Model Layer**.
 Do this next:
 
 1. Create design spec:
-   `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`
+   `.warden/specs/2026-05-08-cady-stage-2-model-design.md`
 2. After spec is approved, create implementation plan:
-   `.warden/plans/2026-05-08-pyseas-cad-stage-2-model.md`
+   `.warden/plans/2026-05-08-cady-stage-2-model.md`
 3. Implement Stage 2 from that plan.
 
 Stage 2 should introduce:
 
-- `cad.model`
+- `cady.model`
 - `Model`
 - `Drawing2D`
 - model layer/layer facade
@@ -92,15 +92,15 @@ Gates:
 
 ```bash
 .venv/bin/pytest -q
-.venv/bin/pyright src/cad
-.venv/bin/ruff check src/cad tests
-.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+.venv/bin/pyright src/cady
+.venv/bin/ruff check src/cady tests
+.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 ```
 
 ## Notes
 
 - Runtime must remain pure stdlib.
-- pyseas-cad must stay domain-blind. No `Padeye`, `Shackle`, or lifting-gear
+- cady must stay domain-blind. No `Padeye`, `Shackle`, or lifting-gear
   objects in core.
 - Direct `DxfDrawing` and `StlMesh` APIs should continue to work after
   `Model` is introduced.

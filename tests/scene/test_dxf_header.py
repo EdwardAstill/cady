@@ -2,7 +2,7 @@
 
 import pytest
 
-from cad import DxfDrawing
+from cady import DxfDrawing
 
 
 def test_header_starts_empty() -> None:

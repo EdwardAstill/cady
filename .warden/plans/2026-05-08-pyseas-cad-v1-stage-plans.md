@@ -1,11 +1,11 @@
-# pyseas-cad v1 Stage Plans
+# cady v1 Stage Plans
 
 > **For agentic workers:** This is the cross-stage execution map for the v1
 > roadmap. Do not execute it as a single implementation plan. For each stage,
 > first create or refine that stage's design spec, then create a dedicated
 > TDD implementation plan under `.warden/plans/`.
 
-**Goal:** Reach pyseas-cad v1: one domain-neutral model that exports practical
+**Goal:** Reach cady v1: one domain-neutral model that exports practical
 DXF drawings, STL previews, and basic viewer-loadable STEP files.
 
 **Architecture:** Stage 2 introduces the model layer that all later exporters
@@ -26,11 +26,11 @@ python, reviewer, verification-before-completion, writing, git
 
 ## Controlling Documents
 
-- Roadmap: `.warden/specs/2026-05-08-pyseas-cad-v1-roadmap.md`
+- Roadmap: `.warden/specs/2026-05-08-cady-v1-roadmap.md`
 - Implemented Stage 1 spec:
-  `.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md`
+  `.warden/specs/2026-05-08-cady-stage-1-design.md`
 - Existing Stage 1 plan:
-  `.warden/plans/2026-05-08-pyseas-cad-stage-1.md`
+  `.warden/plans/2026-05-08-cady-stage-1.md`
 
 ## Global Assumptions
 
@@ -67,19 +67,19 @@ python, reviewer, verification-before-completion, writing, git
 consume.
 
 **Status:** implemented on branch `stage-2-model`; see
-`.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`.
+`.warden/specs/2026-05-08-cady-stage-2-model-design.md`.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-08-pyseas-cad-stage-2-model-design.md`
+- `.warden/specs/2026-05-08-cady-stage-2-model-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-08-pyseas-cad-stage-2-model.md`
+- `.warden/plans/2026-05-08-cady-stage-2-model.md`
 
 **Major Work Units:**
 
-1. Design `cad.model` API contract:
+1. Design `cady.model` API contract:
    - `Model`
    - `Drawing2D`
    - model `Layer` or wrapper around existing scene layer
@@ -99,9 +99,9 @@ consume.
 
 - `pytest tests/model tests/examples tests/write tests/scene -q`
 - `pytest -q`
-- `pyright src/cad`
-- `ruff check src/cad tests`
-- `python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+- `pyright src/cady`
+- `ruff check src/cady tests`
+- `python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"`
 
 **End Gate:**
 
@@ -122,15 +122,15 @@ consume.
 outputs before tackling dimensions or STEP.
 
 **Status:** implemented on branch `stage-3-dxf-plan`; see
-`.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`.
+`.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md`
+- `.warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md`
+- `.warden/plans/2026-05-08-cady-stage-3-dxf-production.md`
 
 **Major Work Units:**
 
@@ -156,8 +156,8 @@ outputs before tackling dimensions or STEP.
 - `pytest tests/write -q -k dxf`
 - `pytest tests/model tests/examples -q`
 - `pytest -q`
-- `pyright src/cad`
-- `ruff check src/cad tests`
+- `pyright src/cady`
+- `ruff check src/cady tests`
 
 **End Gate:**
 
@@ -184,11 +184,11 @@ engineering drawing rather than just geometry.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md`
+- `.warden/specs/2026-05-08-cady-stage-4-dimensions-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md`
+- `.warden/plans/2026-05-08-cady-stage-4-dimensions.md`
 
 **Major Work Units:**
 
@@ -213,8 +213,8 @@ engineering drawing rather than just geometry.
 - `pytest tests/geom -q -k helpers`
 - `pytest tests/examples -q`
 - `pytest -q`
-- `pyright src/cad`
-- `ruff check src/cad tests`
+- `pyright src/cady`
+- `ruff check src/cady tests`
 
 **End Gate:**
 
@@ -236,11 +236,11 @@ engineering drawing rather than just geometry.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-11-pyseas-cad-stage-4-6-dxf-writer-hardening-design.md`
+- `.warden/specs/2026-05-11-cady-stage-4-6-dxf-writer-hardening-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-11-pyseas-cad-stage-4-6-dxf-writer-hardening.md`
+- `.warden/plans/2026-05-11-cady-stage-4-6-dxf-writer-hardening.md`
 
 **Major Work Units:**
 
@@ -262,11 +262,11 @@ general product polish into this stage.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-08-pyseas-cad-stage-5-step-v1-design.md`
+- `.warden/specs/2026-05-08-cady-stage-5-step-v1-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-08-pyseas-cad-stage-5-step-v1.md`
+- `.warden/plans/2026-05-08-cady-stage-5-step-v1.md`
 
 **Major Work Units:**
 
@@ -293,8 +293,8 @@ general product polish into this stage.
 - `pytest tests/write -q -k step`
 - `pytest tests/examples -q`
 - `pytest -q`
-- `pyright src/cad`
-- `ruff check src/cad tests`
+- `pyright src/cady`
+- `ruff check src/cady tests`
 - Manual or scripted viewer smoke check recorded in spec post-implementation
   review.
 
@@ -314,15 +314,15 @@ general product polish into this stage.
 
 ## Stage 6 Plan — v1 Product Hardening
 
-**Purpose:** Make pyseas-cad adoptable after the core exporters exist.
+**Purpose:** Make cady adoptable after the core exporters exist.
 
 **Design Spec To Create:**
 
-- `.warden/specs/2026-05-11-pyseas-cad-stage-6-v1-product-hardening-design.md`
+- `.warden/specs/2026-05-11-cady-stage-6-v1-product-hardening-design.md`
 
 **Implementation Plan To Create After Spec Approval:**
 
-- `.warden/plans/2026-05-11-pyseas-cad-stage-6-v1-product-hardening.md`
+- `.warden/plans/2026-05-11-cady-stage-6-v1-product-hardening.md`
 
 **Major Work Units:**
 

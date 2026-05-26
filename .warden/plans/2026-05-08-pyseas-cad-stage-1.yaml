@@ -1,8 +1,8 @@
 version: 1
 plan:
-  slug: pyseas-cad-stage-1
-  prose: .warden/plans/2026-05-08-pyseas-cad-stage-1.md
-  goal: Ship a pure-stdlib Python cad package producing DXF (R2018) and STL from format-blind 2D and 3D primitives.
+  slug: cady-stage-1
+  prose: .warden/plans/2026-05-08-cady-stage-1.md
+  goal: Ship a pure-stdlib Python cady package producing DXF (R2018) and STL from format-blind 2D and 3D primitives.
   assumptions:
     - id: A1
       statement: A pure-Python MIT-licensed port of mapbox/earcut.hpp with hole support exists and is small enough to vendor.
@@ -50,14 +50,14 @@ plan:
 nodes:
   - id: scaffold
     type: implement
-    description: pyproject + src/cad/__init__.py stub + pytest config + smoke import test.
+    description: pyproject + src/cady/__init__.py stub + pytest config + smoke import test.
     files:
       create:
         - pyproject.toml
         - NOTICE
         - README.md
-        - src/cad/__init__.py
-        - src/cad/_vendor/__init__.py
+        - src/cady/__init__.py
+        - src/cady/_vendor/__init__.py
         - tests/conftest.py
         - tests/__init__.py
         - tests/test_smoke_import.py
@@ -73,10 +73,10 @@ nodes:
     assumption_refs: [A5]
     description: Vec2 and Vec3 frozen-slots dataclasses with ops and finite-coord validation.
     files:
-      create: [src/cad/geom/__init__.py, src/cad/geom/vec.py, tests/geom/__init__.py, tests/geom/test_vec.py]
+      create: [src/cady/geom/__init__.py, src/cady/geom/vec.py, tests/geom/__init__.py, tests/geom/test_vec.py]
     verify:
       - pytest tests/geom/test_vec.py -q
-      - pyright --strict src/cad/geom/vec.py
+      - pyright --strict src/cady/geom/vec.py
 
   - id: shape_base
     type: implement
@@ -84,7 +84,7 @@ nodes:
     assumption_refs: [A5]
     description: Shape2D / Shape3D abstract bases + Axis type and parse_axis().
     files:
-      create: [src/cad/geom/base.py, tests/geom/test_shape_base.py]
+      create: [src/cady/geom/base.py, tests/geom/test_shape_base.py]
     verify:
       - pytest tests/geom/test_shape_base.py -q
 
@@ -93,8 +93,8 @@ nodes:
     depends_on: [shape_base]
     description: Line value type + line() factory.
     files:
-      create: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, tests/geom/test_line.py]
-      modify: [src/cad/__init__.py]
+      create: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, tests/geom/test_line.py]
+      modify: [src/cady/__init__.py]
     verify:
       - pytest tests/geom/test_line.py -q
 
@@ -103,7 +103,7 @@ nodes:
     depends_on: [shape2d_line]
     description: Arc value type + arc() factory + bounds.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_arc.py]
     verify:
       - pytest tests/geom/test_arc.py -q
@@ -113,7 +113,7 @@ nodes:
     depends_on: [shape2d_arc]
     description: Circle (always-closed) + circle() factory.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_circle.py]
     verify:
       - pytest tests/geom/test_circle.py -q
@@ -123,7 +123,7 @@ nodes:
     depends_on: [shape2d_circle]
     description: Rectangle (always-closed) + rectangle() factory.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_rectangle.py]
     verify:
       - pytest tests/geom/test_rectangle.py -q
@@ -133,7 +133,7 @@ nodes:
     depends_on: [shape2d_rectangle]
     description: Polyline (open or closed) + polyline() factory.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_polyline.py]
     verify:
       - pytest tests/geom/test_polyline.py -q
@@ -143,7 +143,7 @@ nodes:
     depends_on: [shape2d_polyline]
     description: Cubic-Bezier Spline (3n+1 control points) + spline() factory.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_spline.py]
     verify:
       - pytest tests/geom/test_spline.py -q
@@ -153,7 +153,7 @@ nodes:
     depends_on: [shape2d_spline]
     description: Path (compound) + Shape2D.__add__ head-to-tail composition with endpoint matching.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/base.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/base.py]
       create: [tests/geom/test_path.py]
     verify:
       - pytest tests/geom/test_path.py -q
@@ -163,7 +163,7 @@ nodes:
     depends_on: [shape2d_path]
     description: .close() method on every Shape2D; auto-closing line on Path.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/base.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/base.py]
       create: [tests/geom/test_close.py]
     verify:
       - pytest tests/geom/test_close.py -q
@@ -173,7 +173,7 @@ nodes:
     depends_on: [shape2d_close]
     description: with_hole() / with_holes() on closed Shape2D; ValueError on open.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/base.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/base.py]
       create: [tests/geom/test_with_hole.py]
     verify:
       - pytest tests/geom/test_with_hole.py -q
@@ -183,7 +183,7 @@ nodes:
     depends_on: [shape2d_with_hole]
     description: translate / rotate / scale / mirror(through=Line) on every Shape2D.
     files:
-      modify: [src/cad/geom/shapes2d.py, src/cad/geom/base.py]
+      modify: [src/cady/geom/shapes2d.py, src/cady/geom/base.py]
       create: [tests/geom/test_transforms_2d.py]
     verify:
       - pytest tests/geom/test_transforms_2d.py -q
@@ -193,7 +193,7 @@ nodes:
     depends_on: [shape2d_transforms]
     description: Shape2D.__sub__ raises TypeError pointing at with_hole and Stage 6.
     files:
-      modify: [src/cad/geom/base.py]
+      modify: [src/cady/geom/base.py]
       create: [tests/geom/test_subtract_typeerror.py]
     verify:
       - pytest tests/geom/test_subtract_typeerror.py -q
@@ -213,8 +213,8 @@ nodes:
     depends_on: [transform_arity_typing_2d]
     description: Sphere value type + sphere() factory.
     files:
-      create: [src/cad/geom/shapes3d.py, tests/geom/test_sphere.py]
-      modify: [src/cad/geom/factories.py, src/cad/__init__.py]
+      create: [src/cady/geom/shapes3d.py, tests/geom/test_sphere.py]
+      modify: [src/cady/geom/factories.py, src/cady/__init__.py]
     verify:
       - pytest tests/geom/test_sphere.py -q
 
@@ -223,7 +223,7 @@ nodes:
     depends_on: [shape3d_sphere]
     description: Prism (axis-aligned box) + prism() factory.
     files:
-      modify: [src/cad/geom/shapes3d.py, src/cad/geom/factories.py, src/cad/__init__.py]
+      modify: [src/cady/geom/shapes3d.py, src/cady/geom/factories.py, src/cady/__init__.py]
       create: [tests/geom/test_prism.py]
     verify:
       - pytest tests/geom/test_prism.py -q
@@ -233,7 +233,7 @@ nodes:
     depends_on: [shape3d_prism]
     description: Extrusion intent value type with profile/axis/distance validation.
     files:
-      modify: [src/cad/geom/shapes3d.py]
+      modify: [src/cady/geom/shapes3d.py]
       create: [tests/geom/test_extrusion_value.py]
     verify:
       - pytest tests/geom/test_extrusion_value.py -q
@@ -243,7 +243,7 @@ nodes:
     depends_on: [shape3d_extrusion_value]
     description: Revolution intent value type with axis_origin/direction/angle validation.
     files:
-      modify: [src/cad/geom/shapes3d.py]
+      modify: [src/cady/geom/shapes3d.py]
       create: [tests/geom/test_revolution_value.py]
     verify:
       - pytest tests/geom/test_revolution_value.py -q
@@ -253,7 +253,7 @@ nodes:
     depends_on: [shape3d_revolution_value]
     description: Shape2D.extrude(axis, distance) bridge → Extrusion (closed-only).
     files:
-      modify: [src/cad/geom/base.py]
+      modify: [src/cady/geom/base.py]
       create: [tests/geom/test_extrude_method.py]
     verify:
       - pytest tests/geom/test_extrude_method.py -q
@@ -263,7 +263,7 @@ nodes:
     depends_on: [shape2d_extrude_method]
     description: Shape2D.revolve(axis, angle) bridge → Revolution.
     files:
-      modify: [src/cad/geom/base.py]
+      modify: [src/cady/geom/base.py]
       create: [tests/geom/test_revolve_method.py]
     verify:
       - pytest tests/geom/test_revolve_method.py -q
@@ -273,7 +273,7 @@ nodes:
     depends_on: [shape2d_revolve_method]
     description: 3D transforms (translate/rotate/mirror) on every Shape3D and Extrusion offset field.
     files:
-      modify: [src/cad/geom/shapes3d.py, src/cad/geom/base.py]
+      modify: [src/cady/geom/shapes3d.py, src/cady/geom/base.py]
       create: [tests/geom/test_transforms_3d.py]
     verify:
       - pytest tests/geom/test_transforms_3d.py -q
@@ -283,7 +283,7 @@ nodes:
     depends_on: [shape3d_transforms]
     description: Shape3D.__sub__ raises TypeError pointing at Stage 6.
     files:
-      modify: [src/cad/geom/base.py]
+      modify: [src/cady/geom/base.py]
       create: [tests/geom/test_shape3d_subtract.py]
     verify:
       - pytest tests/geom/test_shape3d_subtract.py -q
@@ -294,7 +294,7 @@ nodes:
     assumption_refs: [A1]
     description: Vendor pure-Python mapbox-earcut port; pin commit; smoke triangulation test.
     files:
-      create: [src/cad/_vendor/earcut.py, tests/geom/test_vendor_earcut.py]
+      create: [src/cady/_vendor/earcut.py, tests/geom/test_vendor_earcut.py]
       modify: [NOTICE]
     verify:
       - pytest tests/geom/test_vendor_earcut.py -q
@@ -304,7 +304,7 @@ nodes:
     depends_on: [vendor_earcut]
     description: curves_to_polyline(shape, tolerance) flattens curved Shape2Ds at chord-tolerance.
     files:
-      create: [src/cad/geom/tessellate.py, tests/geom/test_curves_to_polyline.py]
+      create: [src/cady/geom/tessellate.py, tests/geom/test_curves_to_polyline.py]
     verify:
       - pytest tests/geom/test_curves_to_polyline.py -q
 
@@ -313,7 +313,7 @@ nodes:
     depends_on: [tessellate_curves_to_polyline]
     description: polygon_to_triangles(closed_shape, tolerance) via earcut with hole support; rejects open shapes.
     files:
-      modify: [src/cad/geom/tessellate.py]
+      modify: [src/cady/geom/tessellate.py]
       create: [tests/geom/test_polygon_to_triangles.py]
     verify:
       - pytest tests/geom/test_polygon_to_triangles.py -q
@@ -323,7 +323,7 @@ nodes:
     depends_on: [tessellate_polygon_to_triangles]
     description: extrusion_to_triangles caps + side bands; deterministic prism diagonal.
     files:
-      modify: [src/cad/geom/tessellate.py]
+      modify: [src/cady/geom/tessellate.py]
       create: [tests/geom/test_extrusion_to_triangles.py]
     verify:
       - pytest tests/geom/test_extrusion_to_triangles.py -q
@@ -333,7 +333,7 @@ nodes:
     depends_on: [tessellate_extrusion_to_triangles]
     description: revolution_to_triangles for full-turn +Z axis; watertight invariant.
     files:
-      modify: [src/cad/geom/tessellate.py]
+      modify: [src/cady/geom/tessellate.py]
       create: [tests/geom/test_revolution_to_triangles.py]
     verify:
       - pytest tests/geom/test_revolution_to_triangles.py -q
@@ -343,8 +343,8 @@ nodes:
     depends_on: [tessellate_revolution_to_triangles]
     description: CadError / SceneError / WriteError class hierarchy + tier tests.
     files:
-      create: [src/cad/errors.py, tests/errors/__init__.py, tests/errors/test_error_tiers.py]
-      modify: [src/cad/__init__.py]
+      create: [src/cady/errors.py, tests/errors/__init__.py, tests/errors/test_error_tiers.py]
+      modify: [src/cady/__init__.py]
     verify:
       - pytest tests/errors -q
 
@@ -353,8 +353,8 @@ nodes:
     depends_on: [error_types]
     description: DxfDrawing + Layer with chained add and SceneError on Shape3D.
     files:
-      create: [src/cad/scene/__init__.py, src/cad/scene/dxf.py, tests/scene/__init__.py, tests/scene/test_dxf_drawing.py]
-      modify: [src/cad/__init__.py]
+      create: [src/cady/scene/__init__.py, src/cady/scene/dxf.py, tests/scene/__init__.py, tests/scene/test_dxf_drawing.py]
+      modify: [src/cady/__init__.py]
     verify:
       - pytest tests/scene/test_dxf_drawing.py -q
 
@@ -363,7 +363,7 @@ nodes:
     depends_on: [scene_dxf_drawing_layers]
     description: DxfDrawing.add_text and Stage-3 add_dimension placeholder.
     files:
-      modify: [src/cad/scene/dxf.py]
+      modify: [src/cady/scene/dxf.py]
       create: [tests/scene/test_dxf_text.py]
     verify:
       - pytest tests/scene/test_dxf_text.py -q
@@ -373,8 +373,8 @@ nodes:
     depends_on: [scene_dxf_text]
     description: StlMesh with variadic chained add, default tolerance 1e-3, SceneError on Shape2D.
     files:
-      create: [src/cad/scene/stl.py, tests/scene/test_stl_mesh.py]
-      modify: [src/cad/scene/__init__.py, src/cad/__init__.py]
+      create: [src/cady/scene/stl.py, tests/scene/test_stl_mesh.py]
+      modify: [src/cady/scene/__init__.py, src/cady/__init__.py]
     verify:
       - pytest tests/scene/test_stl_mesh.py -q
 
@@ -385,11 +385,11 @@ nodes:
     description: DXF emitter helper + HEADER/TABLES/BLOCKS/ENTITIES/OBJECTS/EOF section scaffolding; ezdxf opens the empty file.
     files:
       create:
-        - src/cad/write/__init__.py
-        - src/cad/write/dxf/__init__.py
-        - src/cad/write/dxf/codes.py
-        - src/cad/write/dxf/emit.py
-        - src/cad/write/dxf/sections.py
+        - src/cady/write/__init__.py
+        - src/cady/write/dxf/__init__.py
+        - src/cady/write/dxf/codes.py
+        - src/cady/write/dxf/emit.py
+        - src/cady/write/dxf/sections.py
         - tests/write/__init__.py
         - tests/write/test_dxf_skeleton.py
     verify:
@@ -400,7 +400,7 @@ nodes:
     depends_on: [dxf_writer_skeleton]
     description: LAYER table emission with colours and CONTINUOUS linetype.
     files:
-      modify: [src/cad/write/dxf/sections.py]
+      modify: [src/cady/write/dxf/sections.py]
       create: [tests/write/test_dxf_layers.py]
     verify:
       - pytest tests/write/test_dxf_layers.py -q
@@ -410,8 +410,8 @@ nodes:
     depends_on: [dxf_writer_layers]
     description: LINE entity emitter + ezdxf round-trip test.
     files:
-      create: [src/cad/write/dxf/entities.py, tests/write/test_dxf_entities.py]
-      modify: [src/cad/write/dxf/sections.py]
+      create: [src/cady/write/dxf/entities.py, tests/write/test_dxf_entities.py]
+      modify: [src/cady/write/dxf/sections.py]
     verify:
       - pytest tests/write/test_dxf_entities.py::test_emits_one_line -q
 
@@ -420,7 +420,7 @@ nodes:
     depends_on: [dxf_writer_line]
     description: LWPOLYLINE for Polyline and Rectangle; closed-flag round-trip.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py, tests/write/test_dxf_entities.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py, tests/write/test_dxf_entities.py]
     verify:
       - pytest tests/write/test_dxf_entities.py -q -k polyline
 
@@ -429,7 +429,7 @@ nodes:
     depends_on: [dxf_writer_lwpolyline]
     description: CIRCLE entity emitter; centre+radius round-trip.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py, tests/write/test_dxf_entities.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py, tests/write/test_dxf_entities.py]
     verify:
       - pytest tests/write/test_dxf_entities.py -q -k circle
 
@@ -438,7 +438,7 @@ nodes:
     depends_on: [dxf_writer_circle]
     description: ARC entity emitter with degree conversion.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py, tests/write/test_dxf_entities.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py, tests/write/test_dxf_entities.py]
     verify:
       - pytest tests/write/test_dxf_entities.py -q -k arc
 
@@ -447,7 +447,7 @@ nodes:
     depends_on: [dxf_writer_arc]
     description: MTEXT emitter for add_text annotations.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py, tests/write/test_dxf_entities.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py, tests/write/test_dxf_entities.py]
     verify:
       - pytest tests/write/test_dxf_entities.py -q -k text
 
@@ -456,7 +456,7 @@ nodes:
     depends_on: [dxf_writer_mtext]
     description: Decompose Path into per-segment LINE/ARC/etc. entities.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py]
       create: [tests/write/test_dxf_path_decompose.py]
     verify:
       - pytest tests/write/test_dxf_path_decompose.py -q
@@ -466,7 +466,7 @@ nodes:
     depends_on: [dxf_writer_path_decompose]
     description: Emit inner_loops as separate entities on the same layer.
     files:
-      modify: [src/cad/write/dxf/entities.py, src/cad/write/dxf/sections.py]
+      modify: [src/cady/write/dxf/entities.py, src/cady/write/dxf/sections.py]
       create: [tests/write/test_dxf_holes_decompose.py]
     verify:
       - pytest tests/write/test_dxf_holes_decompose.py -q
@@ -476,7 +476,7 @@ nodes:
     depends_on: [dxf_writer_holes_decompose]
     description: Empty-drawing WriteError + byte-golden smoke test.
     files:
-      modify: [src/cad/write/dxf/sections.py, tests/conftest.py]
+      modify: [src/cady/write/dxf/sections.py, tests/conftest.py]
       create:
         - tests/write/test_dxf_writeerror.py
         - tests/write/test_dxf_golden.py
@@ -490,7 +490,7 @@ nodes:
     assumption_refs: [A3]
     description: Binary STL emitter with unit-norm facet normals; prism / sphere / extrusion / revolution dispatch.
     files:
-      create: [src/cad/write/stl/__init__.py, src/cad/write/stl/binary.py, tests/write/test_stl_binary.py]
+      create: [src/cady/write/stl/__init__.py, src/cady/write/stl/binary.py, tests/write/test_stl_binary.py]
     verify:
       - pytest tests/write/test_stl_binary.py -q
 
@@ -499,7 +499,7 @@ nodes:
     depends_on: [stl_writer_binary]
     description: ASCII STL emitter with token format compliance.
     files:
-      create: [src/cad/write/stl/ascii.py, tests/write/test_stl_ascii.py]
+      create: [src/cady/write/stl/ascii.py, tests/write/test_stl_ascii.py]
     verify:
       - pytest tests/write/test_stl_ascii.py -q
 
@@ -517,7 +517,7 @@ nodes:
     depends_on: [stl_writer_dispatcher]
     description: WriteError on self-intersecting profile with first 3 vertices in message.
     files:
-      modify: [src/cad/geom/tessellate.py]
+      modify: [src/cady/geom/tessellate.py]
       create: [tests/write/test_stl_writeerror.py]
     verify:
       - pytest tests/write/test_stl_writeerror.py -q
@@ -534,7 +534,7 @@ nodes:
   - id: stdlib_only_check
     type: verify
     depends_on: [stl_writer_invariants]
-    description: AST-walk test that no module under src/cad (excluding _vendor) imports anything outside stdlib.
+    description: AST-walk test that no module under src/cady (excluding _vendor) imports anything outside stdlib.
     files:
       create: [tests/conventions/__init__.py, tests/conventions/test_stdlib_only.py]
     verify:
@@ -556,9 +556,9 @@ nodes:
     description: Run every spec Acceptance Criteria item; populate Known Limitations on ⚠ entries.
     verify:
       - pytest -q
-      - pyright --strict src/cad
-      - ruff check src/cad tests
-      - python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+      - pyright --strict src/cady
+      - ruff check src/cady tests
+      - python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
     on_fail: pause
 
   - id: merge_and_cleanup
@@ -567,7 +567,7 @@ nodes:
     depends_on: [spec_acceptance]
     description: Fill Post-Implementation Review block; merge stage-1 to main; remove worktree; warden audit.
     files:
-      modify: [.warden/specs/2026-05-08-pyseas-cad-stage-1-design.md]
+      modify: [.warden/specs/2026-05-08-cady-stage-1-design.md]
     verify:
-      - git -C /home/eastill/projects/pyseas-cad log --oneline main | head -5
-      - test ! -d /home/eastill/projects/pyseas-cad/.worktrees/stage-1
+      - git -C /home/eastill/projects/cady log --oneline main | head -5
+      - test ! -d /home/eastill/projects/cady/.worktrees/stage-1

@@ -4,7 +4,7 @@
 
 **Goal:** Write a pure-stdlib AP214 STEP exporter that converts `Part` objects containing `Prism` solids into valid, viewer-loadable STEP files via `Model.write_step(path)`.
 
-**Architecture:** Add `cad.write.step` alongside DXF/STL writers. An `IdAllocator` handles sequential STEP entity numbering. `brep.py` converts a `Prism` into a six-face `MANIFOLD_SOLID_BREP`. `document.py` assembles the AP214 file frame (header, application context, units, product structure). `Model.write_step` iterates parts, emits one product per part. Unsupported solids (`Sphere`, `Extrusion`, `Revolution`) raise `WriteError` listing the unsupported type.
+**Architecture:** Add `cady.write.step` alongside DXF/STL writers. An `IdAllocator` handles sequential STEP entity numbering. `brep.py` converts a `Prism` into a six-face `MANIFOLD_SOLID_BREP`. `document.py` assembles the AP214 file frame (header, application context, units, product structure). `Model.write_step` iterates parts, emits one product per part. Unsupported solids (`Sphere`, `Extrusion`, `Revolution`) raise `WriteError` listing the unsupported type.
 
 **Tech Stack:** Python 3.11+, pure stdlib, pytest, pyright strict, ruff. No new runtime dependencies.
 
@@ -16,11 +16,11 @@
 
 | Path | Action | Responsibility |
 |---|---|---|
-| `src/cad/write/step/__init__.py` | Create | Package marker |
-| `src/cad/write/step/ids.py` | Create | Sequential entity ID allocator |
-| `src/cad/write/step/brep.py` | Create | `Prism` → 6-face `MANIFOLD_SOLID_BREP` entities |
-| `src/cad/write/step/document.py` | Create | Assemble full AP214 STEP text from parts list |
-| `src/cad/model/core.py` | Modify | Replace `write_step` stub with real implementation |
+| `src/cady/write/step/__init__.py` | Create | Package marker |
+| `src/cady/write/step/ids.py` | Create | Sequential entity ID allocator |
+| `src/cady/write/step/brep.py` | Create | `Prism` → 6-face `MANIFOLD_SOLID_BREP` entities |
+| `src/cady/write/step/document.py` | Create | Assemble full AP214 STEP text from parts list |
+| `src/cady/model/core.py` | Modify | Replace `write_step` stub with real implementation |
 | `tests/model/test_model_step.py` | Modify | Replace stub test; add model-level STEP tests |
 | `tests/write/test_step.py` | Create | Unit tests for IdAllocator, brep, and document |
 
@@ -74,13 +74,13 @@ Oriented-edge truth table (edge index, face, sense):
 ## Task 1 — Package skeleton + failing tests
 
 **Files:**
-- Create: `src/cad/write/step/__init__.py`
+- Create: `src/cady/write/step/__init__.py`
 - Create: `tests/write/test_step.py`
 
 - [ ] **Step 1.1: Create empty package**
 
 ```python
-# src/cad/write/step/__init__.py
+# src/cady/write/step/__init__.py
 ```
 (empty file — just a package marker)
 
@@ -91,9 +91,9 @@ Create `tests/write/test_step.py`:
 ```python
 from __future__ import annotations
 
-from cad import Model, WriteError, prism
-from cad.write.step.ids import IdAllocator
-from cad.write.step.document import render_step
+from cady import Model, WriteError, prism
+from cady.write.step.ids import IdAllocator
+from cady.write.step.document import render_step
 
 
 def test_id_allocator_returns_sequential_ids() -> None:
@@ -119,7 +119,7 @@ def test_render_step_contains_iso_header() -> None:
 
 
 def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
-    from cad.model.core import Part
+    from cady.model.core import Part
     part = Part("box")
     part.add(prism((0, 0, 0), (1, 1, 1)))
     text = render_step([part], "box_model")
@@ -130,8 +130,8 @@ def test_render_step_contains_manifold_solid_brep_for_prism() -> None:
 
 
 def test_render_step_rejects_sphere_solid() -> None:
-    from cad import sphere
-    from cad.model.core import Part
+    from cady import sphere
+    from cady.model.core import Part
     part = Part("bad")
     part.add(sphere((0, 0, 0), 1.0))
     try:
@@ -160,7 +160,7 @@ Expected: collection errors or 6 failures. No passes yet.
 - [ ] **Step 1.4: Commit skeleton**
 
 ```bash
-git add src/cad/write/step/__init__.py tests/write/test_step.py
+git add src/cady/write/step/__init__.py tests/write/test_step.py
 git commit -m "test(step): add failing tests for Stage 5 STEP writer"
 ```
 
@@ -169,12 +169,12 @@ git commit -m "test(step): add failing tests for Stage 5 STEP writer"
 ## Task 2 — IdAllocator
 
 **Files:**
-- Create: `src/cad/write/step/ids.py`
+- Create: `src/cady/write/step/ids.py`
 
 - [ ] **Step 2.1: Implement**
 
 ```python
-# src/cad/write/step/ids.py
+# src/cady/write/step/ids.py
 from __future__ import annotations
 
 
@@ -205,7 +205,7 @@ Expected: 2 passed.
 - [ ] **Step 2.3: Commit**
 
 ```bash
-git add src/cad/write/step/ids.py
+git add src/cady/write/step/ids.py
 git commit -m "feat(step): add IdAllocator for sequential entity numbering"
 ```
 
@@ -214,18 +214,18 @@ git commit -m "feat(step): add IdAllocator for sequential entity numbering"
 ## Task 3 — Box BRep generator
 
 **Files:**
-- Create: `src/cad/write/step/brep.py`
+- Create: `src/cady/write/step/brep.py`
 
 This file converts a `Prism(origin, size)` into all STEP entities required for a `MANIFOLD_SOLID_BREP`. It uses the topology defined in the Topology Reference above.
 
 - [ ] **Step 3.1: Implement**
 
 ```python
-# src/cad/write/step/brep.py
+# src/cady/write/step/brep.py
 from __future__ import annotations
 
-from cad.geom.shapes3d import Prism
-from cad.write.step.ids import IdAllocator
+from cady.geom.shapes3d import Prism
+from cady.write.step.ids import IdAllocator
 
 
 def _f(v: float) -> str:
@@ -364,7 +364,7 @@ Expected: those tests still fail (no `render_step` or `document.py` yet) but wit
 - [ ] **Step 3.3: Commit**
 
 ```bash
-git add src/cad/write/step/brep.py
+git add src/cady/write/step/brep.py
 git commit -m "feat(step): implement Prism to MANIFOLD_SOLID_BREP BRep generator"
 ```
 
@@ -373,27 +373,27 @@ git commit -m "feat(step): implement Prism to MANIFOLD_SOLID_BREP BRep generator
 ## Task 4 — STEP document renderer
 
 **Files:**
-- Create: `src/cad/write/step/document.py`
+- Create: `src/cady/write/step/document.py`
 
 This function assembles the full AP214 STEP text for a list of `Part` objects. Each Part becomes one PRODUCT in the file. Only `Prism` solids are supported; any other `Shape3D` raises `WriteError`.
 
 - [ ] **Step 4.1: Implement**
 
 ```python
-# src/cad/write/step/document.py
+# src/cady/write/step/document.py
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from cad.errors import WriteError
-from cad.geom.shapes3d import Prism
-from cad.geom.base import Shape3D
-from cad.write.step.brep import prism_brep
-from cad.write.step.ids import IdAllocator
+from cady.errors import WriteError
+from cady.geom.shapes3d import Prism
+from cady.geom.base import Shape3D
+from cady.write.step.brep import prism_brep
+from cady.write.step.ids import IdAllocator
 
 if TYPE_CHECKING:
-    from cad.model.core import Part
+    from cady.model.core import Part
 
 
 _HEADER_TMPL = """\
@@ -513,7 +513,7 @@ Expected: 6 passed (all tests except the model-level `test_model_write_step_prod
 - [ ] **Step 4.3: Commit**
 
 ```bash
-git add src/cad/write/step/document.py
+git add src/cady/write/step/document.py
 git commit -m "feat(step): implement AP214 STEP document renderer for Prism solids"
 ```
 
@@ -522,12 +522,12 @@ git commit -m "feat(step): implement AP214 STEP document renderer for Prism soli
 ## Task 5 — Wire Model.write_step; update existing tests
 
 **Files:**
-- Modify: `src/cad/model/core.py` (lines 332–334 — the `write_step` stub)
+- Modify: `src/cady/model/core.py` (lines 332–334 — the `write_step` stub)
 - Modify: `tests/model/test_model_step.py`
 
 - [ ] **Step 5.1: Update `Model.write_step`**
 
-In `src/cad/model/core.py`, replace:
+In `src/cady/model/core.py`, replace:
 
 ```python
     def write_step(self, path: str | Path) -> NoReturn:
@@ -538,7 +538,7 @@ with:
 
 ```python
     def write_step(self, path: str | Path) -> Model:
-        from cad.write.step.document import render_step
+        from cady.write.step.document import render_step
         text = render_step(list(self._parts.values()), self.name)
         Path(path).write_text(text, encoding="ascii")
         return self
@@ -553,7 +553,7 @@ from __future__ import annotations
 
 import pytest
 
-from cad import Model, WriteError, prism, sphere
+from cady import Model, WriteError, prism, sphere
 
 
 def test_write_step_prism_creates_file(tmp_path) -> None:
@@ -637,7 +637,7 @@ Expected: all previously passing tests still pass, plus the new ones.
 - [ ] **Step 5.5: Commit**
 
 ```bash
-git add src/cad/model/core.py tests/model/test_model_step.py
+git add src/cady/model/core.py tests/model/test_model_step.py
 git commit -m "feat(step): wire Model.write_step through AP214 renderer"
 ```
 
@@ -650,7 +650,7 @@ git commit -m "feat(step): wire Model.write_step through AP214 renderer"
 - [ ] **Step 6.1: Run pyright**
 
 ```bash
-.venv/bin/pyright src/cad
+.venv/bin/pyright src/cady
 ```
 
 Expected: 0 errors, 0 warnings.
@@ -660,7 +660,7 @@ If pyright complains about `NoReturn` vs `Model` return type mismatch in `write_
 - [ ] **Step 6.2: Run ruff**
 
 ```bash
-.venv/bin/ruff check src/cad tests examples/scripts
+.venv/bin/ruff check src/cady tests examples/scripts
 ```
 
 Expected: no issues.
@@ -681,14 +681,14 @@ git commit -m "fix(step): resolve pyright/ruff issues in STEP writer"
 ## Task 7 — Stdlib-only convention check + plan update
 
 **Files:**
-- Modify: `.warden/plans/2026-05-11-pyseas-cad-stage-5-step-v1.md` (status)
+- Modify: `.warden/plans/2026-05-11-cady-stage-5-step-v1.md` (status)
 
 - [ ] **Step 7.1: Verify no runtime dependencies added**
 
 ```bash
 .venv/bin/python -c "
 import importlib.metadata as m
-reqs = m.distribution('pyseas-cad').requires or []
+reqs = m.distribution('cady').requires or []
 print('deps:', reqs)
 assert reqs == [], 'unexpected runtime dependency'
 "
@@ -700,15 +700,15 @@ Expected: `deps: []`
 
 ```bash
 .venv/bin/pytest -q && \
-.venv/bin/pyright src/cad && \
-.venv/bin/ruff check src/cad tests examples/scripts
+.venv/bin/pyright src/cady && \
+.venv/bin/ruff check src/cady tests examples/scripts
 ```
 
 Expected: all pass.
 
 - [ ] **Step 7.3: Update plan status**
 
-In `.warden/plans/2026-05-11-pyseas-cad-stage-5-step-v1.md`, change:
+In `.warden/plans/2026-05-11-cady-stage-5-step-v1.md`, change:
 
 ```
 **Status:** complete
@@ -723,7 +723,7 @@ to:
 - [ ] **Step 7.4: Final commit**
 
 ```bash
-git add .warden/plans/2026-05-11-pyseas-cad-stage-5-step-v1.md
+git add .warden/plans/2026-05-11-cady-stage-5-step-v1.md
 git commit -m "docs: mark Stage 5 STEP plan complete"
 ```
 
@@ -734,9 +734,9 @@ git commit -m "docs: mark Stage 5 STEP plan complete"
 | Check | Command |
 |---|---|
 | All tests pass | `.venv/bin/pytest -q` |
-| Pyright clean | `.venv/bin/pyright src/cad` |
-| Ruff clean | `.venv/bin/ruff check src/cad tests examples/scripts` |
-| No runtime deps | `python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` |
+| Pyright clean | `.venv/bin/pyright src/cady` |
+| Ruff clean | `.venv/bin/ruff check src/cady tests examples/scripts` |
+| No runtime deps | `python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"` |
 | Prism writes valid STEP | `test_write_step_prism_creates_file` passes |
 
 ## Non-Goals (Stage 5)

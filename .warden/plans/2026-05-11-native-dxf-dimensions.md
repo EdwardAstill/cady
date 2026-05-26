@@ -31,6 +31,6 @@ dimension rendering is removed from the default writer path.
 ## Verification
 
 - `PYTHONPATH=src .venv/bin/pytest -q` -> 102 passed, 70 dependency warnings.
-- `PYTHONPATH=src .venv/bin/ruff check src/cad tests examples/scripts` -> pass.
-- `PYTHONPATH=src .venv/bin/pyright src/cad` -> 0 errors, 0 warnings.
-- `PYTHONPATH=src .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"` -> pass.
+- `PYTHONPATH=src .venv/bin/ruff check src/cady tests examples/scripts` -> pass.
+- `PYTHONPATH=src .venv/bin/pyright src/cady` -> 0 errors, 0 warnings.
+- `PYTHONPATH=src .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"` -> pass.

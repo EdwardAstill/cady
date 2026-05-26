@@ -1,12 +1,12 @@
-# pyseas-cad Stage 6 v1 Product Hardening Plan
+# cady Stage 6 v1 Product Hardening Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Update docs, add a STEP gallery script, and run full gates so pyseas-cad v1 is complete.
+**Goal:** Update docs, add a STEP gallery script, and run full gates so cady v1 is complete.
 
 **Architecture:** Pure documentation and example work — no new runtime code. Each task either edits an existing file or creates one new file. No new tests for README/pyproject edits; TDD applies to the new gallery script.
 
-**Tech Stack:** Python 3.11, pytest, pyright, ruff, existing `cad` package.
+**Tech Stack:** Python 3.11, pytest, pyright, ruff, existing `cady` package.
 
 ---
 
@@ -19,7 +19,7 @@
 | `examples/scripts/production_step.py` | Create — gallery script for STEP output |
 | `examples/gallery/production_plate.step` | Create by running the script |
 | `tests/examples/test_production_step.py` | Create — integration smoke test |
-| `.warden/plans/2026-05-11-pyseas-cad-stage-6-v1-product-hardening.md` | Modify — status → complete |
+| `.warden/plans/2026-05-11-cady-stage-6-v1-product-hardening.md` | Modify — status → complete |
 
 ---
 
@@ -44,7 +44,7 @@ description = "Small write-only CAD geometry package for DXF, STL, and AP214 STE
 
 - [ ] **Step 3: Run lint to verify no issues**
 
-Run: `.venv/bin/ruff check src/cad tests examples/scripts`
+Run: `.venv/bin/ruff check src/cady tests examples/scripts`
 Expected: no errors
 
 - [ ] **Step 4: Commit**
@@ -115,7 +115,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cad import Model, prism
+from cady import Model, prism
 
 GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
 
@@ -157,7 +157,7 @@ Expected: both tests PASS
 
 - [ ] **Step 7: Run lint and types**
 
-Run: `.venv/bin/ruff check src/cad tests examples/scripts && .venv/bin/pyright src/cad`
+Run: `.venv/bin/ruff check src/cady tests examples/scripts && .venv/bin/pyright src/cady`
 Expected: no errors
 
 - [ ] **Step 8: Commit**
@@ -183,7 +183,7 @@ Replace:
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018 or STL.
 
-pyseas-cad is currently at **Stage 4**:
+cady is currently at **Stage 4**:
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
@@ -202,7 +202,7 @@ With:
 Small, pure-stdlib, write-only CAD package for building format-blind geometry
 and emitting DXF R2018, binary/ASCII STL, or AP214 STEP.
 
-pyseas-cad is at **v1** (Stages 1–6):
+cady is at **v1** (Stages 1–6):
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
@@ -319,7 +319,7 @@ git commit -m "docs: update README to v1 — STEP implemented, viewer table, roa
 ### Task 4: Mark plan complete and run full gates
 
 **Files:**
-- Modify: `.warden/plans/2026-05-11-pyseas-cad-stage-6-v1-product-hardening.md`
+- Modify: `.warden/plans/2026-05-11-cady-stage-6-v1-product-hardening.md`
 
 - [ ] **Step 1: Update plan status**
 
@@ -335,24 +335,24 @@ Run each command, verify zero failures:
 Expected: all tests pass, 0 failures
 
 ```bash
-.venv/bin/pyright src/cad
+.venv/bin/pyright src/cady
 ```
 Expected: 0 errors
 
 ```bash
-.venv/bin/ruff check src/cad tests examples/scripts
+.venv/bin/ruff check src/cady tests examples/scripts
 ```
 Expected: 0 issues
 
 ```bash
-.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 ```
 Expected: exits 0 (no runtime dependencies)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .warden/plans/2026-05-11-pyseas-cad-stage-6-v1-product-hardening.md
+git add .warden/plans/2026-05-11-cady-stage-6-v1-product-hardening.md
 git commit -m "docs: mark stage 6 plan complete"
 ```
 
@@ -362,8 +362,8 @@ git commit -m "docs: mark stage 6 plan complete"
 
 ```bash
 .venv/bin/pytest -q
-.venv/bin/pyright src/cad
-.venv/bin/ruff check src/cad tests examples/scripts
-.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+.venv/bin/pyright src/cady
+.venv/bin/ruff check src/cady tests examples/scripts
+.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"
 PYTHONPATH=src .venv/bin/python examples/scripts/production_step.py
 ```

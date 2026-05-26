@@ -1,7 +1,7 @@
 version: 1
 plan:
-  slug: pyseas-cad-stage-3-dxf-production
-  prose: .warden/plans/2026-05-08-pyseas-cad-stage-3-dxf-production.md
+  slug: cady-stage-3-dxf-production
+  prose: .warden/plans/2026-05-08-cady-stage-3-dxf-production.md
   status: approved
   goal: Add production DXF support for linetypes, ANSI31 hatches, block definitions, and inserts through the model-first API.
   assumptions:
@@ -48,8 +48,8 @@ nodes:
       create:
         - tests/write/test_dxf_linetypes.py
       modify:
-        - src/cad/scene/dxf.py
-        - src/cad/model/core.py
+        - src/cady/scene/dxf.py
+        - src/cady/model/core.py
         - tests/scene/test_scene.py
         - tests/model/test_model_dxf.py
     verify:
@@ -63,8 +63,8 @@ nodes:
     description: Emit LTYPE table entries for CONTINUOUS plus used built-in linetypes.
     files:
       modify:
-        - src/cad/write/dxf/tables.py
-        - src/cad/write/dxf/document.py
+        - src/cady/write/dxf/tables.py
+        - src/cady/write/dxf/document.py
         - tests/write/goldens/smoke.dxf
       create:
         - tests/write/test_dxf_linetypes.py
@@ -80,8 +80,8 @@ nodes:
         - tests/write/test_dxf_hatch.py
         - tests/model/test_model_dxf_production.py
       modify:
-        - src/cad/scene/dxf.py
-        - src/cad/model/core.py
+        - src/cady/scene/dxf.py
+        - src/cady/model/core.py
     verify:
       - .venv/bin/pytest tests/write/test_dxf_hatch.py tests/model/test_model_dxf_production.py -q
 
@@ -92,11 +92,11 @@ nodes:
     description: Emit ANSI31 HATCH entities and include hatches in entity count, bounds, and ENTITIES section.
     files:
       create:
-        - src/cad/write/dxf/hatch.py
+        - src/cady/write/dxf/hatch.py
         - tests/write/test_dxf_hatch.py
       modify:
-        - src/cad/write/dxf/document.py
-        - src/cad/write/dxf/entities.py
+        - src/cady/write/dxf/document.py
+        - src/cady/write/dxf/entities.py
         - tests/write/goldens/smoke.dxf
     verify:
       - .venv/bin/pytest tests/write/test_dxf_hatch.py tests/write/test_dxf.py -q
@@ -111,8 +111,8 @@ nodes:
         - tests/write/test_dxf_blocks.py
         - tests/model/test_model_dxf_production.py
       modify:
-        - src/cad/scene/dxf.py
-        - src/cad/model/core.py
+        - src/cady/scene/dxf.py
+        - src/cady/model/core.py
     verify:
       - .venv/bin/pytest tests/write/test_dxf_blocks.py tests/model/test_model_dxf_production.py -q
 
@@ -123,11 +123,11 @@ nodes:
     description: Emit BLOCK/ENDBLK records and INSERT entities.
     files:
       create:
-        - src/cad/write/dxf/blocks.py
+        - src/cady/write/dxf/blocks.py
         - tests/write/test_dxf_blocks.py
       modify:
-        - src/cad/write/dxf/document.py
-        - src/cad/write/dxf/entities.py
+        - src/cady/write/dxf/document.py
+        - src/cady/write/dxf/entities.py
     verify:
       - .venv/bin/pytest tests/write/test_dxf_blocks.py tests/write/test_dxf.py -q
 
@@ -138,7 +138,7 @@ nodes:
     description: Preserve hatches, linetypes, blocks, and inserts through Model.write_dxf aggregation.
     files:
       modify:
-        - src/cad/model/core.py
+        - src/cady/model/core.py
       create:
         - tests/model/test_model_dxf_production.py
     verify:
@@ -163,12 +163,12 @@ nodes:
     description: Fill Stage 3 review, update preference lock, and create Stage 4 dimension spec/plan stubs.
     files:
       create:
-        - .warden/specs/2026-05-08-pyseas-cad-stage-4-dimensions-design.md
-        - .warden/plans/2026-05-08-pyseas-cad-stage-4-dimensions.md
+        - .warden/specs/2026-05-08-cady-stage-4-dimensions-design.md
+        - .warden/plans/2026-05-08-cady-stage-4-dimensions.md
       modify:
-        - .warden/specs/2026-05-08-pyseas-cad-stage-3-dxf-production-design.md
+        - .warden/specs/2026-05-08-cady-stage-3-dxf-production-design.md
         - .warden/preference-lock.json
-        - .warden/plans/2026-05-08-pyseas-cad-v1-stage-plans.md
+        - .warden/plans/2026-05-08-cady-v1-stage-plans.md
     verify:
       - rg "Stage 3|Stage 4|HATCH|INSERT|DIMENSION" README.md .warden/specs .warden/plans
 
@@ -181,6 +181,6 @@ nodes:
       - .venv/bin/pytest tests/write -q -k dxf
       - .venv/bin/pytest tests/model tests/examples -q
       - .venv/bin/pytest -q
-      - .venv/bin/pyright src/cad
-      - .venv/bin/ruff check src/cad tests
-      - .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"
+      - .venv/bin/pyright src/cady
+      - .venv/bin/ruff check src/cady tests
+      - .venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"

@@ -1,11 +1,11 @@
-# pyseas-cad Stage 5 STEP MVP Implementation Plan
+# cady Stage 5 STEP MVP Implementation Plan
 
 > **For agentic workers:** Refine this draft with `writing-plans` after the
 > Stage 5 design spec is approved.
 
 **Goal:** Implement a conservative pure-stdlib STEP writer for the model layer.
 
-**Architecture:** Add `cad.write.step` alongside the existing DXF/STL writers.
+**Architecture:** Add `cady.write.step` alongside the existing DXF/STL writers.
 Keep the public entry point as `Model.write_step(path)` and translate the
 existing descriptive solids into a limited STEP representation.
 
@@ -30,6 +30,6 @@ viewer/checker tools available locally.
 - `.venv/bin/pytest tests/write -q -k step`
 - `.venv/bin/pytest tests/model -q -k step`
 - `.venv/bin/pytest -q`
-- `.venv/bin/pyright src/cad`
-- `.venv/bin/ruff check src/cad tests examples/scripts`
-- `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('pyseas-cad').requires or []) == []"`
+- `.venv/bin/pyright src/cady`
+- `.venv/bin/ruff check src/cady tests examples/scripts`
+- `.venv/bin/python -c "import importlib.metadata as m; assert (m.distribution('cady').requires or []) == []"`

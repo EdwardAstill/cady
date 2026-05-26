@@ -1,6 +1,6 @@
 import pytest
 
-from cad import DxfDrawing, SceneError, StlMesh, WriteError, circle, prism
+from cady import DxfDrawing, SceneError, StlMesh, WriteError, circle, prism
 
 
 def test_geom_valueerror() -> None:

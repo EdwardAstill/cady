@@ -1,4 +1,4 @@
-# pyseas-cad Stage 4.6 - DXF Writer Hardening
+# cady Stage 4.6 - DXF Writer Hardening
 
 **Status:** draft.
 **Date:** 2026-05-11.
@@ -33,8 +33,8 @@ public scene/model API.
 - `examples/gallery/production_plate.dxf` still audits with zero ezdxf errors
   and contains four native dimensions.
 - `.venv/bin/pytest -q` passes.
-- `.venv/bin/pyright src/cad` passes.
-- `.venv/bin/ruff check src/cad tests examples/scripts` passes.
+- `.venv/bin/pyright src/cady` passes.
+- `.venv/bin/ruff check src/cady tests examples/scripts` passes.
 
 ## Design Contract
 

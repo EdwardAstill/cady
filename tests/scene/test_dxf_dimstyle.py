@@ -2,7 +2,7 @@
 
 import pytest
 
-from cad import DimStyle, DxfDrawing
+from cady import DimStyle, DxfDrawing
 
 
 def test_dimstyle_defaults_match_existing_builtin() -> None:
@@ -70,7 +70,7 @@ def test_dimstyle_rejects_zero_text_gap() -> None:
 
 
 def test_add_dimension_entity_rejects_unknown_dimstyle() -> None:
-    from cad.scene.dxf import AngularDimensionEntity
+    from cady.scene.dxf import AngularDimensionEntity
 
     drawing = DxfDrawing()
     entity = AngularDimensionEntity(

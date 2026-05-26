@@ -1,7 +1,7 @@
 ISO-10303-21;
 HEADER;
-FILE_DESCRIPTION(('Faceted BREP smoke file from pyseas-cad Stage 1'),'2;1');
-FILE_NAME('plate_box.step','2026-05-08T00:00:00',('pyseas-cad'),('pyseas-cad'),'manual','pyseas-cad','');
+FILE_DESCRIPTION(('Faceted BREP smoke file from cady Stage 1'),'2;1');
+FILE_NAME('plate_box.step','2026-05-08T00:00:00',('cady'),('cady'),'manual','cady','');
 FILE_SCHEMA(('AUTOMOTIVE_DESIGN_CC2 { 1 2 10303 214 2 1 1 }'));
 ENDSEC;
 DATA;

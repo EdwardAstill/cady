@@ -5,11 +5,11 @@ from math import isclose, pi
 
 import pytest
 
-from cad import arc, circle, line, polyline, prism, rectangle, sphere, spline
-from cad.geom.base import Shape2D, Shape3D, parse_axis
-from cad.geom.shapes2d import Path
-from cad.geom.shapes3d import Extrusion, Revolution
-from cad.geom.vec import Vec2, Vec3
+from cady import arc, circle, line, polyline, prism, rectangle, sphere, spline
+from cady.geom.base import Shape2D, Shape3D, parse_axis
+from cady.geom.shapes2d import Path
+from cady.geom.shapes3d import Extrusion, Revolution
+from cady.geom.vec import Vec2, Vec3
 
 
 def test_vec2_ops() -> None:

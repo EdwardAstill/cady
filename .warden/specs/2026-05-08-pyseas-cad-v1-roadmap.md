@@ -1,4 +1,4 @@
-# pyseas-cad v1 Roadmap
+# cady v1 Roadmap
 
 **Status:** roadmap contract.
 **Date:** 2026-05-08.
@@ -8,11 +8,11 @@ drawings, 3D previews, and basic interchange files from one source model.
 
 ## End Goal
 
-pyseas-cad v1 is complete when a caller can build one domain-neutral CAD model
+cady v1 is complete when a caller can build one domain-neutral CAD model
 and export the useful manufacturing/review artifacts from it:
 
 ```python
-from cad import Model, rectangle, circle
+from cady import Model, rectangle, circle
 
 plate = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -37,7 +37,7 @@ dimensions, basic extrusions/revolutions, and viewer-loadable 3D output.
 - **Keep `geom` immutable and format-blind.** The model layer organizes names,
   parts, drawings, layers, assemblies, metadata, and output intent; it does not
   replace the primitive geometry layer.
-- **Domain-blind core.** pyseas-cad never learns `Padeye`, `Shackle`, or other
+- **Domain-blind core.** cady never learns `Padeye`, `Shackle`, or other
   lifting-gear vocabulary. Recipes live in pyseas-yard or examples.
 - **Pure-stdlib runtime.** Dev/test tools may use external packages; shipped
   runtime code does not.
@@ -67,7 +67,7 @@ Delivered:
 
 Deliverables:
 
-- `cad.model` package.
+- `cady.model` package.
 - `Model`, `Drawing2D`, `Part`, `Assembly` or equivalent names.
 - Named drawings with layers.
 - Named 3D parts containing `Shape3D` values.
@@ -187,7 +187,7 @@ prove the smallest useful STEP path.
 
 Deliverables:
 
-- `cad.write.step` package.
+- `cady.write.step` package.
 - STEP writer for basic solids from `Model` parts:
   - prisms/boxes,
   - simple extrusions,
@@ -224,7 +224,7 @@ Acceptance:
 
 ### Stage 6 — v1 Product Hardening
 
-**Goal:** Make pyseas-cad boring to install, evaluate, and adopt.
+**Goal:** Make cady boring to install, evaluate, and adopt.
 
 Deliverables:
 

@@ -1,10 +1,10 @@
-"""Tests for cad.read.step — pure-Python STEP reader."""
+"""Tests for cady.read.step — pure-Python STEP reader."""
 
 from __future__ import annotations
 
 import pytest
 
-from cad.read.step import read_step, StepFace
+from cady.read.step import read_step, StepFace
 
 
 # ---------------------------------------------------------------------------

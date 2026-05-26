@@ -2,8 +2,8 @@
 
 import math
 
-from cad import DxfDrawing
-from cad.write.dxf.sections import render_dxf
+from cady import DxfDrawing
+from cady.write.dxf.sections import render_dxf
 
 
 def test_angular_dimension_emits_dimension_entity() -> None:

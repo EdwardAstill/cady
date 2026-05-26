@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from cad import Assembly, Drawing2D, Model, ModelMetadata, Part
+from cady import Assembly, Drawing2D, Model, ModelMetadata, Part
 
 
 def test_model_imports_from_top_level() -> None:
