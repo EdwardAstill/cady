@@ -96,6 +96,9 @@ class _EntityResolver:
         inst = self.resolve(ref)
         if inst is None:
             return None
+        if hasattr(inst, "entities"):
+            # ComplexEntityInstance — return first constituent entity
+            return inst.entities[0] if inst.entities else None
         return inst.entity
 
     def resolve_chain(self, ref: str, *names: str) -> Any | None:
@@ -204,11 +207,16 @@ def _extract_faces(data_section: Any, resolver: _EntityResolver):
 
     # Walk: MANIFOLD_SOLID_BREP → CLOSED_SHELL → ADVANCED_FACE
     for inst in data_section.instances.values():
-        entity = inst.entity
-        if entity.name == "ADVANCED_FACE":
-            face = _extract_advanced_face(entity, resolver)
-            if face is not None:
-                yield face
+        entities: list[Any] = []
+        if hasattr(inst, "entities"):
+            entities.extend(inst.entities)
+        elif hasattr(inst, "entity"):
+            entities.append(inst.entity)
+        for entity in entities:
+            if entity.name == "ADVANCED_FACE":
+                face = _extract_advanced_face(entity, resolver)
+                if face is not None:
+                    yield face
 
 
 def _extract_advanced_face(entity: Any, resolver: _EntityResolver) -> StepFace | None:
