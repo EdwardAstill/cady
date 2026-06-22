@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cady import DxfDrawing, SceneError, circle
-from cady.write.dxf.sections import render_dxf
+from cady.files.dxf.sections import render_dxf
 
 
 def test_block_definition_records_entities() -> None:

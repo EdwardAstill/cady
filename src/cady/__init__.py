@@ -1,9 +1,19 @@
-from cady.errors import CadError, SceneError, WriteError
-from cady.geom import (
+from cady.build import arc, circle, line, polyline, prism, rectangle, sphere, spline
+from cady.domain import (
+    AngularDimensionEntity,
     Arc,
+    Assembly,
     Circle,
+    DimStyle,
+    Drawing2D,
+    DxfDrawing,
     Extrusion,
+    Layer,
     Line,
+    Model,
+    ModelLayer,
+    ModelMetadata,
+    Part,
     Path,
     Polyline,
     Prism,
@@ -13,23 +23,13 @@ from cady.geom import (
     Shape3D,
     Sphere,
     Spline,
+    StlMesh,
     Vec2,
     Vec3,
-    arc,
-    circle,
-    line,
-    midpoint,
-    offset_point,
-    perpendicular,
-    polyline,
-    prism,
-    rectangle,
-    sphere,
-    spline,
 )
-from cady.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
-from cady.read.extrude import ExtrudedMember, ExtrudedSection, extract_members_from_faces
-from cady.scene import AngularDimensionEntity, DimStyle, DxfDrawing, Layer, StlMesh
+from cady.errors import CadError, SceneError, WriteError
+from cady.files.step import ExtrudedMember, ExtrudedSection, extract_members_from_faces
+from cady.ops import midpoint, offset_point, perpendicular
 
 __all__ = [
     "AngularDimensionEntity",

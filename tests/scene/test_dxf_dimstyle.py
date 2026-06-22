@@ -70,7 +70,7 @@ def test_dimstyle_rejects_zero_text_gap() -> None:
 
 
 def test_add_dimension_entity_rejects_unknown_dimstyle() -> None:
-    from cady.scene.dxf import AngularDimensionEntity
+    from cady.domain.drawing import AngularDimensionEntity
 
     drawing = DxfDrawing()
     entity = AngularDimensionEntity(

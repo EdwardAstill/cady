@@ -1,8 +1,8 @@
-"""Tests for cady.read.step — pure-Python STEP reader."""
+"""Tests for cady.files.step — pure-Python STEP reader."""
 
 from __future__ import annotations
 
-from cady.read.step import read_step
+from cady.files.step import read_step
 
 # ---------------------------------------------------------------------------
 # A minimal valid STEP file with one cylindrical surface

@@ -5,11 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "cady"
 version = "0.1.0"
-description = "Small write-only CAD geometry package for DXF, STL, and AP214 STEP output."
+description = "Small native CAD geometry package with DXF, STL, and STEP import/export tools."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2.4.6",
     "steputils>=0.1",
+]
+
+[project.optional-dependencies]
+visualisation = [
+    "matplotlib>=3.10",
+    "pyvista>=0.46",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -29,6 +36,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 include = ["src/cady"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
 
 [dependency-groups]
 dev = [

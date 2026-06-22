@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from cady import Model, WriteError, prism
-from cady.model.core import Part
-from cady.write.step.document import render_step
-from cady.write.step.ids import IdAllocator
+from cady.domain import Part
+from cady.files.step.document import render_step
+from cady.files.step.ids import IdAllocator
 
 
 def test_id_allocator_returns_sequential_ids() -> None:
@@ -79,7 +79,7 @@ def test_render_step_extrusion_rejects_non_polyline_inner_loop() -> None:
     from dataclasses import replace
 
     from cady import Extrusion, Vec2, polyline
-    from cady.geom.shapes2d import Spline
+    from cady.domain.shapes2d import Spline
 
     spline = Spline(
         control_points=(

@@ -3,7 +3,7 @@
 import math
 
 from cady import DxfDrawing
-from cady.write.dxf.sections import render_dxf
+from cady.files.dxf.sections import render_dxf
 
 
 def test_angular_dimension_emits_dimension_entity() -> None:

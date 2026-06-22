@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from cady import DxfDrawing, WriteError, arc, circle, line, rectangle
-from cady.write.dxf.sections import render_dxf
+from cady.files.dxf.sections import render_dxf
 
 
 def smoke_drawing() -> DxfDrawing:

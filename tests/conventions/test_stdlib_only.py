@@ -6,15 +6,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "cady"
-ALLOWED = {"cady", "steputils"}
+RUNTIME_ALLOWED = {"cady", "numpy", "steputils"}
+OPTIONAL_BY_PACKAGE = {
+    "visualisation": {"matplotlib", "mpl_toolkits", "pyvista"},
+}
 STDLIB = set(sys.stdlib_module_names)
 
 
-def test_runtime_imports_are_stdlib_only() -> None:
+def test_runtime_imports_use_declared_allowlist() -> None:
     offenders: list[str] = []
     for path in SRC.rglob("*.py"):
-        if "_vendor" in path.parts:
-            continue
+        package = path.relative_to(SRC).parts[0]
+        allowed = set(RUNTIME_ALLOWED)
+        allowed.update(OPTIONAL_BY_PACKAGE.get(package, set()))
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -24,6 +28,6 @@ def test_runtime_imports_are_stdlib_only() -> None:
             else:
                 continue
             for name in names:
-                if name not in STDLIB and name not in ALLOWED and name != "__future__":
+                if name not in STDLIB and name not in allowed and name != "__future__":
                     offenders.append(f"{path.relative_to(ROOT)} imports {name}")
     assert offenders == []

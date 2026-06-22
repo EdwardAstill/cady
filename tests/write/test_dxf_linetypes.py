@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cady import DxfDrawing, Model, SceneError, line
-from cady.write.dxf.sections import render_dxf
+from cady.files.dxf.sections import render_dxf
 
 
 def test_dxf_layer_accepts_builtin_linetype() -> None:

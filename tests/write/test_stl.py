@@ -6,8 +6,8 @@ from math import isclose
 import pytest
 
 from cady import StlMesh, WriteError, prism, rectangle, sphere
-from cady.write.stl.ascii import write_ascii_stl
-from cady.write.stl.binary import write_binary_stl
+from cady.files.stl.ascii import write_ascii_stl
+from cady.files.stl.binary import write_binary_stl
 
 
 def test_binary_prism_invariants(tmp_path) -> None:

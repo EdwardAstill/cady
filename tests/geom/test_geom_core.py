@@ -6,10 +6,10 @@ from math import isclose, pi
 import pytest
 
 from cady import arc, circle, line, polyline, prism, rectangle, sphere, spline
-from cady.geom.base import Shape2D, Shape3D, parse_axis
-from cady.geom.shapes2d import Path
-from cady.geom.shapes3d import Extrusion, Revolution
-from cady.geom.vec import Vec2, Vec3
+from cady.domain.base import Shape2D, Shape3D, parse_axis
+from cady.domain.shapes2d import Path
+from cady.domain.shapes3d import Extrusion, Revolution
+from cady.domain.vec import Vec2, Vec3
 
 
 def test_vec2_ops() -> None:

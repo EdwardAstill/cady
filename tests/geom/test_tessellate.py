@@ -4,7 +4,7 @@ from collections import Counter
 from math import hypot, isclose, pi
 
 from cady import circle, prism, rectangle
-from cady.geom.tessellate import (
+from cady.ops.tessellate import (
     curves_to_polyline,
     extrusion_to_triangles,
     polygon_to_triangles,
@@ -32,7 +32,7 @@ def test_polygon_with_hole_area_and_vertices() -> None:
 
 
 def test_prism_exactly_12_triangles() -> None:
-    from cady.geom.tessellate import prism_to_triangles
+    from cady.ops.tessellate import prism_to_triangles
 
     assert len(prism_to_triangles(prism((0, 0, 0), (2, 2, 1)))) == 12
 

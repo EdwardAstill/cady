@@ -1,8 +1,8 @@
 """Emitter tests for HEADER section."""
 
 from cady import DxfDrawing
-from cady.geom import line
-from cady.write.dxf.sections import render_dxf
+from cady.build import line
+from cady.files.dxf.sections import render_dxf
 
 
 def test_header_section_includes_insunits_when_set() -> None:
