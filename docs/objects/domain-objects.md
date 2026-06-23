@@ -45,6 +45,17 @@ The semantic 3D objects are:
 - `Extrusion(profile, axis, distance)`
 - `Revolution(profile, axis_origin, axis_direction, angle_rad)`
 
+Faceted 3D import objects are:
+
+- `Face3D(vertices)`
+- `Polyline3D(vertices, closed=False)`
+- `FacetedMesh(vertices, faces)`
+
+These represent evaluated geometry from mesh-style formats and faceted DXF
+entities. They are useful for inspection, visualisation, STL-style workflows,
+and `dxf.read_mesh(...)`, but they do not carry the design intent of semantic
+solids such as `Extrusion`.
+
 `Shape3D.to_array(tolerance)` converts a solid to an `ArrayMesh3`. The mesh is
 the evaluated representation for plotting, STL output, intersections, volume
 calculation, and bulk transforms. Semantic solids still remain the preferred

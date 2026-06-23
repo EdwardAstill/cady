@@ -4,7 +4,15 @@ from pathlib import Path
 
 from cady.domain.drawing import DxfDrawing
 from cady.domain.model import Drawing2D, Model
-from cady.files.dxf.reader import parse_dxf, read_dxf
+from cady.files.dxf.reader import (
+    Dxf3DImportResult,
+    DxfSkippedEntity,
+    parse_dxf,
+    parse_dxf_3d,
+    read_3d,
+    read_dxf,
+    read_mesh,
+)
 from cady.files.dxf.sections import render_dxf, write_dxf
 
 
@@ -33,8 +41,13 @@ def write_model(model: Model, path: str | Path) -> Model:
 
 __all__ = [
     "parse_dxf",
+    "parse_dxf_3d",
+    "Dxf3DImportResult",
+    "DxfSkippedEntity",
     "read_drawing",
     "read_dxf",
+    "read_3d",
+    "read_mesh",
     "render_drawing",
     "render_dxf",
     "write_drawing",

@@ -51,6 +51,18 @@ _EDGE_ANGLE_TOLERANCE_DEGREES = 15.0
 _CURVED_PATCH_ANGLE_TOLERANCE_DEGREES = 35.0
 _MIN_CURVED_PATCH_ROOTS = 4
 _MAX_CURVED_PATCH_ROOT_FACES = 4
+_ISOMETRIC_PITCH_DEGREES = 35.26438968
+_ISOMETRIC_VIEW_ANGLES: dict[str, tuple[float, float]] = {
+    "6": (45.0, _ISOMETRIC_PITCH_DEGREES),
+    "7": (-45.0, _ISOMETRIC_PITCH_DEGREES),
+    "8": (-135.0, _ISOMETRIC_PITCH_DEGREES),
+    "9": (135.0, _ISOMETRIC_PITCH_DEGREES),
+}
+_LOCAL_AXIS_TURN_KEYS: dict[str, tuple[float, float, float]] = {
+    "1": (1.0, 0.0, 0.0),
+    "2": (0.0, 1.0, 0.0),
+    "3": (0.0, 0.0, 1.0),
+}
 
 
 class _MeshLike(Protocol):
@@ -335,6 +347,41 @@ def _apply_view_orbit(orientation: np.ndarray, dx_degrees: float, dy_degrees: fl
     return (orientation @ yaw @ pitch).astype(np.float32, copy=False)
 
 
+def _front_orientation() -> np.ndarray:
+    return np.eye(4, dtype=np.float32)
+
+
+def _isometric_orientation(key: str) -> np.ndarray | None:
+    angles = _ISOMETRIC_VIEW_ANGLES.get(key)
+    if angles is None:
+        return None
+    yaw_degrees, pitch_degrees = angles
+    return _apply_view_orbit(_front_orientation(), yaw_degrees, pitch_degrees)
+
+
+def _apply_local_axis_turn(orientation: np.ndarray, axis: tuple[float, float, float]) -> np.ndarray:
+    """Apply a 90 degree turn about one of the object's current local axes."""
+    return (_rotation_matrix(90.0, axis) @ orientation).astype(np.float32, copy=False)
+
+
+def _orientation_for_number_key(orientation: np.ndarray, key: str) -> np.ndarray | None:
+    if key == "0":
+        return _front_orientation()
+    local_axis = _LOCAL_AXIS_TURN_KEYS.get(key)
+    if local_axis is not None:
+        return _apply_local_axis_turn(orientation, local_axis)
+    return _isometric_orientation(key)
+
+
+def _number_key_name(key: object) -> str | None:
+    raw_name = getattr(key, "name", key)
+    name = str(raw_name).lower()
+    for digit in "0123456789":
+        if name in {digit, f"digit{digit}", f"key{digit}", f"num{digit}", f"numpad{digit}"}:
+            return digit
+    return None
+
+
 def _model_matrix(local_centre: np.ndarray, orientation: np.ndarray) -> np.ndarray:
     """Map local mesh coordinates to centred global/view coordinates."""
     return (_translation_matrix(-local_centre) @ orientation).astype(np.float32, copy=False)
@@ -493,6 +540,17 @@ def _make_canvas(
         def on_mouse_wheel(self, event: Any) -> None:
             self._distance -= event.delta[1] * self._radius * 0.1
             self._distance = max(self._radius * 0.5, min(self._distance, self._radius * 20.0))
+            self._update_matrices()
+            self.update()
+
+        def on_key_press(self, event: Any) -> None:
+            digit = _number_key_name(event.key)
+            if digit is None:
+                return
+            orientation = _orientation_for_number_key(self._orientation, digit)
+            if orientation is None:
+                return
+            self._orientation = orientation
             self._update_matrices()
             self.update()
 

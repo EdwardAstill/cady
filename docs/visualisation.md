@@ -66,6 +66,19 @@ Planned 3D helpers:
 The baseline Matplotlib backend should work without an interactive display
 when saving images.
 
+### VisPy Controls
+
+The interactive VisPy viewer keeps the camera simple: wheel zoom changes
+distance, middle drag pans, and left drag rotates the object model around
+screen-oriented axes.
+
+Number keys provide fixed orientation controls:
+
+- `0` resets to the front view, with local axes aligned to global axes;
+- `1`, `2`, and `3` rotate 90 degrees about the object's local X, Y, and Z
+  axes;
+- `6`, `7`, `8`, and `9` snap to four isometric views.
+
 ## Saving Output
 
 Use `save_path` for static images:

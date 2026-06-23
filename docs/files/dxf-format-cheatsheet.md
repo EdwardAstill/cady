@@ -136,6 +136,68 @@ Complex — needs boundary path data. Defer to stage 2.
 Complex — needs an associated BLOCK with the rendered geometry.
 Defer to stage 3.
 
+### 3DFACE
+```
+0   3DFACE
+8   <layer>
+10  x1
+20  y1
+30  z1
+11  x2
+21  y2
+31  z2
+12  x3
+22  y3
+32  z3
+13  x4
+23  y4
+33  z4
+```
+
+`3DFACE` is an evaluated face, not a semantic solid. cady imports triangles
+and quads into `FacetedMesh`; if the fourth point repeats the third point, the
+face is treated as a triangle.
+
+### Polyface POLYLINE
+```
+0   POLYLINE
+70  <flags: 64=polyface mesh>
+0   VERTEX          <- coordinate record
+70  64
+10  x
+20  y
+30  z
+0   VERTEX          <- face record
+70  128
+71  v1
+72  v2
+73  v3
+74  v4
+0   SEQEND
+```
+
+Face indices are 1-based; negative indices mark invisible edges. cady imports
+the absolute values and triangulates quad face records deterministically.
+
+### 3D POLYLINE
+```
+0   POLYLINE
+70  <flags: 8=3D polyline, 1=closed>
+0   VERTEX
+10  x
+20  y
+30  z
+0   SEQEND
+```
+
+3D wire polylines import as `Polyline3D` via `dxf.read_3d(...)`.
+
+### ACIS-backed 3D entities
+
+`3DSOLID`, `BODY`, `REGION`, and `SURFACE` commonly store embedded ACIS/SAT
+payloads. cady reports these as skipped import records instead of pretending
+ordinary DXF group-code parsing can reconstruct the solid.
+
 ## Coordinate handedness
 
 DXF uses a right-handed coordinate system: +X right, +Y up, +Z out of

@@ -8,7 +8,7 @@ cady has the staged v1 feature set:
 
 - immutable 2D and 3D geometry values,
 - DXF writer for `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `MTEXT`,
-- limited ASCII DXF reader for basic 2D geometry,
+- limited ASCII DXF reader for basic 2D geometry and faceted 3D meshes,
 - production DXF helpers for `HATCH`, `BLOCK`, `INSERT`, and built-in
   linetypes,
 - native editable DXF dimensions and hatch holes/islands,
@@ -257,6 +257,8 @@ File API:
 from cady.files import dxf, step
 
 drawing = dxf.read_drawing("profile.dxf")
+mesh = dxf.read_mesh("faceted-part.dxf")
+import_result = dxf.read_3d("mixed-3d.dxf")
 faces = step.read_faces("frame.step")
 members = step.read_members("frame.step")
 ```
@@ -264,8 +266,15 @@ members = step.read_members("frame.step")
 `dxf.read_drawing` imports supported ASCII DXF `ENTITIES` into a `DxfDrawing`.
 The initial reader covers `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `TEXT`, and
 `MTEXT`, preserving layer names and cady-supported layer colors/linetypes.
-Unsupported entities such as hatches, blocks, inserts, dimensions, and 3D DXF
-objects are skipped.
+Unsupported 2D drawing entities such as hatches, blocks, inserts, and
+dimensions are skipped.
+
+`dxf.read_mesh` imports supported faceted 3D ASCII DXF entities into a
+`FacetedMesh`. It currently supports `3DFACE` triangles/quads and polyface
+`POLYLINE`/`VERTEX` meshes. `dxf.read_3d` returns meshes, 3D wire polylines,
+and skipped-entity records for inspection. ACIS-backed entities such as
+`3DSOLID`, `BODY`, `REGION`, and `SURFACE` are reported as skipped; cady does
+not parse their embedded solid-kernel data.
 
 `step.read_faces` resolves elementary `PLANE`, `CYLINDRICAL_SURFACE`, and
 `CONICAL_SURFACE` faces from AP203/AP214-style STEP files. It is intended for
@@ -363,9 +372,9 @@ cady uses `steputils` at runtime for STEP parsing. Dev tools live in
 ## Boundaries
 
 - DXF/STL/STEP writers should stay small and dependency-light.
-- cady parses a limited 2D ASCII DXF subset, not arbitrary DXF drawings. It
-  does not parse STL. STEP read support is limited to elementary surfaces and
-  structural-member extraction helpers.
+- cady parses limited 2D and faceted 3D ASCII DXF subsets, not arbitrary DXF
+  drawings or ACIS-backed DXF solids. It does not parse STL. STEP read support
+  is limited to elementary surfaces and structural-member extraction helpers.
 - cady is domain-blind. It does not contain `Padeye`, `Shackle`, or other
   lifting-gear objects.
 - Domain recipes belong in pyseas-yard or examples.

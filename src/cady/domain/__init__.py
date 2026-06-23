@@ -10,7 +10,7 @@ from cady.domain.drawing import (
     Layer,
     TextEntity,
 )
-from cady.domain.mesh import StlMesh
+from cady.domain.mesh import Face3D, FacetedMesh, Polyline3D, StlMesh
 from cady.domain.model import Assembly, Drawing2D, Model, ModelLayer, ModelMetadata, Part
 from cady.domain.shapes2d import Arc, Circle, Line, Path, Polyline, Rectangle, Spline
 from cady.domain.shapes3d import Extrusion, Prism, Revolution, Sphere
@@ -29,6 +29,8 @@ __all__ = [
     "Drawing2D",
     "DxfDrawing",
     "Extrusion",
+    "Face3D",
+    "FacetedMesh",
     "HatchEntity",
     "InsertEntity",
     "Layer",
@@ -39,6 +41,7 @@ __all__ = [
     "Part",
     "Path",
     "Polyline",
+    "Polyline3D",
     "Prism",
     "Rectangle",
     "Revolution",

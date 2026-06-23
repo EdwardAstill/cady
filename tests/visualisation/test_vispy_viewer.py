@@ -260,6 +260,88 @@ def test_view_orbit_uses_screen_axes_after_existing_local_rotation() -> None:
     np.testing.assert_allclose(transformed[:3], [0.0, -1.0, 0.0], atol=1e-6)
 
 
+def test_number_key_zero_resets_to_front_orientation() -> None:
+    from cady.visualisation.vispy_viewer import _orientation_for_number_key
+
+    orientation = np.array(
+        [
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+
+    reset = _orientation_for_number_key(orientation, "0")
+
+    np.testing.assert_allclose(reset, np.eye(4, dtype=np.float32), atol=1e-6)
+
+
+def test_number_keys_one_two_three_turn_about_local_axes() -> None:
+    from cady.visualisation.vispy_viewer import _orientation_for_number_key, _rotation_matrix
+
+    orientation = _rotation_matrix(90.0, (0.0, 1.0, 0.0))
+
+    x_turn = _orientation_for_number_key(orientation, "1")
+    y_turn = _orientation_for_number_key(orientation, "2")
+    z_turn = _orientation_for_number_key(orientation, "3")
+
+    np.testing.assert_allclose(
+        x_turn,
+        _rotation_matrix(90.0, (1.0, 0.0, 0.0)) @ orientation,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        y_turn,
+        _rotation_matrix(90.0, (0.0, 1.0, 0.0)) @ orientation,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        z_turn,
+        _rotation_matrix(90.0, (0.0, 0.0, 1.0)) @ orientation,
+        atol=1e-6,
+    )
+    assert not np.allclose(x_turn, orientation @ _rotation_matrix(90.0, (1.0, 0.0, 0.0)))
+
+
+def test_number_keys_six_to_nine_are_isometric_view_snaps() -> None:
+    from cady.visualisation.vispy_viewer import _orientation_for_number_key
+
+    orientations = [
+        _orientation_for_number_key(np.eye(4, dtype=np.float32), str(key))
+        for key in range(6, 10)
+    ]
+
+    assert all(orientation is not None for orientation in orientations)
+    for orientation in orientations:
+        assert orientation is not None
+        np.testing.assert_allclose(
+            orientation[:3, :3] @ orientation[:3, :3].T,
+            np.eye(3, dtype=np.float32),
+            atol=1e-6,
+        )
+        assert not np.allclose(orientation, np.eye(4, dtype=np.float32))
+    distinct_orientations = {
+        orientation.tobytes() for orientation in orientations if orientation is not None
+    }
+    assert len(distinct_orientations) == 4
+
+
+def test_number_key_name_handles_digit_and_numpad_names() -> None:
+    from cady.visualisation.vispy_viewer import _number_key_name
+
+    class Key:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    assert _number_key_name("1") == "1"
+    assert _number_key_name("Digit2") == "2"
+    assert _number_key_name("Key3") == "3"
+    assert _number_key_name(Key("Numpad9")) == "9"
+    assert _number_key_name("A") is None
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("vispy") is None,
     reason="VisPy not installed.",
