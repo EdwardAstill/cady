@@ -55,6 +55,12 @@ class ArrayMesh3:
     def transformed(self, transform: Transform3) -> Self:
         return type(self)(transform.apply_points(self.vertices), self.faces)
 
+    def visualise(self, *, tolerance: float = 1e-3) -> None:
+        """Open an interactive 3D viewer for this mesh."""
+        from cady.visualisation.vispy_viewer import vispy_view_mesh
+
+        vispy_view_mesh(self)
+
     @classmethod
     def merged(cls, meshes: Iterable[ArrayMesh3]) -> ArrayMesh3:
         mesh_tuple = tuple(meshes)

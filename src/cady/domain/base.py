@@ -52,6 +52,12 @@ class Shape2D(ABC):
     @abstractmethod
     def to_array(self, *, tolerance: float = 1e-3) -> object: ...
 
+    def visualise(self, *, tolerance: float = 1e-3) -> None:
+        """Open an interactive 3D viewer for this shape."""
+        from cady.visualisation.vispy_viewer import vispy_view_mesh
+
+        vispy_view_mesh(self.to_array(tolerance=tolerance))
+
     def map_points(self, fn: Callable[[Vec2], Vec2]) -> Shape2D:
         return self._transform2(fn)
 
@@ -138,6 +144,12 @@ class Shape3D(ABC):
 
     @abstractmethod
     def to_array(self, *, tolerance: float = 1e-3) -> object: ...
+
+    def visualise(self, *, tolerance: float = 1e-3) -> None:
+        """Open an interactive 3D viewer for this shape."""
+        from cady.visualisation.vispy_viewer import vispy_view_mesh
+
+        vispy_view_mesh(self.to_array(tolerance=tolerance))
 
     def map_points(self, fn: Callable[[Vec3], Vec3]) -> Shape3D:
         return self._transform3(fn)

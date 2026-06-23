@@ -228,6 +228,13 @@ class Part:
     def to_array(self, *, tolerance: float = 1e-3) -> list[object]:
         return [solid.to_array(tolerance=tolerance) for solid in self.solids]
 
+    def visualise(self, *, tolerance: float = 1e-3) -> None:
+        """Open an interactive 3D viewer for all solids in this part."""
+        from cady.visualisation.vispy_viewer import vispy_view_meshes
+
+        meshes = self.to_array(tolerance=tolerance)
+        vispy_view_meshes(meshes, title=f"cady part: {self.name}")
+
     def to_dict(self) -> dict[str, object]:
         return {"name": self.name, "solids": len(self.solids)}
 
@@ -358,6 +365,13 @@ class Model:
             for part in self._parts.values()
             for mesh in part.to_array(tolerance=tolerance)
         ]
+
+    def visualise(self, *, tolerance: float = 1e-3) -> None:
+        """Open an interactive 3D viewer for all parts in this model."""
+        from cady.visualisation.vispy_viewer import vispy_view_meshes
+
+        meshes = self.to_array(tolerance=tolerance)
+        vispy_view_meshes(meshes, title=f"cady model: {self.name}")
 
     def drawing_arrays(self, *, tolerance: float = 1e-3) -> list[object]:
         return [
