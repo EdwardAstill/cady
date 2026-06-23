@@ -361,9 +361,7 @@ class Model:
 
     def to_array(self, *, tolerance: float = 1e-3) -> list[object]:
         return [
-            mesh
-            for part in self._parts.values()
-            for mesh in part.to_array(tolerance=tolerance)
+            mesh for part in self._parts.values() for mesh in part.to_array(tolerance=tolerance)
         ]
 
     def visualise(self, *, tolerance: float = 1e-3) -> None:

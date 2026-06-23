@@ -8,13 +8,18 @@ SRC = ROOT / "src" / "cady"
 
 
 def _imports(path: Path) -> set[str]:
+    """Return module-level import names from a Python file.
+
+    Only top-level imports are collected — imports inside function bodies
+    (lazy imports) are excluded.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            names.add(node.module)
+    for statement in tree.body:
+        if isinstance(statement, ast.Import):
+            names.update(alias.name for alias in statement.names)
+        elif isinstance(statement, ast.ImportFrom) and statement.module:
+            names.add(statement.module)
     return names
 
 

@@ -1,8 +1,8 @@
 # cady
 
 Small CAD package for building format-blind geometry, emitting DXF R2018,
-binary/ASCII STL, or AP214 STEP, and extracting elementary surface data from
-STEP files.
+binary/ASCII STL, AP214 STEP, or converter-backed DWG, and extracting
+elementary surface data from STEP files.
 
 cady has the staged v1 feature set:
 
@@ -11,6 +11,7 @@ cady has the staged v1 feature set:
 - production DXF helpers for `HATCH`, `BLOCK`, `INSERT`, and built-in
   linetypes,
 - native editable DXF dimensions and hatch holes/islands,
+- converter-backed DWG writing from cady's DXF output,
 - binary and ASCII STL writer,
 - AP214 STEP writer for `Prism` and supported `Extrusion` solids,
 - STEP reader helpers for elementary surfaces and simple extruded-member
@@ -94,7 +95,7 @@ The source split is:
 - `cady.build`: factory and builder functions for constructing domain objects,
 - `cady.ops`: geometry algorithms such as profile helpers, transforms,
   tessellation, and triangulation,
-- `cady.files`: DXF, STL, and STEP file reading/writing modules.
+- `cady.files`: DXF, DWG, STL, and STEP file reading/writing modules.
 
 The old `geom`, `model`, `scene`, `write`, `read`, `exporters`, and
 `importers` source packages have been removed; import from the split above or
@@ -253,15 +254,25 @@ Use `DxfDrawing` and `StlMesh` directly for low-level or single-format output.
 File API:
 
 ```python
-from cady.files import step
+from cady.files import dwg, step
 
 faces = step.read_faces("frame.step")
 members = step.read_members("frame.step")
+
+converter = dwg.DwgConverter.from_command("dwg-convert {input} {output}")
+dwg.write_model(model, "plate.dwg", converter=converter)
 ```
 
 `step.read_faces` resolves elementary `PLANE`, `CYLINDRICAL_SURFACE`, and
 `CONICAL_SURFACE` faces from AP203/AP214-style STEP files. It is intended for
 simple extrusion analysis, not full CAD-kernel import.
+
+DWG output is conversion-backed rather than native. cady first writes a
+temporary DXF R2018 file, then runs the configured converter. Pass
+`converter=dwg.DwgConverter(...)` or set `CADY_DWG_CONVERTER` to a command that
+accepts `{input}` and `{output}` placeholders. `dwg.convert_to_dxf(...)` exposes
+the same converter boundary for DWG-to-DXF file conversion; cady does not parse
+DWG or DXF into editable domain objects.
 
 Production DXF features:
 
@@ -308,9 +319,10 @@ model.write_step("padeye_plate.step")
 
 `write_dxf`, `write_stl`, and `write_step` are all implemented as object-level
 convenience methods. The same file operations are also available through
-`cady.files.dxf`, `cady.files.stl`, and `cady.files.step`. STEP export currently
-supports `Prism` and `Extrusion` solids. `Revolution` and `Sphere` are not
-supported by STEP export yet.
+`cady.files.dxf`, `cady.files.stl`, and `cady.files.step`; converter-backed DWG
+operations live in `cady.files.dwg`. STEP export currently supports `Prism` and
+`Extrusion` solids. `Revolution` and `Sphere` are not supported by STEP export
+yet.
 
 ## Roadmap
 
@@ -329,6 +341,7 @@ Current sequence:
 | Format | Tested tool | Notes |
 |--------|-------------|-------|
 | DXF R2018 | `ezdxf` (CI) | Zero audit errors on production example. Compatible with FreeCAD, LibreCAD, and any AC1032-capable viewer. |
+| DWG | External converter | cady emits DXF internally and invokes the configured converter. |
 | STL binary | Any mesh viewer | FreeCAD, Blender, MeshLab, browser-based viewers. |
 | STEP AP214 | FreeCAD (manual) | File loads as a multi-body solid. `Prism` and supported `Extrusion` solids are exported. |
 
@@ -355,8 +368,10 @@ cady uses `steputils` at runtime for STEP parsing. Dev tools live in
 ## Boundaries
 
 - DXF/STL/STEP writers should stay small and dependency-light.
-- cady does not parse DXF or STL. STEP read support is limited to elementary
-  surfaces and structural-member extraction helpers.
+- Native DWG bytes are not written by cady. DWG support goes through an explicit
+  external converter boundary.
+- cady does not parse DXF, DWG, or STL. STEP read support is limited to
+  elementary surfaces and structural-member extraction helpers.
 - cady is domain-blind. It does not contain `Padeye`, `Shackle`, or other
   lifting-gear objects.
 - Domain recipes belong in pyseas-yard or examples.
