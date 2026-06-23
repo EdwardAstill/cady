@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "cady"
 RUNTIME_ALLOWED = {"cady", "numpy", "steputils"}
 OPTIONAL_BY_PACKAGE = {
-    "visualisation": {"matplotlib", "mpl_toolkits", "pyvista"},
+    "visualisation": {"matplotlib", "mpl_toolkits"},
 }
 STDLIB = set(sys.stdlib_module_names)
 

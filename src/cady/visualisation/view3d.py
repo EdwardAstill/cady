@@ -42,18 +42,6 @@ class ArrayMesh3Like(Protocol):
     triangles: Sequence[Sequence[Point3Like]]
 
 
-class PyvistaPlotterLike(Protocol):
-    def add_mesh(self, mesh: object, *, show_edges: bool, opacity: float) -> object: ...
-
-    def show(self) -> object: ...
-
-
-class PyvistaLike(Protocol):
-    def Plotter(self) -> PyvistaPlotterLike: ...
-
-    def PolyData(self, vertices: Sequence[Point3Like], faces: Sequence[int]) -> object: ...
-
-
 def _import_pyplot() -> PyplotLike:
     try:
         pyplot = importlib.import_module("matplotlib.pyplot")
@@ -131,27 +119,6 @@ def plot_array_mesh3(
     return fig, axis
 
 
-def _view_pyvista(meshes: Sequence[ArrayMesh3Like], *, show: bool) -> object:
-    try:
-        pyvista_module = importlib.import_module("pyvista")
-    except ImportError as exc:
-        raise ImportError(
-            "PyVista viewing requires pyvista; install cady[visualisation]"
-        ) from exc
-    pyvista = cast(PyvistaLike, pyvista_module)
-
-    plotter = pyvista.Plotter()
-    for mesh in meshes:
-        padded_faces: list[int] = []
-        for face in mesh.faces:
-            padded_faces.extend([3, int(face[0]), int(face[1]), int(face[2])])
-        poly = pyvista.PolyData(mesh.vertices, padded_faces)
-        plotter.add_mesh(poly, show_edges=True, opacity=styles.FACE_ALPHA)
-    if show:
-        plotter.show()
-    return plotter
-
-
 def view_shape3d(
     shape: Shape3D | object,
     *,
@@ -166,8 +133,6 @@ def view_shape3d(
     )
     if backend == "matplotlib":
         return plot_array_mesh3(mesh, show=show, save_path=save_path)[0]
-    if backend == "pyvista":
-        return _view_pyvista([mesh], show=show)
     raise ValueError(f"unknown 3D visualisation backend {backend!r}")
 
 
@@ -179,12 +144,10 @@ def view_model(
     show: bool = True,
     save_path: str | Path | None = None,
 ) -> object:
-    meshes = [cast(ArrayMesh3Like, mesh) for mesh in model.to_array(tolerance=tolerance)]
-    if backend == "pyvista":
-        return _view_pyvista(meshes, show=show)
     if backend != "matplotlib":
         raise ValueError(f"unknown 3D visualisation backend {backend!r}")
 
+    meshes = [cast(ArrayMesh3Like, mesh) for mesh in model.to_array(tolerance=tolerance)]
     fig, axis = _figure_axis(None)
     for mesh in meshes:
         plot_array_mesh3(mesh, ax=axis, show=False)

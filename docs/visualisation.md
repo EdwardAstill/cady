@@ -4,10 +4,7 @@
 domain and numeric geometry, while the core `cady` import stays independent of
 viewer libraries.
 
-Install the backend you need in the active environment:
-
-- `matplotlib` for baseline 2D plotting and static 3D previews;
-- `pyvista` for richer interactive 3D viewing when available.
+Install `matplotlib` for 2D plotting and static 3D previews.
 
 ## 2D Plotting
 
@@ -67,8 +64,7 @@ Planned 3D helpers:
 - `view_model(model, *, tolerance=1e-3, backend="matplotlib", show=True)`
 
 The baseline Matplotlib backend should work without an interactive display
-when saving images. The PyVista backend is optional and should be selected
-only when installed.
+when saving images.
 
 ## Saving Output
 

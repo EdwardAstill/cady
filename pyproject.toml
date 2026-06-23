@@ -8,16 +8,10 @@ version = "0.1.0"
 description = "Small native CAD geometry package with DXF, STL, and STEP import/export tools."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "numpy>=2.4.6",
-    "steputils>=0.1",
-]
+dependencies = ["numpy>=2.4.6", "steputils>=0.1"]
 
 [project.optional-dependencies]
-visualisation = [
-    "matplotlib>=3.10",
-    "pyvista>=0.46",
-]
+visualisation = ["matplotlib>=3.10"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cady"]
@@ -40,8 +34,4 @@ venvPath = "."
 venv = ".venv"
 
 [dependency-groups]
-dev = [
-    "pyright>=1.1.409",
-    "pytest>=9.0.3",
-    "ruff>=0.15.14",
-]
+dev = ["pyright>=1.1.409", "pytest>=9.0.3", "ruff>=0.15.14"]

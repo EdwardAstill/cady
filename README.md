@@ -184,7 +184,7 @@ More detail:
 
 The planned `cady.visualisation` package is an optional layer for plotting and
 viewing. It depends on the semantic and numeric layers, while core cady imports
-do not require `matplotlib` or `pyvista`.
+does not require `matplotlib`.
 
 2D plotting returns the Matplotlib figure/axis so callers can customise or
 save output:
