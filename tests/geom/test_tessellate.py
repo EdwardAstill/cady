@@ -28,7 +28,36 @@ def test_polygon_with_hole_area_and_vertices() -> None:
     area = sum(tri_area(tri) for tri in tris)
     assert isclose(area, 1 - pi * 0.2**2, rel_tol=0.01)
     for tri in tris:
-        assert all(hypot(vertex.x - 0.5, vertex.y - 0.5) >= 0.2 for vertex in tri)
+        assert all(hypot(vertex.x - 0.5, vertex.y - 0.5) >= 0.2 - 1e-12 for vertex in tri)
+
+
+def test_polygon_with_hole_uses_exact_hole_boundary_edges() -> None:
+    hole = circle((0.5, 0.5), 0.2)
+    tris = polygon_to_triangles(rectangle((0, 0), (1, 1)).with_hole(hole), tolerance=1e-3)
+    edges: Counter[tuple[tuple[float, float], tuple[float, float]]] = Counter()
+    for tri in tris:
+        pts = [point.tuple() for point in tri]
+        for a, b in zip(pts, pts[1:] + pts[:1], strict=True):
+            edges[tuple(sorted((a, b)))] += 1
+
+    hole_points = list(curves_to_polyline(hole, tolerance=1e-3).points())
+    if hole_points[0] == hole_points[-1]:
+        hole_points.pop()
+
+    for a, b in zip(hole_points, hole_points[1:] + hole_points[:1], strict=True):
+        assert edges[tuple(sorted((a.tuple(), b.tuple())))] == 1
+
+
+def test_extrusion_with_hole_is_watertight() -> None:
+    profile = rectangle((0, 0), (1, 1)).with_hole(circle((0.5, 0.5), 0.2))
+    mesh = profile.extrude("+z", 0.1).to_array(tolerance=1e-3)
+    edges: Counter[tuple[tuple[float, float, float], tuple[float, float, float]]] = Counter()
+    for tri in mesh.triangles:
+        pts = [tuple(map(float, point)) for point in tri]
+        for a, b in zip(pts, pts[1:] + pts[:1], strict=True):
+            edges[tuple(sorted((a, b)))] += 1
+
+    assert set(edges.values()) == {2}
 
 
 def test_prism_exactly_12_triangles() -> None:

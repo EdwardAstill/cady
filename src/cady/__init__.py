@@ -27,7 +27,7 @@ from cady.domain import (
     Vec2,
     Vec3,
 )
-from cady.errors import CadError, SceneError, WriteError
+from cady.errors import CadError, ReadError, SceneError, WriteError
 from cady.files.step import ExtrudedMember, ExtrudedSection, extract_members_from_faces
 from cady.ops import midpoint, offset_point, perpendicular
 
@@ -52,6 +52,7 @@ __all__ = [
     "Part",
     "Polyline",
     "Prism",
+    "ReadError",
     "Rectangle",
     "Revolution",
     "SceneError",

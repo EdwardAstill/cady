@@ -107,10 +107,231 @@ def _point_in_poly(point: Vec2, poly: tuple[Vec2, ...]) -> bool:
     return inside
 
 
-def _fan(points: tuple[Vec2, ...]) -> list[Triangle2]:
+def _cross2(a: Vec2, b: Vec2, c: Vec2) -> float:
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+
+
+def _geometry_tolerance(points: tuple[Vec2, ...], tolerance: float) -> float:
+    span = max(
+        max(point.x for point in points) - min(point.x for point in points),
+        max(point.y for point in points) - min(point.y for point in points),
+    )
+    return max(span * 1e-12, tolerance * 1e-6, 1e-12)
+
+
+def _same_point(a: Vec2, b: Vec2, tolerance: float) -> bool:
+    return abs(a.x - b.x) <= tolerance and abs(a.y - b.y) <= tolerance
+
+
+def _point_on_segment(point: Vec2, a: Vec2, b: Vec2, tolerance: float) -> bool:
+    if abs(_cross2(a, b, point)) > tolerance:
+        return False
+    return (
+        min(a.x, b.x) - tolerance <= point.x <= max(a.x, b.x) + tolerance
+        and min(a.y, b.y) - tolerance <= point.y <= max(a.y, b.y) + tolerance
+    )
+
+
+def _segments_intersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2, tolerance: float) -> bool:
+    if (
+        max(a.x, b.x) + tolerance < min(c.x, d.x)
+        or max(c.x, d.x) + tolerance < min(a.x, b.x)
+        or max(a.y, b.y) + tolerance < min(c.y, d.y)
+        or max(c.y, d.y) + tolerance < min(a.y, b.y)
+    ):
+        return False
+
+    ab_c = _cross2(a, b, c)
+    ab_d = _cross2(a, b, d)
+    cd_a = _cross2(c, d, a)
+    cd_b = _cross2(c, d, b)
+    if (
+        (ab_c > tolerance and ab_d < -tolerance)
+        or (ab_c < -tolerance and ab_d > tolerance)
+    ) and (
+        (cd_a > tolerance and cd_b < -tolerance)
+        or (cd_a < -tolerance and cd_b > tolerance)
+    ):
+        return True
+    return (
+        abs(ab_c) <= tolerance
+        and _point_on_segment(c, a, b, tolerance)
+        or abs(ab_d) <= tolerance
+        and _point_on_segment(d, a, b, tolerance)
+        or abs(cd_a) <= tolerance
+        and _point_on_segment(a, c, d, tolerance)
+        or abs(cd_b) <= tolerance
+        and _point_on_segment(b, c, d, tolerance)
+    )
+
+
+def _point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2, tolerance: float) -> bool:
+    return (
+        _cross2(a, b, point) >= -tolerance
+        and _cross2(b, c, point) >= -tolerance
+        and _cross2(c, a, point) >= -tolerance
+    )
+
+
+def _clean_ring(points: tuple[Vec2, ...]) -> tuple[Vec2, ...]:
+    clean: list[Vec2] = []
+    for point in _dedupe_closed(list(points)):
+        if clean and point == clean[-1]:
+            continue
+        clean.append(point)
+    if len(clean) > 1 and clean[0] == clean[-1]:
+        clean.pop()
+    return tuple(clean)
+
+
+def _triangulate_simple_polygon(points: tuple[Vec2, ...], *, tolerance: float) -> list[Triangle2]:
+    points = _clean_ring(points)
+    if len(points) < 3:
+        return []
     if _area2(points) < 0:
         points = tuple(reversed(points))
-    return [(points[0], points[i], points[i + 1]) for i in range(1, len(points) - 1)]
+
+    eps = _geometry_tolerance(points, tolerance)
+    remaining = list(points)
+    triangles: list[Triangle2] = []
+    guard = len(remaining) * len(remaining)
+
+    while len(remaining) > 3 and guard > 0:
+        guard -= 1
+        clipped = False
+        for index, point in enumerate(remaining):
+            previous_index = (index - 1) % len(remaining)
+            following_index = (index + 1) % len(remaining)
+            previous = remaining[previous_index]
+            following = remaining[following_index]
+            if _cross2(previous, point, following) <= eps:
+                continue
+            if any(
+                not (
+                    candidate_index in {previous_index, index, following_index}
+                    or _same_point(candidate, previous, eps)
+                    or _same_point(candidate, point, eps)
+                    or _same_point(candidate, following, eps)
+                )
+                and _point_in_triangle(candidate, previous, point, following, eps)
+                for candidate_index, candidate in enumerate(remaining)
+            ):
+                continue
+            triangles.append((previous, point, following))
+            del remaining[index]
+            clipped = True
+            break
+
+        if clipped:
+            continue
+
+        for index, point in enumerate(remaining):
+            previous = remaining[index - 1]
+            following = remaining[(index + 1) % len(remaining)]
+            if _same_point(point, previous, eps) or abs(_cross2(previous, point, following)) <= eps:
+                del remaining[index]
+                clipped = True
+                break
+        if not clipped:
+            raise WriteError("could not triangulate polygon profile; check for invalid boundaries")
+
+    if len(remaining) == 3 and abs(_cross2(remaining[0], remaining[1], remaining[2])) > eps:
+        triangles.append((remaining[0], remaining[1], remaining[2]))
+    return triangles
+
+
+def _bridge_is_visible(
+    start: Vec2,
+    end: Vec2,
+    polygon: tuple[Vec2, ...],
+    outer: tuple[Vec2, ...],
+    holes: tuple[tuple[Vec2, ...], ...],
+    current_hole: int,
+    tolerance: float,
+) -> bool:
+    if _same_point(start, end, tolerance):
+        return False
+
+    for fraction in (0.25, 0.5, 0.75):
+        sample = Vec2(
+            start.x + (end.x - start.x) * fraction,
+            start.y + (end.y - start.y) * fraction,
+        )
+        if not _point_in_poly(sample, outer):
+            return False
+        if any(_point_in_poly(sample, hole) for hole in holes):
+            return False
+
+    for a, b in zip(polygon, polygon[1:] + polygon[:1], strict=True):
+        if _same_point(a, end, tolerance) or _same_point(b, end, tolerance):
+            continue
+        if _segments_intersect(start, end, a, b, tolerance):
+            return False
+
+    for hole_index, hole in enumerate(holes):
+        for a, b in zip(hole, hole[1:] + hole[:1], strict=True):
+            if hole_index == current_hole and (
+                _same_point(a, start, tolerance) or _same_point(b, start, tolerance)
+            ):
+                continue
+            if _segments_intersect(start, end, a, b, tolerance):
+                return False
+    return True
+
+
+def _bridge_hole(
+    polygon: tuple[Vec2, ...],
+    outer: tuple[Vec2, ...],
+    holes: tuple[tuple[Vec2, ...], ...],
+    hole_index: int,
+    *,
+    tolerance: float,
+) -> tuple[Vec2, ...]:
+    hole = holes[hole_index]
+    eps = _geometry_tolerance(outer + tuple(point for hole in holes for point in hole), tolerance)
+    start_index = max(range(len(hole)), key=lambda index: (hole[index].x, -abs(hole[index].y)))
+    start = hole[start_index]
+    candidate_indices = list(range(len(polygon)))
+    candidate_indices.sort(
+        key=lambda index: (
+            polygon[index].x < start.x - eps,
+            (polygon[index].x - start.x) ** 2 + (polygon[index].y - start.y) ** 2,
+        )
+    )
+
+    for end_index in candidate_indices:
+        end = polygon[end_index]
+        if not _bridge_is_visible(start, end, polygon, outer, holes, hole_index, eps):
+            continue
+        hole_path = hole[start_index:] + hole[:start_index] + (start,)
+        return polygon[: end_index + 1] + hole_path + (end,) + polygon[end_index + 1 :]
+
+    raise WriteError("could not connect polygon hole to outer boundary")
+
+
+def _triangulate_polygon_with_holes(
+    outer: tuple[Vec2, ...],
+    holes: tuple[tuple[Vec2, ...], ...],
+    *,
+    tolerance: float,
+) -> list[Triangle2]:
+    if _area2(outer) < 0:
+        outer = tuple(reversed(outer))
+    oriented_holes = tuple(tuple(reversed(hole)) if _area2(hole) > 0 else hole for hole in holes)
+    polygon = outer
+    for hole_index in sorted(
+        range(len(oriented_holes)),
+        key=lambda index: max(point.x for point in oriented_holes[index]),
+        reverse=True,
+    ):
+        polygon = _bridge_hole(
+            polygon,
+            outer,
+            oriented_holes,
+            hole_index,
+            tolerance=tolerance,
+        )
+    return _triangulate_simple_polygon(polygon, tolerance=tolerance)
 
 
 def _is_self_intersecting(points: tuple[Vec2, ...]) -> bool:
@@ -140,32 +361,8 @@ def polygon_to_triangles(shape: Shape2D, *, tolerance: float) -> list[Triangle2]
         for h in flattened.inner_loops
     ]
     if not holes:
-        return _fan(outer)
-
-    mn, mx = flattened.bounds()
-    span = max(mx.x - mn.x, mx.y - mn.y)
-    grid = min(160, max(48, ceil(span / max(tolerance * 8, span / 96))))
-    dx = (mx.x - mn.x) / grid
-    dy = (mx.y - mn.y) / grid
-    tris: list[Triangle2] = []
-
-    def allowed(point: Vec2) -> bool:
-        return _point_in_poly(point, outer) and not any(
-            _point_in_poly(point, hole) for hole in holes
-        )
-
-    for ix in range(grid):
-        for iy in range(grid):
-            p00 = Vec2(mn.x + ix * dx, mn.y + iy * dy)
-            p10 = Vec2(p00.x + dx, p00.y)
-            p11 = Vec2(p00.x + dx, p00.y + dy)
-            p01 = Vec2(p00.x, p00.y + dy)
-            centre = Vec2(p00.x + dx / 2, p00.y + dy / 2)
-            corners = (p00, p10, p11, p01)
-            if allowed(centre) and all(allowed(p) for p in corners):
-                tris.append((p00, p10, p11))
-                tris.append((p00, p11, p01))
-    return tris
+        return _triangulate_simple_polygon(outer, tolerance=tolerance)
+    return _triangulate_polygon_with_holes(outer, tuple(holes), tolerance=tolerance)
 
 
 def _normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3:
@@ -213,17 +410,22 @@ def extrusion_to_triangles(extrusion: Extrusion, *, tolerance: float) -> list[Tr
     for a, b, c in cap2:
         tris.append((_map2(c, start, u, v), _map2(b, start, u, v), _map2(a, start, u, v)))
         tris.append((_map2(a, end, u, v), _map2(b, end, u, v), _map2(c, end, u, v)))
-    loops = [curves_to_polyline(extrusion.profile, tolerance=tolerance).points()]
+    loops = [(curves_to_polyline(extrusion.profile, tolerance=tolerance).points(), False)]
     loops.extend(
-        curves_to_polyline(h, tolerance=tolerance).points() for h in extrusion.profile.inner_loops
+        (curves_to_polyline(h, tolerance=tolerance).points(), True)
+        for h in extrusion.profile.inner_loops
     )
-    for loop in loops:
+    for loop, is_hole in loops:
         pts = _dedupe_closed(list(loop))
         for a, b in zip(pts, pts[1:] + pts[:1], strict=True):
             a0, b0 = _map2(a, start, u, v), _map2(b, start, u, v)
             a1, b1 = _map2(a, end, u, v), _map2(b, end, u, v)
-            tris.append((a0, b0, b1))
-            tris.append((a0, b1, a1))
+            if is_hole:
+                tris.append((a0, b1, b0))
+                tris.append((a0, a1, b1))
+            else:
+                tris.append((a0, b0, b1))
+                tris.append((a0, b1, a1))
     return tris
 
 

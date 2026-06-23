@@ -20,22 +20,37 @@ uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 attribute vec3 a_position;
+attribute vec3 a_normal;
 attribute vec3 a_color;
 varying vec3 v_color;
+varying vec3 v_normal;
 void main() {
     v_color = a_color;
+    v_normal = normalize((u_model * vec4(a_normal, 0.0)).xyz);
     gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
 }
 """
 
 _FRAG_SHADER = """
+uniform vec3 u_light_direction;
+uniform vec3 u_ambient_light;
+uniform vec3 u_diffuse_light;
+uniform float u_lighting;
 varying vec3 v_color;
+varying vec3 v_normal;
 void main() {
-    gl_FragColor = vec4(v_color, 1.0);
+    vec3 normal = normalize(v_normal);
+    float diffuse = abs(dot(normal, normalize(u_light_direction)));
+    vec3 lit = v_color * clamp(u_ambient_light + diffuse * u_diffuse_light, 0.0, 1.0);
+    gl_FragColor = vec4(mix(v_color, lit, u_lighting), 1.0);
 }
 """
 
 _HAS_VISPY = importlib.util.find_spec("vispy") is not None
+_EDGE_ANGLE_TOLERANCE_DEGREES = 15.0
+_CURVED_PATCH_ANGLE_TOLERANCE_DEGREES = 35.0
+_MIN_CURVED_PATCH_ROOTS = 4
+_MAX_CURVED_PATCH_ROOT_FACES = 4
 
 
 class _MeshLike(Protocol):
@@ -84,61 +99,206 @@ def _vertex_key(vertex: np.ndarray, coordinate_tolerance: float) -> tuple[int, i
     return (int(scaled[0]), int(scaled[1]), int(scaled[2]))
 
 
-def _edge_key(
-    vertices: np.ndarray,
-    start: int,
-    end: int,
-    coordinate_tolerance: float,
-) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    a = _vertex_key(vertices[start], coordinate_tolerance)
-    b = _vertex_key(vertices[end], coordinate_tolerance)
-    return (a, b) if a <= b else (b, a)
+def _coordinate_edge_ownership(
+    vertices: np.ndarray, faces: np.ndarray, valid_faces: np.ndarray
+) -> tuple[
+    dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]],
+    dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]],
+]:
+    coordinate_tolerance = _coordinate_tolerance(vertices)
+    edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]] = {}
+    edge_indices: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
+    for face_index, face in enumerate(faces):
+        if not valid_faces[face_index]:
+            continue
+        face_edges = ((face[0], face[1]), (face[1], face[2]), (face[2], face[0]))
+        for start, end in face_edges:
+            start_index = int(start)
+            end_index = int(end)
+            start_key = _vertex_key(vertices[start_index], coordinate_tolerance)
+            end_key = _vertex_key(vertices[end_index], coordinate_tolerance)
+            if start_key == end_key:
+                continue
+            edge = (start_key, end_key) if start_key <= end_key else (end_key, start_key)
+            edge_faces.setdefault(edge, []).append(face_index)
+            edge_indices.setdefault(edge, (start_index, end_index))
+    return edge_faces, edge_indices
+
+
+def _smooth_face_roots(
+    normals: np.ndarray,
+    edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]],
+    *,
+    angle_tolerance_degrees: float,
+    curved_patch_angle_tolerance_degrees: float = _CURVED_PATCH_ANGLE_TOLERANCE_DEGREES,
+) -> np.ndarray:
+    cos_tolerance = cos(radians(angle_tolerance_degrees))
+    parents = list(range(len(normals)))
+
+    def find(face_index: int) -> int:
+        while parents[face_index] != face_index:
+            parents[face_index] = parents[parents[face_index]]
+            face_index = parents[face_index]
+        return face_index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parents[right_root] = left_root
+
+    for owners in edge_faces.values():
+        for i, left in enumerate(owners):
+            for right in owners[i + 1 :]:
+                if abs(float(np.dot(normals[left], normals[right]))) >= cos_tolerance:
+                    union(left, right)
+
+    cos_curved_tolerance = cos(radians(curved_patch_angle_tolerance_degrees))
+    if cos_curved_tolerance < cos_tolerance:
+        roots = [find(face_index) for face_index in range(len(normals))]
+        root_face_counts = np.bincount(np.array(roots, dtype=np.int64), minlength=len(normals))
+        curved_adjacency: dict[int, set[int]] = {}
+        for owners in edge_faces.values():
+            for i, left in enumerate(owners):
+                for right in owners[i + 1 :]:
+                    left_root = find(left)
+                    right_root = find(right)
+                    if left_root == right_root:
+                        continue
+                    if (
+                        root_face_counts[left_root] > _MAX_CURVED_PATCH_ROOT_FACES
+                        or root_face_counts[right_root] > _MAX_CURVED_PATCH_ROOT_FACES
+                    ):
+                        continue
+                    dot = abs(float(np.dot(normals[left], normals[right])))
+                    if dot >= cos_curved_tolerance:
+                        curved_adjacency.setdefault(left_root, set()).add(right_root)
+                        curved_adjacency.setdefault(right_root, set()).add(left_root)
+
+        visited: set[int] = set()
+        for root in tuple(curved_adjacency):
+            if root in visited:
+                continue
+            component: list[int] = []
+            stack = [root]
+            visited.add(root)
+            while stack:
+                current = stack.pop()
+                component.append(current)
+                for neighbour in curved_adjacency.get(current, set()):
+                    if neighbour in visited:
+                        continue
+                    visited.add(neighbour)
+                    stack.append(neighbour)
+
+            if len(component) < _MIN_CURVED_PATCH_ROOTS:
+                continue
+            first = component[0]
+            for other in component[1:]:
+                union(first, other)
+
+    return np.array([find(face_index) for face_index in range(len(normals))], dtype=np.int64)
 
 
 def _orientation_edges(
     vertices: np.ndarray,
     faces: np.ndarray,
     *,
-    angle_tolerance_degrees: float = 15.0,
-    include_boundary_edges: bool = False,
+    angle_tolerance_degrees: float = _EDGE_ANGLE_TOLERANCE_DEGREES,
+    include_boundary_edges: bool = True,
 ) -> np.ndarray:
-    """Hard crease edges, excluding coplanar triangulation and boundary artifacts."""
+    """Boundaries between smooth face patches, excluding internal tessellation."""
     if len(faces) == 0:
         return np.empty((0, 2), dtype=np.uint32)
 
     normals, valid_normals = _face_normals(vertices, faces)
-    coordinate_tolerance = _coordinate_tolerance(vertices)
-    edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]] = {}
-    edge_indices: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
-    for face_index, face in enumerate(faces):
-        face_edges = ((face[0], face[1]), (face[1], face[2]), (face[2], face[0]))
-        for start, end in face_edges:
-            start_index = int(start)
-            end_index = int(end)
-            edge = _edge_key(vertices, start_index, end_index, coordinate_tolerance)
-            edge_faces.setdefault(edge, []).append(face_index)
-            edge_indices.setdefault(edge, (start_index, end_index))
+    edge_faces, edge_indices = _coordinate_edge_ownership(vertices, faces, valid_normals)
+    smooth_roots = _smooth_face_roots(
+        normals,
+        edge_faces,
+        angle_tolerance_degrees=angle_tolerance_degrees,
+    )
 
-    cos_tolerance = cos(radians(angle_tolerance_degrees))
     visible: list[tuple[int, int]] = []
     for edge, owners in edge_faces.items():
         representative = edge_indices[edge]
-        if len(owners) == 1:
-            if include_boundary_edges:
-                visible.append(representative)
-            continue
-        for i, left in enumerate(owners):
-            for right in owners[i + 1 :]:
-                if not (valid_normals[left] and valid_normals[right]):
-                    continue
-                if abs(float(np.dot(normals[left], normals[right]))) < cos_tolerance:
-                    visible.append(representative)
-                    break
-            else:
-                continue
-            break
+        owner_roots = {int(smooth_roots[owner]) for owner in owners}
+        if len(owner_roots) > 1 or (len(owners) == 1 and include_boundary_edges):
+            visible.append(representative)
 
     return np.array(sorted(visible), dtype=np.uint32).reshape((-1, 2))
+
+
+def _shaded_face_buffers(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    *,
+    angle_tolerance_degrees: float = _EDGE_ANGLE_TOLERANCE_DEGREES,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Duplicate hard-edge vertices and build smooth normals per face patch."""
+    if len(faces) == 0:
+        return (
+            np.empty((0, 3), dtype=np.float32),
+            np.empty((0, 3), dtype=np.uint32),
+            np.empty((0, 3), dtype=np.float32),
+        )
+
+    normals, valid_normals = _face_normals(vertices, faces)
+    edge_faces, _edge_indices = _coordinate_edge_ownership(vertices, faces, valid_normals)
+    smooth_roots = _smooth_face_roots(
+        normals,
+        edge_faces,
+        angle_tolerance_degrees=angle_tolerance_degrees,
+    )
+
+    coordinate_tolerance = _coordinate_tolerance(vertices)
+    render_indices_by_key: dict[tuple[tuple[int, int, int], int], int] = {}
+    render_vertices: list[np.ndarray] = []
+    normal_sums: list[np.ndarray] = []
+    render_faces: list[tuple[int, int, int]] = []
+
+    for face_index, face in enumerate(faces):
+        if not valid_normals[face_index]:
+            continue
+
+        root = int(smooth_roots[face_index])
+        face_render_indices: list[int] = []
+        for vertex_index in face:
+            original_index = int(vertex_index)
+            key = (_vertex_key(vertices[original_index], coordinate_tolerance), root)
+            render_index = render_indices_by_key.get(key)
+            if render_index is None:
+                render_index = len(render_vertices)
+                render_indices_by_key[key] = render_index
+                render_vertices.append(vertices[original_index])
+                normal_sums.append(np.zeros(3, dtype=np.float32))
+
+            face_normal = normals[face_index]
+            if float(np.dot(normal_sums[render_index], face_normal)) < 0.0:
+                face_normal = -face_normal
+            normal_sums[render_index] = normal_sums[render_index] + face_normal
+            face_render_indices.append(render_index)
+
+        render_faces.append(
+            (face_render_indices[0], face_render_indices[1], face_render_indices[2])
+        )
+
+    if not render_vertices:
+        return (
+            np.empty((0, 3), dtype=np.float32),
+            np.empty((0, 3), dtype=np.uint32),
+            np.empty((0, 3), dtype=np.float32),
+        )
+
+    render_normals = np.array(normal_sums, dtype=np.float32)
+    lengths = np.linalg.norm(render_normals, axis=1)
+    valid = lengths > 1e-12
+    render_normals[valid] = render_normals[valid] / lengths[valid, None]
+    return (
+        np.array(render_vertices, dtype=np.float32),
+        np.array(render_faces, dtype=np.uint32),
+        render_normals,
+    )
 
 
 def _translation_matrix(offset: tuple[float, float, float] | np.ndarray) -> np.ndarray:
@@ -183,6 +343,7 @@ def _model_matrix(local_centre: np.ndarray, orientation: np.ndarray) -> np.ndarr
 def _make_canvas(
     face_vertices: list[np.ndarray],
     face_indices: list[np.ndarray],
+    face_normals: list[np.ndarray],
     face_rgb: list[tuple[float, float, float]],
     edge_vertices: list[np.ndarray],
     edge_indices: list[np.ndarray],
@@ -200,23 +361,31 @@ def _make_canvas(
 
     class _Canvas(canvas_base):
         def __init__(self) -> None:
-            super().__init__(title=title, keys="interactive", size=(900, 700))  # pyright: ignore[reportUnknownMemberType]
+            super().__init__(  # pyright: ignore[reportUnknownMemberType]
+                title=title,
+                keys="interactive",
+                size=(900, 700),
+                config={"samples": 4},
+            )
 
             self._program = gloo.Program(_VERT_SHADER, _FRAG_SHADER)
 
             # ── pack per-vertex position+color arrays ──────────────────────
             self._face_data: list[tuple[np.ndarray, object]] = []  # (packed_vertices, index_buffer)
-            for verts, indices, rgb in zip(face_vertices, face_indices, face_rgb, strict=True):
+            for verts, indices, normals, rgb in zip(
+                face_vertices, face_indices, face_normals, face_rgb, strict=True
+            ):
                 n = len(verts)
                 colors = np.tile(np.array(rgb, dtype=np.float32), (n, 1))
-                packed = np.hstack([verts, colors]).astype(np.float32)
+                packed = np.hstack([verts, normals, colors]).astype(np.float32)
                 self._face_data.append((packed, gloo.IndexBuffer(indices)))
 
             self._edge_data: list[tuple[np.ndarray, object]] = []
             for verts, indices in zip(edge_vertices, edge_indices, strict=True):
                 n = len(verts)
                 colors = np.tile(np.array(edge_rgb, dtype=np.float32), (n, 1))
-                packed = np.hstack([verts, colors]).astype(np.float32)
+                normals = np.tile(np.array((0.0, 0.0, 1.0), dtype=np.float32), (n, 1))
+                packed = np.hstack([verts, normals, colors]).astype(np.float32)
                 self._edge_data.append((packed, gloo.IndexBuffer(indices)))
 
             # ── bounding box ───────────────────────────────────────────────
@@ -235,7 +404,17 @@ def _make_canvas(
             self._mouse_button: int | None = None
             self._dragging = False
 
-            gloo.set_state(clear_color="white", depth_test=True)
+            self._program["u_light_direction"] = (0.2, 0.45, 0.9)
+            self._program["u_ambient_light"] = (0.38, 0.38, 0.38)
+            self._program["u_diffuse_light"] = (0.72, 0.72, 0.72)
+
+            gloo.set_state(
+                clear_color="white",
+                depth_test=True,
+                polygon_offset=(1, 1),
+                blend_func=("src_alpha", "one_minus_src_alpha"),
+                line_width=1.0,
+            )
 
             self._update_matrices()
             self.show()
@@ -255,15 +434,32 @@ def _make_canvas(
         def on_draw(self, event: object) -> None:
             gloo.clear(color=True, depth=True)
 
+            gloo.set_state(
+                blend=False,
+                depth_test=True,
+                depth_mask=True,
+                polygon_offset_fill=True,
+            )
+            self._program["u_lighting"] = 1.0
             for packed, ibuf in self._face_data:
                 self._program["a_position"] = packed[:, :3]
-                self._program["a_color"] = packed[:, 3:]
+                self._program["a_normal"] = packed[:, 3:6]
+                self._program["a_color"] = packed[:, 6:]
                 self._program.draw("triangles", ibuf)
 
+            gloo.set_state(
+                blend=True,
+                depth_test=True,
+                depth_mask=False,
+                polygon_offset_fill=False,
+            )
+            self._program["u_lighting"] = 0.0
             for packed, ibuf in self._edge_data:
                 self._program["a_position"] = packed[:, :3]
-                self._program["a_color"] = packed[:, 3:]
+                self._program["a_normal"] = packed[:, 3:6]
+                self._program["a_color"] = packed[:, 6:]
                 self._program.draw("lines", ibuf)
+            gloo.set_state(depth_mask=True)
 
         def on_resize(self, event: object) -> None:
             self._update_matrices()
@@ -305,12 +501,13 @@ def _make_canvas(
 
 def _prepare_mesh(
     mesh: _MeshLike, face_rgb: tuple[float, float, float], edge_rgb: tuple[float, float, float]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return (face_vertices, face_indices, edge_vertices, edge_indices)."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return (face_vertices, face_indices, face_normals, edge_vertices, edge_indices)."""
     verts = np.array(mesh.vertices, dtype=np.float32)
     faces = np.array(mesh.faces, dtype=np.uint32)
     edges = _orientation_edges(verts, faces)
-    return verts, faces, verts, edges
+    render_vertices, render_faces, render_normals = _shaded_face_buffers(verts, faces)
+    return render_vertices, render_faces, render_normals, verts, edges
 
 
 def _mesh_from_object(mesh: object, *, tolerance: float) -> _MeshLike:
@@ -330,13 +527,20 @@ def vispy_view_mesh(
 
     mesh_like = _mesh_from_object(mesh, tolerance=tolerance)
 
-    fv, fi, ev, ei = _prepare_mesh(
+    fv, fi, fn, ev, ei = _prepare_mesh(
         mesh_like,
         _hex_to_rgb(MESH_COLOR),
         _hex_to_rgb(MESH_EDGE_COLOR),
     )
     _make_canvas(
-        [fv], [fi], [_hex_to_rgb(MESH_COLOR)], [ev], [ei], _hex_to_rgb(MESH_EDGE_COLOR), title=title
+        [fv],
+        [fi],
+        [fn],
+        [_hex_to_rgb(MESH_COLOR)],
+        [ev],
+        [ei],
+        _hex_to_rgb(MESH_EDGE_COLOR),
+        title=title,
     )
     app.run()
 
@@ -355,15 +559,17 @@ def vispy_view_meshes(
 
     fvs: list[np.ndarray] = []
     fis: list[np.ndarray] = []
+    fns: list[np.ndarray] = []
     evs: list[np.ndarray] = []
     eis: list[np.ndarray] = []
     for mesh in meshes:
         mesh_like = _mesh_from_object(mesh, tolerance=tolerance)
-        fv, fi, ev, ei = _prepare_mesh(mesh_like, face_rgb, edge_rgb)
+        fv, fi, fn, ev, ei = _prepare_mesh(mesh_like, face_rgb, edge_rgb)
         fvs.append(fv)
         fis.append(fi)
+        fns.append(fn)
         evs.append(ev)
         eis.append(ei)
 
-    _make_canvas(fvs, fis, [face_rgb] * len(fvs), evs, eis, edge_rgb, title=title)
+    _make_canvas(fvs, fis, fns, [face_rgb] * len(fvs), evs, eis, edge_rgb, title=title)
     app.run()

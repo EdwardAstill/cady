@@ -1,6 +1,6 @@
 import pytest
 
-from cady import DxfDrawing, SceneError, StlMesh, WriteError, circle, prism
+from cady import DxfDrawing, ReadError, SceneError, StlMesh, WriteError, circle, prism
 
 
 def test_geom_valueerror() -> None:
@@ -16,3 +16,7 @@ def test_scene_error() -> None:
 def test_writer_error() -> None:
     with pytest.raises(WriteError):
         StlMesh().write("/tmp/empty.stl")
+
+
+def test_reader_error() -> None:
+    assert issubclass(ReadError, Exception)
