@@ -1,7 +1,14 @@
 # STEP (ISO 10303-21) cheatsheet
 
-Working notes for the future STEP writer. Pulled from ISO 10303-21
-spec + reverse-engineered from CadQuery/build123d STEP output.
+## Overview
+
+Working notes for maintaining the STEP writer. Pulled from ISO 10303-21 spec
++ reverse-engineered from CadQuery/build123d STEP output.
+
+This page is an implementation reference, not the user-facing file guide. For
+format support and public APIs, see [File formats](index.md).
+
+## Details
 
 ## File structure
 

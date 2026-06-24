@@ -1,7 +1,14 @@
 # DXF format cheatsheet
 
-Working notes for implementing the DXF writer. Pulled from Autodesk
-DXF reference + ezdxf docs as crib sheet.
+## Overview
+
+Working notes for maintaining the DXF writer. Pulled from Autodesk DXF
+reference + ezdxf docs as crib sheet.
+
+This page is an implementation reference, not the user-facing file guide. For
+format support and public APIs, see [File formats](index.md).
+
+## Details
 
 ## File structure
 

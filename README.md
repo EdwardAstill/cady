@@ -4,6 +4,10 @@ Small CAD package for building format-blind geometry, emitting DXF R2018,
 binary/ASCII STL, or AP214 STEP, and extracting elementary surface data from
 STEP files.
 
+Documentation starts at [docs/index.md](docs/index.md). The README gives a
+quick tour; the docs index links to focused sections with overview and detail
+pages.
+
 cady has the staged v1 feature set:
 
 - immutable 2D and 3D geometry values,
@@ -134,10 +138,10 @@ Splines remain analytic in the numeric layer as `ArrayBezierSpline2` control
 points. They are only discretised when you call an explicit sampling,
 tessellation, export, or visualisation function.
 
-Detailed references:
+More detail:
 
-- [Domain objects](docs/objects/domain-objects.md)
-- [Numeric objects](docs/objects/numeric-objects.md)
+- [Architecture](docs/architecture.md)
+- [API guide](docs/api.md)
 
 ## Layer Boundaries
 
@@ -178,8 +182,8 @@ rotated = mesh.transformed(
 
 More detail:
 
-- [Array operations](docs/operations/array-ops.md)
-- [Tessellation](docs/operations/tessellation.md)
+- [Architecture](docs/architecture.md)
+- [Development](docs/development.md)
 
 ## Plotting And Visualisation
 

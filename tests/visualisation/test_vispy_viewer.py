@@ -438,6 +438,21 @@ def test_polyline_indices_connect_consecutive_vertices() -> None:
     assert _polyline_indices(1).shape == (0, 2)
 
 
+def test_vertex_attributes_are_contiguous_for_vispy_struct_uploads() -> None:
+    from cady.visualisation.vispy_viewer import _vertex_attributes
+
+    packed = np.arange(36, dtype=np.float32).reshape((4, 9))
+
+    positions, normals, colors = _vertex_attributes(packed[:, :3], packed[:, 3:6], packed[:, 6:])
+
+    assert positions.flags.c_contiguous
+    assert normals.flags.c_contiguous
+    assert colors.flags.c_contiguous
+    np.testing.assert_array_equal(positions, packed[:, :3])
+    np.testing.assert_array_equal(normals, packed[:, 3:6])
+    np.testing.assert_array_equal(colors, packed[:, 6:])
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("vispy") is None,
     reason="VisPy not installed.",

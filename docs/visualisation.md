@@ -1,11 +1,15 @@
 # Plotting And Visualisation
 
+## Overview
+
 `cady.plotting` owns static plot and figure outputs. `cady.visualisation` owns
 interactive object viewing. Both depend on domain and numeric geometry, while
 the core `cady` import stays independent of viewer libraries.
 
 Install `cady[plotting]` for Matplotlib plots and `cady[visualisation]` for
 the interactive VisPy viewer.
+
+## Details
 
 ## 2D Plotting
 

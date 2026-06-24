@@ -1,9 +1,13 @@
 # Note Jun 23
 
+## Overview
+
 This note records the 3D viewer issue investigated on June 23, 2026: circular
 holes in extruded plates showed jagged rims, apparent gaps on the top face,
 and see-through side walls. The symptoms appeared in the VisPy viewer, but the
 main fault was in tessellation rather than only in rendering.
+
+## Details
 
 ## Symptoms
 

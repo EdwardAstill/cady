@@ -239,6 +239,18 @@ def _prepare_polyline(vertices: LineVertices) -> tuple[np.ndarray, np.ndarray]:
     return points, _polyline_indices(len(points))
 
 
+def _vertex_attributes(
+    positions: np.ndarray,
+    normals: np.ndarray,
+    colors: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    return (
+        np.ascontiguousarray(positions, dtype=np.float32),
+        np.ascontiguousarray(normals, dtype=np.float32),
+        np.ascontiguousarray(colors, dtype=np.float32),
+    )
+
+
 def _make_canvas(
     face_vertices: list[np.ndarray],
     face_indices: list[np.ndarray],
@@ -269,7 +281,7 @@ def _make_canvas(
 
             self._program = gloo.Program(_VERT_SHADER, _FRAG_SHADER)
 
-            self._face_data: list[tuple[np.ndarray, object]] = []  # (packed_vertices, index_buffer)
+            self._face_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
             for verts, indices, normals, rgb in zip(
                 face_vertices, face_indices, face_normals, face_rgb, strict=True
             ):
@@ -277,18 +289,22 @@ def _make_canvas(
                     continue
                 n = len(verts)
                 colors = np.tile(np.array(rgb, dtype=np.float32), (n, 1))
-                packed = np.hstack([verts, normals, colors]).astype(np.float32)
-                self._face_data.append((packed, gloo.IndexBuffer(indices)))
+                positions, normal_data, color_data = _vertex_attributes(verts, normals, colors)
+                self._face_data.append(
+                    (positions, normal_data, color_data, gloo.IndexBuffer(indices))
+                )
 
-            self._edge_data: list[tuple[np.ndarray, object]] = []
+            self._edge_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
             for verts, indices in zip(edge_vertices, edge_indices, strict=True):
                 if len(indices) == 0:
                     continue
                 n = len(verts)
                 colors = np.tile(np.array(edge_rgb, dtype=np.float32), (n, 1))
                 normals = np.tile(np.array((0.0, 0.0, 1.0), dtype=np.float32), (n, 1))
-                packed = np.hstack([verts, normals, colors]).astype(np.float32)
-                self._edge_data.append((packed, gloo.IndexBuffer(indices)))
+                positions, normal_data, color_data = _vertex_attributes(verts, normals, colors)
+                self._edge_data.append(
+                    (positions, normal_data, color_data, gloo.IndexBuffer(indices))
+                )
 
             geometry_vertices = [
                 verts for verts in [*face_vertices, *edge_vertices] if len(verts) > 0
@@ -309,11 +325,9 @@ def _make_canvas(
                 np.array((0.0, 0.0, 1.0), dtype=np.float32),
                 (len(axis_vertices), 1),
             )
-            self._axis_colors = axis_colors
-            self._axis_normals = axis_normals
-            self._axis_packed = np.hstack([axis_vertices, axis_normals, axis_colors]).astype(
-                np.float32
-            )
+            self._axis_positions = np.ascontiguousarray(axis_vertices, dtype=np.float32)
+            self._axis_colors = np.ascontiguousarray(axis_colors, dtype=np.float32)
+            self._axis_normals = np.ascontiguousarray(axis_normals, dtype=np.float32)
             self._axis_index_buffer = gloo.IndexBuffer(axis_indices)
             self._show_local_axes = False
 
@@ -345,9 +359,7 @@ def _make_canvas(
                 self._local_centre,
                 length,
             )
-            self._axis_packed = np.hstack(
-                [axis_vertices, self._axis_normals, self._axis_colors]
-            ).astype(np.float32)
+            self._axis_positions = np.ascontiguousarray(axis_vertices, dtype=np.float32)
 
         def _update_matrices(self) -> None:
             width, height = cast(tuple[int, int], self.physical_size)
@@ -375,10 +387,10 @@ def _make_canvas(
                 polygon_offset_fill=True,
             )
             self._program["u_lighting"] = 1.0
-            for packed, ibuf in self._face_data:
-                self._program["a_position"] = packed[:, :3]
-                self._program["a_normal"] = packed[:, 3:6]
-                self._program["a_color"] = packed[:, 6:]
+            for positions, normals, colors, ibuf in self._face_data:
+                self._program["a_position"] = positions
+                self._program["a_normal"] = normals
+                self._program["a_color"] = colors
                 self._program.draw("triangles", ibuf)
 
             gloo.set_state(
@@ -389,10 +401,10 @@ def _make_canvas(
                 line_width=1.0,
             )
             self._program["u_lighting"] = 0.0
-            for packed, ibuf in self._edge_data:
-                self._program["a_position"] = packed[:, :3]
-                self._program["a_normal"] = packed[:, 3:6]
-                self._program["a_color"] = packed[:, 6:]
+            for positions, normals, colors, ibuf in self._edge_data:
+                self._program["a_position"] = positions
+                self._program["a_normal"] = normals
+                self._program["a_color"] = colors
                 self._program.draw("lines", ibuf)
             if self._show_local_axes:
                 gloo.set_state(
@@ -402,9 +414,9 @@ def _make_canvas(
                     polygon_offset_fill=False,
                     line_width=3.0,
                 )
-                self._program["a_position"] = self._axis_packed[:, :3]
-                self._program["a_normal"] = self._axis_packed[:, 3:6]
-                self._program["a_color"] = self._axis_packed[:, 6:]
+                self._program["a_position"] = self._axis_positions
+                self._program["a_normal"] = self._axis_normals
+                self._program["a_color"] = self._axis_colors
                 self._program.draw("lines", self._axis_index_buffer)
             gloo.set_state(depth_mask=True, line_width=1.0)
 
