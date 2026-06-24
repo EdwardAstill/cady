@@ -4,7 +4,7 @@ from typing import cast
 
 import numpy as np
 
-from cady.numeric.types import FaceArray, Matrix3, Matrix4, PointArray2, PointArray3
+from cady.numeric.types import EdgeArray, FaceArray, Matrix3, Matrix4, PointArray2, PointArray3
 
 
 def _as_float_array(value: object, *, name: str) -> np.ndarray:
@@ -41,6 +41,17 @@ def as_faces(value: object, *, name: str = "faces") -> FaceArray:
         raise ValueError(f"{name} must have rank 2")
     if raw.shape[1] != 3:
         raise ValueError(f"{name} must have shape (n, 3)")
+    if not np.all(raw == np.floor(raw)):
+        raise ValueError(f"{name} must contain integer indices")
+    return np.array(raw, dtype=np.int64, copy=True)
+
+
+def as_edges(value: object, *, name: str = "edges") -> EdgeArray:
+    raw = _as_float_array(value, name=name)
+    if raw.ndim != 2:
+        raise ValueError(f"{name} must have rank 2")
+    if raw.shape[1] != 2:
+        raise ValueError(f"{name} must have shape (n, 2)")
     if not np.all(raw == np.floor(raw)):
         raise ValueError(f"{name} must contain integer indices")
     return np.array(raw, dtype=np.int64, copy=True)

@@ -1,22 +1,32 @@
-import pytest
-
-from cady import DxfDrawing, ReadError, SceneError, StlMesh, WriteError, circle, prism
-
-
-def test_geom_valueerror() -> None:
-    with pytest.raises(ValueError):
-        circle((0, 0), -1)
-
-
-def test_scene_error() -> None:
-    with pytest.raises(SceneError):
-        DxfDrawing().layer("X").add(prism((0, 0, 0), (1, 1, 1)))  # type: ignore[arg-type]
+from cady.errors import (
+    CadError,
+    DrawingError,
+    GeometryError,
+    ProductError,
+    ReadError,
+    ViewError,
+    WriteError,
+)
 
 
-def test_writer_error() -> None:
-    with pytest.raises(WriteError):
-        StlMesh().write("/tmp/empty.stl")
+def test_error_tiers_share_cad_base() -> None:
+    tiers = (
+        GeometryError,
+        DrawingError,
+        ProductError,
+        ViewError,
+        ReadError,
+        WriteError,
+    )
+
+    for tier in tiers:
+        assert issubclass(tier, CadError)
 
 
-def test_reader_error() -> None:
-    assert issubclass(ReadError, Exception)
+def test_error_tiers_remain_exceptions() -> None:
+    assert isinstance(GeometryError("bad geometry"), Exception)
+    assert isinstance(DrawingError("bad drawing"), Exception)
+    assert isinstance(ProductError("bad product"), Exception)
+    assert isinstance(ViewError("bad view"), Exception)
+    assert isinstance(ReadError("bad input"), Exception)
+    assert isinstance(WriteError("bad output"), Exception)

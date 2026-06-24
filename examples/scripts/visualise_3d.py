@@ -1,97 +1,134 @@
-"""Interactive 3D visualisation demo.
-
-Opens a VisPy window with orbit/pan/zoom controls for each shape.
+"""Open the 3D examples in the VisPy scene viewer.
 
 Usage:
-    PYTHONPATH=src python examples/scripts/visualise_3d.py
-    PYTHONPATH=src python examples/scripts/visualise_3d.py --shape plate
-    PYTHONPATH=src python examples/scripts/visualise_3d.py --shape model
-    PYTHONPATH=src python examples/scripts/visualise_3d.py --shape sphere
-
-Controls:
-    Left-drag   → orbit (rotate around object)
-    Middle-drag → pan (slide the view)
-    Scroll      → zoom in/out
-    Close window → move to next shape (or exit if it was the last)
+    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py
+    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape plate
+    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape assembly
+    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape sphere
 """
 
 from __future__ import annotations
 
 import argparse
 
-from cady import Model, circle, prism, rectangle, sphere
+from example_geometry import (
+    plate_part,
+    production_assembly,
+    scene_for_target,
+    scene_summary,
+)
+
+from cady import Assembly, Body3D, Part, box, sphere
+from cady.visualisation import view_scene
 
 
-def build_plate():
-    """A plate with a circular hole, extruded."""
-    profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-    return profile.extrude("+z", 0.04)
+def build_plate() -> Part:
+    return plate_part()
 
 
-def build_model():
-    """A model with two parts: a plate and a prism stud."""
-    plate = rectangle((0, 0), (1.0, 0.6))
-    hole = circle((0.5, 0.3), 0.12)
-    profile = plate.with_hole(hole)
-
-    model = Model("demo_model")
-    model.part("plate").add(profile.extrude("+z", 0.04))
-    model.part("stud").add(prism((0.3, 0.15, 0.04), (0.4, 0.3, 0.06)))
-    return model
+def build_assembly() -> Assembly:
+    return production_assembly()
 
 
 SHAPES: dict[str, str] = {
     "plate": "Extruded plate with hole",
-    "prism": "Plain prism",
+    "box": "Plain box",
     "sphere": "Sphere",
-    "model": "Two-part model (plate + stud)",
+    "assembly": "Two-part assembly (plate + pin)",
     "all": "All shapes, one after another",
 }
 
 
-def _try_visualise(label: str, obj: object, *, tolerance: float) -> None:  # noqa: B027 — obj used via .visualise()
-    print(f"\n  → {label}")
-    print("    Opening window… (close it to continue)")
-    try:
-        obj.visualise(tolerance=tolerance)  # type: ignore[attr-defined]
-    except ImportError:
-        print("    (vispy not installed — skipping interactive viewer)")
+def _target_for_shape(shape: str) -> object:
+    if shape == "plate":
+        return build_plate()
+    if shape == "box":
+        return box(1.0, 0.6, 0.4)
+    if shape == "sphere":
+        return sphere(0.5, centre=(0.5, 0.3, 0.5))
+    if shape == "assembly":
+        return build_assembly()
+    raise ValueError(f"unknown shape: {shape}")
+
+
+def _describe_target(label: str, target: object, *, tolerance: float) -> object:
+    key = label.lower().replace(" ", "_")
+    scene = scene_for_target(target, name=key)
+    print()
+    print(label)
+    print(scene_summary(scene).rstrip())
+    print(_mesh_summary(target, tolerance=tolerance))
+    return scene
+
+
+def _mesh_summary(target: object, *, tolerance: float) -> str:
+    meshable = target
+    if isinstance(target, Part | Assembly | Body3D):
+        mesh = target.to_mesh(tolerance=tolerance)
+    else:
+        to_mesh = getattr(meshable, "to_mesh", None)
+        if not callable(to_mesh):
+            return "mesh: unavailable"
+        mesh = to_mesh(tolerance=tolerance)
+
+    lower, upper = mesh.bounds()
+    lower_point = _point_tuple(lower)
+    upper_point = _point_tuple(upper)
+    return (
+        f"mesh: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces, "
+        f"bounds={lower_point} to {upper_point}"
+    )
+
+
+def _point_tuple(value: object) -> tuple[float, float, float]:
+    point = value.tuple() if hasattr(value, "tuple") else value
+    x, y, z = point
+    return (float(x), float(y), float(z))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Interactive 3D visualisation demo",
+        description="Build an interactive 3D viewer for the example geometry",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Controls: left-drag=orbit, middle-drag=pan, scroll=zoom, close=next/exit",
     )
     parser.add_argument(
         "--shape",
         choices=list(SHAPES),
         default="all",
-        help="Which shape to visualise (default: all)",
+        help="Which shape to view (default: all)",
     )
     parser.add_argument("--tolerance", type=float, default=1e-3)
+    parser.add_argument(
+        "--no-view",
+        action="store_true",
+        help="Print scene and mesh summaries without opening a VisPy window",
+    )
     args = parser.parse_args()
 
     tolerance = args.tolerance
     choice = args.shape
 
-    print("cady interactive 3D viewer")
-    print("  backend: vispy")
+    print("cady 3D scene demo")
     print(f"  tolerance: {tolerance}")
     print(f"  shape: {choice}")
 
-    if choice in ("plate", "all"):
-        _try_visualise(SHAPES["plate"], build_plate(), tolerance=tolerance)
+    selected = ("plate", "box", "sphere", "assembly") if choice == "all" else (choice,)
+    scenes: list[object] = []
+    for shape in selected:
+        scene = _describe_target(
+            SHAPES[shape],
+            _target_for_shape(shape),
+            tolerance=tolerance,
+        )
+        scenes.append(scene)
 
-    if choice in ("prism", "all"):
-        _try_visualise(SHAPES["prism"], prism((0, 0, 0), (1.0, 0.6, 0.4)), tolerance=tolerance)
+    if args.no_view:
+        print("\nVisPy viewer skipped.")
+        print("Done.")
+        return
 
-    if choice in ("sphere", "all"):
-        _try_visualise(SHAPES["sphere"], sphere((0, 0, 0), 0.5), tolerance=tolerance)
-
-    if choice in ("model", "all"):
-        _try_visualise(SHAPES["model"], build_model(), tolerance=tolerance)
+    for scene in scenes:
+        view_scene(scene, tolerance=tolerance)
 
     print("\nDone.")
 

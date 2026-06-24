@@ -1,17 +1,14 @@
 # Development
 
-## Overview
-
-Keep changes aligned with cady's boundaries: semantic domain objects,
-primitive ops functions, validated numeric arrays, and small file writers.
-
-## Details
+Keep changes aligned with cady's package boundaries: immutable authoring
+values, primitive ops functions, validated numeric arrays, and small file
+facades.
 
 ## Environment
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e . -r requirements-dev.txt
+.venv/bin/pip install --group dev -e .
 ```
 
 Optional extras:
@@ -19,6 +16,7 @@ Optional extras:
 ```bash
 .venv/bin/pip install -e '.[plotting]'
 .venv/bin/pip install -e '.[visualisation]'
+.venv/bin/pip install -e '.[all]'
 ```
 
 ## Gates
@@ -32,42 +30,68 @@ Optional extras:
 ## Layout
 
 ```text
-src/cady/build         factories
-src/cady/domain        semantic objects
-src/cady/ops           geometry algorithms
-src/cady/numeric       evaluated geometry
-src/cady/files         DXF/STL/STEP I/O
-src/cady/plotting      optional static plotting
-src/cady/visualisation optional interactive viewing
-tests                  regression and convention tests
-docs                   user and contributor docs
+src/cady/geometry2d
+src/cady/geometry3d
+src/cady/drawing
+src/cady/product
+src/cady/view
+src/cady/document.py
+src/cady/numeric
+src/cady/ops
+src/cady/files
+src/cady/visualisation
+tests
+docs
+examples
 ```
 
-## Adding Features
+## Adding 2D geometry
 
-For a 2D shape, add the frozen domain dataclass, implement
-`bounds()`, `points()`, `close()`, `_transform2()`, and
-`to_array(tolerance=...)`, then add public exports and tests.
+Add the frozen value object under `cady.geometry2d`, implement:
 
-For a 3D shape, add the frozen domain dataclass, implement `bounds()`,
-`_transform3()`, and `to_array(tolerance=...)`, then add tessellation, public
-exports, and tests. Add STEP support only when semantic STEP export is needed.
+- `bounds()`
+- `points()`
+- `to_array(tolerance=...)`
 
-For ops functions, accept primitive values only. Do not import domain objects
-from core ops modules.
+Add a factory only when construction is common enough to justify one. Re-export
+the public name from `cady.geometry2d.__init__` and `cady.__init__`, then add
+tests under `tests/geometry2d`.
 
-For numeric types, validate arrays in `__post_init__` with
-`cady.numeric.validation` helpers.
+## Adding 3D geometry
 
-For file I/O, preserve semantic entities where the target format supports
-them and tessellate only where the format requires evaluated geometry.
+Prefer features on `Body3D` or dedicated values under `cady.geometry3d`.
+Meshable objects should expose:
 
-## Common Checks
+- `to_mesh(tolerance=...)` when they are 3D authoring objects;
+- `to_array(tolerance=...)` when they are already semantic mesh values.
 
-Import-boundary failures usually mean a module-scope dependency crossed the
-domain/numeric/ops/files boundary.
+Add tests under `tests/geometry3d`, `tests/product`, and `tests/files` when the
+new behavior affects export.
 
-Cracked curved meshes usually mean caps and side walls do not share boundary
-vertices, hole loops are wound incorrectly, or closed-solid edges are not
-owned by exactly two triangles.
+## Adding ops functions
 
+Ops functions must accept primitive values: arrays, tuples/lists, and scalars.
+They should not import `cady.geometry2d`, `cady.geometry3d`, `cady.drawing`,
+`cady.product`, or `cady.view`.
+
+## Adding numeric types
+
+Numeric types are frozen dataclasses with NumPy array fields. Validate arrays in
+`__post_init__` with `cady.numeric.validation` helpers and provide
+`.transformed(...)` where transforms make sense.
+
+## Adding file I/O
+
+Keep file modules import-light. Prefer public methods such as
+`to_array(tolerance=...)` and `to_mesh(tolerance=...)` rather than inspecting
+internal authoring state. Preserve semantic file entities where the format has
+one, and sample only when the file format requires evaluated geometry.
+
+## Common checks
+
+Import-boundary failures usually mean a module-scope dependency crossed from
+numeric/ops/files into an authoring or viewer package.
+
+Mesh failures usually mean cap triangulation, side wall winding, or transform
+composition changed. Add a small regression test around bounds and face counts
+before widening the implementation.

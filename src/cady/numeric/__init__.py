@@ -9,7 +9,14 @@ from cady.numeric.curves2d import (
 from cady.numeric.mesh3d import ArrayMesh3, ArrayPolyline3
 from cady.numeric.paths2d import ArrayPolygon2, ArrayPolyline2
 from cady.numeric.transform import Pose3, Transform2, Transform3
-from cady.numeric.validation import as_faces, as_matrix3, as_matrix4, as_points2, as_points3
+from cady.numeric.validation import (
+    as_edges,
+    as_faces,
+    as_matrix3,
+    as_matrix4,
+    as_points2,
+    as_points3,
+)
 
 __all__ = [
     "ArrayBezierSpline2",
@@ -20,6 +27,7 @@ __all__ = [
     "Pose3",
     "Transform2",
     "Transform3",
+    "as_edges",
     "as_faces",
     "as_matrix3",
     "as_matrix4",

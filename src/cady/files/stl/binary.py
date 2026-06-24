@@ -4,7 +4,7 @@ import struct
 from pathlib import Path
 
 from cady.errors import WriteError
-from cady.ops.tessellate import Triangle3, normal_for_triangle
+from cady.files.stl.ascii import Triangle3, normal_for_triangle
 
 
 def write_binary_stl(triangles: list[Triangle3], path: Path) -> None:

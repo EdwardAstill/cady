@@ -1,182 +1,171 @@
 # Object Model
 
-## Overview
+cady uses immutable value objects. Methods that sound mutating, such as
+`.add(...)`, `.with_body(...)`, and `.with_metadata(...)`, return new objects.
 
-cady has two kinds of objects:
-
-- authoring objects, which preserve CAD meaning;
-- evaluated objects, which hold sampled points, polygons, meshes, and
-  transforms for calculation or output.
-
-Most user code should create authoring objects, organise them in a `Model`,
-and let cady convert to evaluated geometry only at explicit boundaries.
-
-## Details
-
-## Object Hierarchy
+## Layers of objects
 
 ```text
-Model
-  metadata -> ModelMetadata
-  drawings -> Drawing2D values, by name
-    Drawing2D
-      layers -> ModelLayer values, by name
-        ModelLayer
-          shapes -> Shape2D values
-      annotations -> text, hatches, blocks, inserts, dimensions
-  parts -> Part values, by name
-    Part
-      solids -> Shape3D values
-  assemblies -> Assembly values, by name
-    Assembly
-      part references -> Part names
+Document
+  drawings -> named Drawing2D values
+  parts -> named Part values
+  assemblies -> named Assembly values
+  scenes -> named Scene values
+
+Drawing2D
+  layers -> Layer values
+  entities -> DrawingEntity, Text2D, Hatch2D, Insert2D, dimensions
+  blocks -> BlockDefinition values
+  dim_styles -> DimStyle values
+
+Part
+  bodies -> meshable Body3D, Mesh3D, ArrayMesh3, or compatible objects
+  material
+  metadata
+
+Assembly
+  part instances
+  assembly instances
+
+Scene
+  scene objects
+  cameras
+  lights
+  display styles
 ```
 
-`Drawing2D`, `Part`, and `Assembly` are peers under `Model`. A drawing does
-not contain parts, and a part does not contain drawings. A drawing is for 2D
-DXF-style output; a part is for 3D STL/STEP-style output; an assembly is a
-named list of part references.
+`Document` is a registry. It does not own a hidden modelling kernel and it is
+not required for normal drawing, part, assembly, or scene work.
 
-## Creation Flow
+## 2D geometry
 
-Factory functions create shapes. Model methods create or return containers.
-Shapes are then added to the right container:
+2D authoring objects live in `cady.geometry2d` and are re-exported from
+`cady`:
 
-```text
-line(...) / circle(...) / rectangle(...) / polyline(...) / spline(...)
-  -> Shape2D
-      -> model.drawing("name").layer("LAYER").add(shape)
-      -> shape.to_array(tolerance=...) for numeric 2D work
+- `Line2D`, `Arc2D`, `Polyline2D`, and `Spline2D` are open curves.
+- `Circle2D`, `Ellipse2D`, and `ClosedPolyline2D` are closed curves.
+- `Profile2D` represents a filled region with one outer closed curve and zero
+  or more closed holes.
 
-shape2d.extrude(...) / prism(...) / sphere(...)
-  -> Shape3D
-      -> model.part("name").add(solid)
-      -> solid.to_array(tolerance=...) for numeric 3D work
-
-model.assembly("name").add(part)
-  -> stores the part name, not a copy of the part geometry
-```
-
-The common path looks like this:
+Factories cover the common cases:
 
 ```python
-from cady import Model, circle, rectangle
+from cady import Profile2D, circle2d, line2d, polyline2d, profile_rectangle
 
-profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-solid = profile.extrude("+z", 0.04)
-
-model = Model("plate")
-model.drawing("front").layer("PLATE").add(profile)
-model.part("plate").add(solid)
+outline = profile_rectangle(4.0, 2.0, origin=(1.0, 1.0))
+hole = circle2d((3.0, 2.0), 0.4)
+profile = Profile2D(outline.outer, holes=(hole,))
+edge = line2d((0.0, 0.0), (1.0, 0.0))
 ```
 
-## Authoring Objects
+`Profile2D.to_array(tolerance=...)` returns an `ArrayPolygon2`. Open curves
+return `ArrayPolyline2`.
 
-`Vec2` and `Vec3` are coordinate values. Factories accept plain tuples and
-promote them to vectors.
+## 3D geometry
 
-`Shape2D` objects are 2D geometry:
+3D authoring objects live in `cady.geometry3d`:
 
-- `Line` and `Arc` are open curves;
-- `Circle`, `Rectangle`, and closed `Polyline` values are closed profiles;
-- `Spline` stores Bezier control points;
-- `Path` joins open segments into one curve.
+- `Frame3D` places local 2D coordinates in 3D space.
+- `Face3D` places a profile or point loop on a frame.
+- `Body3D` stores meshable primitive/profile/extrude features.
+- `Mesh3D` stores evaluated vertices with triangle face indices and optional
+  explicit edge indices for wire geometry.
 
-Closed 2D shapes can carry holes:
+Convenience primitives return `Body3D`:
 
 ```python
-profile = rectangle((0, 0), (1, 0.6)).with_hole(circle((0.5, 0.3), 0.1))
+from cady import Body3D, Part, box, cylinder, sphere
+
+plate_body = Body3D.from_profile(profile).extrude(0.04)
+box_body = box(1.0, 0.6, 0.04)
+pin_body = cylinder(0.05, 0.08)
+ball = sphere(0.5, centre=(0.0, 0.0, 0.5))
+
+part = Part("plate").with_body(plate_body)
+mesh = part.to_mesh(tolerance=1e-3)
 ```
 
-Closed 2D shapes can become 3D solids:
+`Body3D.to_mesh(tolerance=...)` returns `Mesh3D`. `Part.to_mesh(...)` and
+`Assembly.to_mesh(...)` return `ArrayMesh3`.
+
+## Drawings
+
+`Drawing2D` is the 2D drafting object used by the DXF facade:
 
 ```python
-solid = profile.extrude("+z", 0.04)
+from cady import Drawing2D
+
+drawing = (
+    Drawing2D("front", units="m")
+    .add_layer("PLATE", color=7)
+    .add_layer("CENTER", color=3, linetype="CENTER")
+    .add(profile.outer, layer="PLATE")
+    .add(hole, layer="PLATE")
+    .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
+    .linear_dimension((0.0, 0.0), (1.0, 0.0), offset=-0.08)
+)
 ```
 
-`Shape3D` objects are 3D geometry:
+The drawing model includes hatches, blocks, inserts, and dimensions. The
+current DXF writer emits the basic geometry/text subset described in
+[File formats](files/index.md).
 
-- `Prism` is a box-like solid;
-- `Sphere` is a spherical solid;
-- `Extrusion` is a closed 2D profile swept along an axis;
-- `Revolution` is a profile revolved around an axis.
+## Parts and assemblies
 
-Geometry values are immutable. Transforms and composition methods return new
-geometry instead of changing the original.
-
-## Model Containers
-
-`Drawing2D` is for 2D output. It contains named layers, and those layers hold
-2D shapes. Drawings can also contain text, hatches, blocks, inserts, and
-dimensions.
+`Part` names one manufacturable item. `Assembly` places parts and
+subassemblies without merging their geometry:
 
 ```python
-front = model.drawing("front")
-front.layer("PLATE", color=7).add(profile)
-front.layer("SECTION").hatch(profile)
-front.add_text("PLATE", at=(0.02, 0.02), height=0.03)
+from cady import Assembly, Part, box
+
+plate = Part("plate").with_body(plate_body)
+pin = Part("pin").with_body(box(0.1, 0.1, 0.08))
+
+assembly = (
+    Assembly("production_plate")
+    .add(plate, name="plate")
+    .add(pin, name="pin", pose=(0.45, 0.25, 0.04))
+)
+
+flattened = assembly.flatten()
+mesh = assembly.to_mesh(tolerance=1e-3)
 ```
 
-`Part` is for 3D output. It contains solids:
+An instance `pose` may be `None`, a `Transform3`, a `Pose3`-like object with
+`to_transform3()`, or a 3D translation tuple.
+
+## Scenes
+
+`Scene` is for viewing and presentation state:
 
 ```python
-model.part("plate").add(solid)
+from cady import Camera, DirectionalLight, DisplayStyle, Scene
+
+scene = (
+    Scene("review")
+    .add(part, style=DisplayStyle(color=(0.74, 0.78, 0.82)))
+    .with_camera(
+        Camera.perspective(position=(1.7, -1.6, 0.9), target=(0.5, 0.3, 0.05)),
+        name="iso",
+    )
+    .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.6))
+)
 ```
 
-`Assembly` stores named part references for model organisation. It is not a
-boolean engine or a placement system.
+Scenes do not change the CAD truth. They reference targets and add view-specific
+cameras, lights, poses, styles, and metadata.
 
-`Model` is the public top-level container. It owns drawings, parts,
-assemblies, and metadata, and exposes the main writers:
+## Numeric objects
 
-```python
-model.write_dxf("plate.dxf")
-model.write_stl("plate.stl")
-model.write_step("plate.step")
-```
+The numeric package stores evaluated arrays:
 
-## Evaluated Objects
+- `ArrayPolyline2`
+- `ArrayPolygon2`
+- `ArrayPolyline3`
+- `ArrayMesh3`
+- `Transform2`
+- `Transform3`
+- `Pose3`
 
-Evaluated objects live in `cady.numeric`. They are useful once geometry needs
-to become arrays:
-
-- `ArrayPolyline2` stores sampled 2D vertices;
-- `ArrayPolygon2` stores a filled outer loop and holes;
-- `ArrayMesh3` stores vertices and triangular faces;
-- `Transform2` and `Transform3` store matrix transforms.
-
-Create evaluated geometry explicitly:
-
-```python
-profile_array = profile.to_array(tolerance=1e-3)
-mesh = solid.to_array(tolerance=1e-3)
-```
-
-Tolerance matters because circles, arcs, splines, spheres, extrusions, and
-revolutions need sampling before they can become polylines or meshes.
-
-## File Objects
-
-Use `Model` first. Lower-level file objects exist for one-format workflows:
-
-- `DxfDrawing` is a direct DXF scene object;
-- `StlMesh` is a direct STL triangle collector;
-- `cady.files.dxf`, `cady.files.stl`, and `cady.files.step` expose format
-  facades.
-
-DXF preserves semantic 2D entities where possible. STL always uses triangles.
-STEP export uses supported semantic solids instead of numeric meshes.
-
-## Creation Rules
-
-Use factories for normal construction:
-
-```python
-from cady import circle, line, prism, rectangle, sphere
-```
-
-Use direct classes when you need exact class-level control or when extending
-cady internals.
-
-Stay semantic while building geometry. Convert with `to_array(...)` only for
-numeric calculation, plotting, visualisation, tessellation, or mesh output.
+Numeric modules do not import authoring packages. Authoring objects adapt their
+own fields into primitive values before calling numeric or ops functions.

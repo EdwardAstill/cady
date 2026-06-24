@@ -1,128 +1,99 @@
-# Plotting And Visualisation
+# Visualisation
 
-## Overview
+cady's core visual model is backend-independent. The `cady.view` package stores
+scene descriptions: targets, cameras, lights, display styles, object poses, and
+metadata. It does not render anything by itself.
 
-`cady.plotting` owns static plot and figure outputs. `cady.visualisation` owns
-interactive object viewing. Both depend on domain and numeric geometry, while
-the core `cady` import stays independent of viewer libraries.
-
-Install `cady[plotting]` for Matplotlib plots and `cady[visualisation]` for
-the interactive VisPy viewer.
-
-## Details
-
-## 2D Plotting
-
-Use `plot_shape2d(...)` for one shape and `plot_drawing2d(...)` for a drawing.
-Both functions should default to equal axes, accept an optional Matplotlib
-axis, and return the figure/axis for caller customisation.
+## Scene values
 
 ```python
-from cady import circle, rectangle
-from cady.plotting import plot_shape2d
+from cady import Camera, DirectionalLight, DisplayStyle, Scene
 
-profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-
-fig, ax = plot_shape2d(
-    profile,
-    tolerance=1e-3,
-    save_path="plate-profile.png",
-    show=False,
+scene = (
+    Scene("review")
+    .add(part, style=DisplayStyle(color=(0.74, 0.78, 0.82), render_mode="shaded"))
+    .with_camera(
+        Camera.perspective(
+            position=(1.7, -1.6, 0.9),
+            target=(0.5, 0.3, 0.05),
+            fov_degrees=35.0,
+        ),
+        name="iso",
+    )
+    .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.6))
 )
 ```
 
-2D helpers:
+Scenes can reference bodies, parts, assemblies, meshes, drawings, or imported
+wire data. They do not own CAD geometry and they do not affect file export.
 
-- `plot_shape2d(shape, *, tolerance=1e-3, ax=None, show=False, save_path=None)`
-- `plot_drawing2d(drawing, *, tolerance=1e-3, ax=None, show=False, save_path=None)`
-- `plot_array_polyline2(polyline, *, ax=None)`
-- `plot_array_polygon2(polygon, *, ax=None)`
+## Cameras, lights, and styles
 
-Filled profiles with holes should render as filled outer loops with cut-out
-inner loops. Splines and arcs are sampled at the visualisation boundary using
-the provided tolerance.
+Camera constructors:
 
-## 3D Viewing
+- `Camera.look_at(position=..., target=..., up=(0, 0, 1))`
+- `Camera.perspective(position=..., target=..., up=(0, 0, 1), fov_degrees=45.0)`
+- `Camera.orthographic(position=..., target=..., up=(0, 0, 1), scale=1.0)`
 
-Use `view_shape3d(...)` or `view_model(...)` for semantic objects, and import
-`plot_array_mesh3(...)` from `cady.plotting` when a mesh has already been
-evaluated.
+Light values:
 
-```python
-from cady import circle, rectangle
-from cady.visualisation import view_shape3d
+- `AmbientLight(intensity=..., color=(1, 1, 1))`
+- `DirectionalLight(direction=..., intensity=..., color=(1, 1, 1))`
+- `PointLight(position=..., intensity=..., color=(1, 1, 1), range=None)`
 
-profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-solid = profile.extrude("+z", 0.04)
+Display styles support color, opacity, line width, point size, visibility, and
+`render_mode` values of `"shaded"`, `"wireframe"`, and `"points"`.
 
-view_shape3d(
-    solid,
-    tolerance=1e-3,
-    backend="matplotlib",
-    show=True,
-)
-```
+## VisPy viewer
 
-3D helpers:
-
-- `plot_array_mesh3(mesh, *, ax=None, show=False, save_path=None)`
-- `view_shape3d(shape, *, tolerance=1e-3, backend="matplotlib", show=True)`
-- `view_part(part, *, tolerance=1e-3, backend="matplotlib", show=True)`
-- `view_model(model, *, tolerance=1e-3, backend="matplotlib", show=True)`
-- `visualise(value, *, tolerance=1e-3, backend="matplotlib", show=True)`
-
-The baseline Matplotlib backend should work without an interactive display
-when saving images.
-
-### VisPy Controls
-
-The interactive VisPy viewer keeps the camera simple: wheel zoom changes
-distance, middle drag pans, and left drag rotates the object model around
-screen-oriented axes.
-
-Number keys provide fixed orientation controls:
-
-- `0` resets to the front view, with local axes aligned to global axes;
-- `1`, `2`, and `3` rotate 90 degrees about the object's local X, Y, and Z
-  axes;
-- `6`, `7`, `8`, and `9` snap to four isometric views.
-- `a` toggles the local XYZ axis overlay, sized relative to the camera view.
-
-## Saving Output
-
-Use `save_path` for static images:
+Install the optional viewer dependencies with `cady[visualisation]`. The VisPy
+adapter consumes the backend-independent `Scene`, `Camera`, `Light`, and
+`DisplayStyle` values:
 
 ```python
-plot_shape2d(profile, save_path="profile.png", show=False)
-plot_array_mesh3(mesh, save_path="mesh.png", show=False)
+from cady.visualisation import view_scene
+
+view_scene(scene, tolerance=1e-3)
 ```
 
-Screenshot support for interactive backends depends on the backend. When a
-backend cannot save a screenshot, the function should raise a clear error
-rather than silently doing nothing.
-
-## Example Script
-
-From the repository root:
+`examples/scripts/visualise_3d.py` opens a VisPy window for the selected target:
 
 ```bash
-PYTHONPATH=src python examples/scripts/visualise_plate.py --out /tmp/cady-visualisation
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape plate
 ```
 
-The script builds the same plate as the model example and writes visualisation
-images when the visualisation layer and optional backends are available.
+3D objects also expose a convenience `view(...)` method. It builds a scene with
+a fitted camera, a default light, and a default display style, then opens that
+scene:
 
-## Layering Rules
-
-Plotting and visualisation are leaf packages:
-
-```text
-plotting -> domain
-plotting -> numeric
-visualisation -> domain
-visualisation -> numeric
+```python
+mesh.view(title="review")
+body.view(render_mode="wireframe")
+part.view(color=(0.7, 0.75, 0.82))
+assembly.view(projection="perspective")
 ```
 
-`domain`, `numeric`, `ops`, `files`, and the top-level `cady` package
-should not import `plotting` or `visualisation` at module scope. This keeps
-normal model construction and file export usable without plotting dependencies.
+Pass `camera=...`, `style=...`, `light=...`, `name=...`, `title=...`,
+`render_mode=...`, `color=...`, `projection=...`, `center=...`, or
+`tolerance=...` when the defaults are not enough. These methods return `None`.
+
+`examples/scripts/visualise_plate.py` writes a scene summary text file and the
+same plate as DXF/STL:
+
+```bash
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_plate.py --out /tmp/cady-visualisation
+```
+
+## Optional visualisation package
+
+`cady.visualisation` provides scene construction and VisPy viewing helpers:
+
+```python
+from cady.visualisation import scene_from_target, view_target
+
+scene = scene_from_target(part, name="review")
+view_target(part)
+```
+
+Rendering adapters remain leaf code. Core packages must not import viewer
+libraries at module scope.

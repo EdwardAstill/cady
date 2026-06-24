@@ -17,7 +17,7 @@ def orientation_edges(
     angle_tolerance_degrees: float = EDGE_ANGLE_TOLERANCE_DEGREES,
     include_boundary_edges: bool = True,
 ) -> np.ndarray:
-    """Boundaries between smooth face patches, excluding internal tessellation."""
+    """Return visible mesh edges, suppressing smooth tessellation diagonals."""
     if len(faces) == 0:
         return np.empty((0, 2), dtype=np.uint32)
 
@@ -181,8 +181,8 @@ def _smooth_face_roots(
             parents[right_root] = left_root
 
     for owners in edge_faces.values():
-        for i, left in enumerate(owners):
-            for right in owners[i + 1 :]:
+        for index, left in enumerate(owners):
+            for right in owners[index + 1 :]:
                 if abs(float(np.dot(normals[left], normals[right]))) >= cos_tolerance:
                     union(left, right)
 
@@ -192,8 +192,8 @@ def _smooth_face_roots(
         root_face_counts = np.bincount(np.array(roots, dtype=np.int64), minlength=len(normals))
         curved_adjacency: dict[int, set[int]] = {}
         for owners in edge_faces.values():
-            for i, left in enumerate(owners):
-                for right in owners[i + 1 :]:
+            for index, left in enumerate(owners):
+                for right in owners[index + 1 :]:
                     left_root = find(left)
                     right_root = find(right)
                     if left_root == right_root:

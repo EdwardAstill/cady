@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cady.domain.vec import Vec2, promote2
+from cady.vec import Vec2, promote2
 
 
 def midpoint(a: Vec2 | tuple[float, float], b: Vec2 | tuple[float, float]) -> Vec2:

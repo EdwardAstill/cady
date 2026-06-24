@@ -1,77 +1,96 @@
 # File Formats
 
-## Overview
+cady exposes small file facades under `cady.files`. The writers accept direct
+objects instead of requiring a top-level model.
 
-cady writes DXF R2018, binary/ASCII STL, and AP214 STEP. It reads a limited
-ASCII DXF subset and elementary STEP surfaces for analysis.
-
-## Details
+```python
+from cady.files import dxf, step, stl
+```
 
 ## DXF
 
-Write drawings through `Model` or the file facade:
+Write a `Drawing2D`:
 
 ```python
-model.write_dxf("drawing.dxf")
-dxf.write_model(model, "drawing.dxf", tolerance=1e-3)
+dxf.write(drawing, "front.dxf", tolerance=1e-3)
+text = dxf.render(drawing, tolerance=1e-3)
 ```
 
-Supported output includes lines, polylines, circles, arcs, text, layers,
-hatches, blocks, inserts, linetypes, and native dimensions.
+Current DXF output emits:
 
-Read support covers a limited ASCII subset:
+- `LINE` from `Line2D`;
+- `LWPOLYLINE` from `Polyline2D` and `ClosedPolyline2D`;
+- `CIRCLE` from `Circle2D`;
+- `ARC` from `Arc2D`;
+- `TEXT` from `Text2D`;
+- layer table records for drawing layers;
+- sampled closed polylines for other profile-like objects that expose
+  `to_array(tolerance=...)`.
+
+The drawing object can model hatches, blocks, inserts, and dimensions, but the
+current DXF writer does not emit those entities yet.
+
+Read support:
 
 ```python
 drawing = dxf.read_drawing("profile.dxf")
 mesh = dxf.read_mesh("faceted-part.dxf")
-result = dxf.read_3d("mixed-3d.dxf")
+result = dxf.read("mixed.dxf")
 ```
 
-`read_3d(...)` reports unsupported ACIS-backed entities such as `3DSOLID`,
-`BODY`, `REGION`, and `SURFACE` as skipped records.
+`dxf.read(...)` returns a `DxfImportResult` with:
+
+- `drawing` for supported 2D entities;
+- `meshes` for `3DFACE` triangle/quad entities;
+- `wires` for 3D `POLYLINE` vertex sequences;
+- `skipped` records for unsupported entities such as ACIS-backed solids.
 
 Implementation notes: [DXF format cheatsheet](dxf-format-cheatsheet.md).
 
 ## STL
 
-Write STL when you need triangle mesh output:
+Write binary or ASCII STL from any meshable target:
 
 ```python
-model.write_stl("part.stl")
-model.write_stl("part-ascii.stl", ascii=True)
+stl.write(part, "plate.stl", tolerance=1e-3)
+stl.write(assembly, "assembly-ascii.stl", ascii=True, tolerance=1e-3)
 ```
 
-STL has no semantic curves, layers, units, or assemblies. cady tessellates
-3D shapes, so tolerance controls curved mesh density.
+Supported targets include `Mesh3D`, `ArrayMesh3`, `Body3D`, `Part`,
+`Assembly`, and `Document` values containing meshable parts or assemblies.
+
+STL has no curves, layers, units, materials, or product structure. cady writes
+triangles only.
 
 ## STEP
 
-Write STEP when a CAD tool needs supported solid geometry:
+Write STEP from meshable targets:
 
 ```python
-model.write_step("part.step")
-step.write_model(model, "part.step")
+step.write(part, "plate.step", tolerance=1e-3)
+text = step.render(assembly, tolerance=1e-3)
 ```
 
-STEP export currently supports `Prism` and supported `Extrusion` solids. It
-does not export `Sphere` or `Revolution` as STEP solids yet.
+The current writer emits an ISO-10303-21 file with Cartesian points and
+`POLY_LOOP` records for triangular mesh faces. It is useful as a simple mesh
+exchange path, not a full AP214/AP242 B-rep solid exporter.
 
-Read support is analysis-only:
+Read support is analysis-oriented:
 
 ```python
-faces = step.read_faces("frame.step")
-members = step.read_members("frame.step")
+faces = step.read_faces("member.step")
+members = step.read_members("member.step")
 ```
 
-`read_faces(...)` resolves elementary plane, cylindrical, and conical faces.
-`read_members(...)` infers simple extruded structural members from those
-faces. cady does not rebuild arbitrary STEP assemblies into editable models.
+`read_faces(...)` parses elementary surface data. `read_members(...)` attempts
+to infer simple extruded members from parsed faces. cady does not rebuild
+arbitrary STEP assemblies into editable `Body3D`, `Part`, or `Assembly` values.
 
 Implementation notes: [STEP format cheatsheet](step-format-cheatsheet.md).
 
-## Choosing A Format
+## Choosing a format
 
-- DXF: 2D drawings with editable CAD entities.
-- STL: triangle meshes for mesh tools and printing.
-- STEP: supported solids for mechanical CAD tools.
-
+- DXF: 2D drawing entities and basic 2D import.
+- STL: triangle meshes for mesh tools, printing, and simple viewers.
+- STEP: currently mesh-flavored exchange plus elementary surface/member
+  analysis.

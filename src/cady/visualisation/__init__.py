@@ -1,20 +1,32 @@
-from cady.plotting import (
-    plot_array_mesh3,
-    plot_array_polygon2,
-    plot_array_polyline2,
-    plot_drawing2d,
-    plot_shape2d,
+from __future__ import annotations
+
+from cady.view import Scene
+from cady.visualisation.vispy_viewer import (
+    PreparedScene,
+    SceneLine,
+    SceneMesh,
+    prepare_scene,
+    view_lines,
+    view_mesh,
+    view_meshes,
+    view_scene,
+    view_target,
 )
-from cady.visualisation.view3d import view_model, view_part, view_shape3d, visualise
+
+
+def scene_from_target(target: object, *, name: str = "scene") -> Scene:
+    return Scene.from_target(target, name=name)
+
 
 __all__ = [
-    "plot_array_mesh3",
-    "plot_array_polygon2",
-    "plot_array_polyline2",
-    "plot_drawing2d",
-    "plot_shape2d",
-    "view_model",
-    "view_part",
-    "view_shape3d",
-    "visualise",
+    "PreparedScene",
+    "SceneLine",
+    "SceneMesh",
+    "prepare_scene",
+    "scene_from_target",
+    "view_lines",
+    "view_mesh",
+    "view_meshes",
+    "view_scene",
+    "view_target",
 ]

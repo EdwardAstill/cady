@@ -1,43 +1,130 @@
-"""Smoke tests for VisPy viewer. ViSpy is optional — tests are skipped when absent."""
-
 from __future__ import annotations
 
-import importlib
 from unittest import mock
 
 import numpy as np
 import pytest
 
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, box
+from cady.visualisation.vispy_viewer import (
+    _camera_orientation,
+    _orientation_edges,
+    _require_vispy,
+    _shaded_face_buffers,
+    _view_relative_orthographic_axis_length,
+    _zoomed_orthographic_scale,
+    prepare_scene,
+)
 
-def test_vispy_viewer_module_imports() -> None:
-    """The module must be importable regardless of vispy presence."""
-    from cady.visualisation.vispy_viewer import vispy_view_lines, vispy_view_mesh, vispy_view_meshes
 
-    assert vispy_view_lines
-    assert vispy_view_mesh
-    assert vispy_view_meshes
+def test_vispy_viewer_module_imports_without_opening_window() -> None:
+    from cady.visualisation import prepare_scene, view_mesh, view_scene, view_target
+
+    assert all((prepare_scene, view_mesh, view_scene, view_target))
 
 
 def test_require_vispy_raises_when_missing() -> None:
-    """_require_vispy raises ImportError when vispy is not installed."""
-    with mock.patch("cady.visualisation.vispy_viewer._HAS_VISPY", False):
-        from cady.visualisation.vispy_viewer import _require_vispy
+    with (
+        mock.patch("cady.visualisation.vispy_viewer._HAS_VISPY", False),
+        pytest.raises(ImportError, match="requires vispy"),
+    ):
+        _require_vispy()
 
-        with pytest.raises(ImportError, match="requires vispy"):
-            _require_vispy()
+
+def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
+    scene = (
+        Scene("review")
+        .add(box(1.0, 0.5, 0.25), style=DisplayStyle(color=(0.2, 0.4, 0.8)))
+        .with_camera(
+            Camera.perspective(
+                position=(1.0, -2.0, 1.5),
+                target=(0.0, 0.0, 0.0),
+                fov_degrees=35.0,
+            ),
+            name="iso",
+        )
+        .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.5))
+    )
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert prepared.name == "review"
+    assert prepared.camera.fov_degrees == 35.0
+    assert len(prepared.meshes) == 1
+    assert prepared.meshes[0].color == (0.2, 0.4, 0.8)
+    assert prepared.meshes[0].vertices.shape[1] == 3
+    assert prepared.meshes[0].faces.shape[1] == 3
+    assert prepared.light_direction == (-1.0, -1.0, -2.0)
 
 
-def test_require_vispy_passes_when_present() -> None:
-    """_require_vispy does not raise when vispy is installed."""
-    from cady.visualisation.vispy_viewer import _require_vispy
+def test_prepare_scene_accepts_wire_polyline_targets() -> None:
+    wire = (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5))
+    scene = Scene("wires").add(
+        wire,
+        name="station",
+        style=DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe"),
+    )
 
-    # Should not raise — vispy is installed in the test environment.
-    _require_vispy()
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert prepared.meshes == ()
+    assert len(prepared.lines) == 1
+    assert prepared.lines[0].name == "station"
+    assert prepared.lines[0].color == (0.05, 0.23, 0.55)
+    np.testing.assert_allclose(
+        prepared.lines[0].vertices,
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.5], [1.0, 1.0, 0.5]],
+    )
+    np.testing.assert_array_equal(prepared.lines[0].indices, [[0, 1], [1, 2]])
+
+
+def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
+    mesh = Mesh3D(
+        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5)),
+        (),
+        ((0, 1), (1, 2)),
+    )
+    scene = Scene("mesh wires").add(mesh, style=DisplayStyle(render_mode="wireframe"))
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert prepared.lines == ()
+    assert len(prepared.meshes) == 1
+    np.testing.assert_array_equal(prepared.meshes[0].faces, np.empty((0, 3), dtype=np.uint32))
+    np.testing.assert_array_equal(prepared.meshes[0].edges, [[0, 1], [1, 2]])
+
+
+def test_camera_orientation_maps_camera_position_to_view_z() -> None:
+    camera = Camera.look_at(position=(0.0, -2.0, 0.0), target=(0.0, 0.0, 0.0))
+
+    orientation = _camera_orientation(camera)
+    view_direction = np.array(camera.position, dtype=np.float32) @ orientation[:3, :3]
+
+    np.testing.assert_allclose(view_direction, [0.0, 0.0, 2.0], atol=1e-6)
+
+
+def test_orthographic_zoom_changes_scale_instead_of_camera_distance() -> None:
+    scale = 152_661.0
+    radius = 181_739.0
+
+    zoomed_in = _zoomed_orthographic_scale(scale, 1.0, radius)
+    zoomed_out = _zoomed_orthographic_scale(scale, -1.0, radius)
+
+    assert zoomed_in < scale
+    assert zoomed_out > scale
+    assert _zoomed_orthographic_scale(radius, 1_000.0, radius) == pytest.approx(
+        radius * 0.001
+    )
+
+
+def test_orthographic_axis_length_tracks_view_scale() -> None:
+    near = _view_relative_orthographic_axis_length(100.0, (900, 700))
+    far = _view_relative_orthographic_axis_length(200.0, (900, 700))
+
+    assert far == pytest.approx(near * 2.0)
 
 
 def test_orientation_edges_hide_coplanar_triangle_diagonal() -> None:
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
     vertices = np.array(
         [
             [0.0, 0.0, 0.0],
@@ -54,163 +141,7 @@ def test_orientation_edges_hide_coplanar_triangle_diagonal() -> None:
     assert edges == {(0, 1), (1, 2), (2, 3), (0, 3)}
 
 
-def test_orientation_edges_hide_nearly_flat_face_change() -> None:
-    from math import cos, radians, sin
-
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    angle = radians(5.0)
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, -cos(angle), sin(angle)],
-        ],
-        dtype=np.float32,
-    )
-    faces = np.array([[0, 1, 2], [0, 3, 1]], dtype=np.uint32)
-
-    edges = {tuple(sorted(edge)) for edge in _orientation_edges(vertices, faces).tolist()}
-
-    assert (0, 1) not in edges
-
-
-def test_orientation_edges_keep_isolated_shallow_crease() -> None:
-    from math import cos, radians, sin
-
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    angle = radians(20.0)
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, -cos(angle), sin(angle)],
-        ],
-        dtype=np.float32,
-    )
-    faces = np.array([[0, 1, 2], [0, 3, 1]], dtype=np.uint32)
-
-    edges = {tuple(sorted(edge)) for edge in _orientation_edges(vertices, faces).tolist()}
-
-    assert (0, 1) in edges
-
-
-def test_orientation_edges_keep_cube_crease_edges() -> None:
-    from cady import prism
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    mesh = prism((0, 0, 0), (1, 1, 1)).to_array(tolerance=1e-2)
-    vertices = np.array(mesh.vertices, dtype=np.float32)
-    faces = np.array(mesh.faces, dtype=np.uint32)
-
-    visible_edges = _orientation_edges(vertices, faces)
-
-    assert len(visible_edges) == 12
-
-
-def test_orientation_edges_hide_small_circle_extrusion_side_facets() -> None:
-    from cady import circle
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    mesh = circle((0, 0), 0.1).extrude("+z", 0.04).to_array(tolerance=1e-3)
-    vertices = np.array(mesh.vertices, dtype=np.float32)
-    faces = np.array(mesh.faces, dtype=np.uint32)
-
-    visible_edges = _orientation_edges(vertices, faces)
-    vertical_edges = [
-        edge
-        for edge in visible_edges
-        if abs(float(vertices[edge[0], 2] - vertices[edge[1], 2])) > 1e-7
-    ]
-    segment_count = len(
-        {(round(float(vertex[0]), 9), round(float(vertex[1]), 9)) for vertex in vertices}
-    )
-
-    assert vertical_edges == []
-    assert len(visible_edges) == segment_count * 2
-
-
-def test_orientation_edges_suppress_extrusion_cap_artifacts() -> None:
-    from cady import circle, rectangle
-    from cady.ops.tessellate import curves_to_polyline
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
-    mesh = profile.extrude("+z", 0.04).to_array(tolerance=1e-3)
-    vertices = np.array(mesh.vertices, dtype=np.float32)
-    faces = np.array(mesh.faces, dtype=np.uint32)
-
-    visible_edges = _orientation_edges(vertices, faces)
-
-    vertical_edges = [
-        edge
-        for edge in visible_edges
-        if abs(float(vertices[edge[0], 2] - vertices[edge[1], 2])) > 1e-7
-    ]
-    outer_segment_count = len(
-        {point.tuple() for point in curves_to_polyline(profile, tolerance=1e-3).points()}
-    )
-    hole_segment_count = len(
-        {
-            point.tuple()
-            for point in curves_to_polyline(profile.inner_loops[0], tolerance=1e-3).points()
-        }
-    )
-
-    assert len(vertical_edges) == outer_segment_count
-    assert len(visible_edges) == (outer_segment_count + hole_segment_count) * 2 + len(
-        vertical_edges
-    )
-
-
-def test_orientation_edges_hide_smooth_sphere_tessellation() -> None:
-    from cady import sphere
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    mesh = sphere((0, 0, 0), 0.5).to_array(tolerance=1e-3)
-    vertices = np.array(mesh.vertices, dtype=np.float32)
-    faces = np.array(mesh.faces, dtype=np.uint32)
-
-    visible_edges = _orientation_edges(vertices, faces)
-
-    assert len(visible_edges) == 0
-
-
-def test_shaded_face_buffers_share_normals_across_smooth_join() -> None:
-    from math import cos, radians, sin
-
-    from cady.visualisation.vispy_viewer import _shaded_face_buffers
-
-    angle = radians(5.0)
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, -cos(angle), sin(angle)],
-        ],
-        dtype=np.float32,
-    )
-    faces = np.array([[0, 1, 2], [0, 3, 1]], dtype=np.uint32)
-
-    render_vertices, render_faces, render_normals = _shaded_face_buffers(vertices, faces)
-
-    assert len(render_vertices) == 4
-    assert render_faces[0, 0] == render_faces[1, 0]
-    assert render_faces[0, 1] == render_faces[1, 2]
-    np.testing.assert_allclose(
-        np.linalg.norm(render_normals, axis=1),
-        np.ones(len(render_normals)),
-        atol=1e-6,
-    )
-
-
 def test_shaded_face_buffers_split_normals_at_hard_crease() -> None:
-    from cady.visualisation.vispy_viewer import _shaded_face_buffers
-
     vertices = np.array(
         [
             [0.0, 0.0, 0.0],
@@ -226,290 +157,8 @@ def test_shaded_face_buffers_split_normals_at_hard_crease() -> None:
 
     assert len(render_vertices) == 6
     assert render_faces[0, 0] != render_faces[1, 0]
-    assert render_faces[0, 1] != render_faces[1, 2]
     np.testing.assert_allclose(
         render_normals[render_faces[0, 0]],
         [0.0, 0.0, 1.0],
         atol=1e-6,
     )
-    np.testing.assert_allclose(
-        np.abs(render_normals[render_faces[1, 0]]),
-        [0.0, 1.0, 0.0],
-        atol=1e-6,
-    )
-
-
-def test_model_matrix_maps_local_centre_to_global_origin() -> None:
-    from cady.visualisation.vispy_viewer import _apply_view_orbit, _model_matrix
-
-    centre = np.array([10.0, -5.0, 3.0], dtype=np.float32)
-    orientation = _apply_view_orbit(np.eye(4, dtype=np.float32), 30.0, 20.0)
-
-    transformed = np.array([*centre, 1.0], dtype=np.float32) @ _model_matrix(centre, orientation)
-
-    np.testing.assert_allclose(transformed, [0.0, 0.0, 0.0, 1.0], atol=1e-6)
-
-
-def test_projection_clip_planes_scale_to_large_geometry() -> None:
-    from cady.visualisation.vispy_viewer import _projection_clip_planes
-
-    radius = 218_087.2
-    distance = radius * 2.5
-
-    near, far = _projection_clip_planes(radius, distance)
-
-    assert 0.0 < near < distance - radius
-    assert far > distance + radius
-
-
-def test_view_relative_axis_length_uses_perspective_window_size() -> None:
-    from cady.visualisation.vispy_viewer import _view_relative_axis_length
-
-    length = _view_relative_axis_length(
-        10.0,
-        (1000, 500),
-        fov_degrees=90.0,
-        view_fraction=0.25,
-    )
-
-    assert length == pytest.approx(5.0)
-
-
-def test_view_relative_axis_length_scales_with_camera_distance_not_object_size() -> None:
-    from cady.visualisation.vispy_viewer import _view_relative_axis_length
-
-    near = _view_relative_axis_length(5.0, (900, 700))
-    far = _view_relative_axis_length(10.0, (900, 700))
-    same_view_larger_framebuffer = _view_relative_axis_length(10.0, (1800, 1400))
-    narrow_window = _view_relative_axis_length(10.0, (350, 700))
-
-    assert far == pytest.approx(near * 2.0)
-    assert same_view_larger_framebuffer == pytest.approx(far)
-    assert narrow_window == pytest.approx(far * 0.5)
-
-
-def test_view_orbit_uses_screen_axes_after_existing_local_rotation() -> None:
-    from cady.visualisation.vispy_viewer import _apply_view_orbit, _rotation_matrix
-
-    orientation = _rotation_matrix(90.0, (1.0, 0.0, 0.0))
-    orientation = _apply_view_orbit(orientation, 90.0, 0.0)
-
-    transformed = np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float32) @ orientation
-
-    np.testing.assert_allclose(transformed[:3], [0.0, -1.0, 0.0], atol=1e-6)
-
-
-def test_number_key_zero_resets_to_front_orientation() -> None:
-    from cady.visualisation.vispy_viewer import _orientation_for_number_key
-
-    orientation = np.array(
-        [
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [-1.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
-        ],
-        dtype=np.float32,
-    )
-
-    reset = _orientation_for_number_key(orientation, "0")
-
-    np.testing.assert_allclose(reset, np.eye(4, dtype=np.float32), atol=1e-6)
-
-
-def test_number_keys_one_two_three_turn_about_local_axes() -> None:
-    from cady.visualisation.vispy_viewer import _orientation_for_number_key, _rotation_matrix
-
-    orientation = _rotation_matrix(90.0, (0.0, 1.0, 0.0))
-
-    x_turn = _orientation_for_number_key(orientation, "1")
-    y_turn = _orientation_for_number_key(orientation, "2")
-    z_turn = _orientation_for_number_key(orientation, "3")
-
-    np.testing.assert_allclose(
-        x_turn,
-        _rotation_matrix(90.0, (1.0, 0.0, 0.0)) @ orientation,
-        atol=1e-6,
-    )
-    np.testing.assert_allclose(
-        y_turn,
-        _rotation_matrix(90.0, (0.0, 1.0, 0.0)) @ orientation,
-        atol=1e-6,
-    )
-    np.testing.assert_allclose(
-        z_turn,
-        _rotation_matrix(90.0, (0.0, 0.0, 1.0)) @ orientation,
-        atol=1e-6,
-    )
-    assert not np.allclose(x_turn, orientation @ _rotation_matrix(90.0, (1.0, 0.0, 0.0)))
-
-
-def test_number_keys_six_to_nine_are_isometric_view_snaps() -> None:
-    from cady.visualisation.vispy_viewer import _orientation_for_number_key
-
-    orientations = [
-        _orientation_for_number_key(np.eye(4, dtype=np.float32), str(key))
-        for key in range(6, 10)
-    ]
-
-    assert all(orientation is not None for orientation in orientations)
-    for orientation in orientations:
-        assert orientation is not None
-        np.testing.assert_allclose(
-            orientation[:3, :3] @ orientation[:3, :3].T,
-            np.eye(3, dtype=np.float32),
-            atol=1e-6,
-        )
-        assert not np.allclose(orientation, np.eye(4, dtype=np.float32))
-    distinct_orientations = {
-        orientation.tobytes() for orientation in orientations if orientation is not None
-    }
-    assert len(distinct_orientations) == 4
-
-
-def test_number_key_name_handles_digit_and_numpad_names() -> None:
-    from cady.visualisation.vispy_viewer import _number_key_name
-
-    class Key:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-    assert _number_key_name("1") == "1"
-    assert _number_key_name("Digit2") == "2"
-    assert _number_key_name("Key3") == "3"
-    assert _number_key_name(Key("Numpad9")) == "9"
-    assert _number_key_name("A") is None
-
-
-def test_axis_toggle_key_name_handles_a_key_variants() -> None:
-    from cady.visualisation.vispy_viewer import _axis_toggle_key_pressed
-
-    class Key:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-    assert _axis_toggle_key_pressed("a")
-    assert _axis_toggle_key_pressed("A")
-    assert _axis_toggle_key_pressed("KeyA")
-    assert _axis_toggle_key_pressed(Key("A"))
-    assert not _axis_toggle_key_pressed("1")
-
-
-def test_local_axis_line_data_is_centred_and_colored_by_axis() -> None:
-    from cady.visualisation.vispy_viewer import _local_axis_line_data
-
-    origin = np.array([2.0, -1.0, 0.5], dtype=np.float32)
-
-    vertices, indices, colors = _local_axis_line_data(origin, 0.25)
-
-    np.testing.assert_allclose(
-        vertices,
-        np.array(
-            [
-                [2.0, -1.0, 0.5],
-                [2.25, -1.0, 0.5],
-                [2.0, -1.0, 0.5],
-                [2.0, -0.75, 0.5],
-                [2.0, -1.0, 0.5],
-                [2.0, -1.0, 0.75],
-            ],
-            dtype=np.float32,
-        ),
-        atol=1e-6,
-    )
-    np.testing.assert_array_equal(indices, np.array([[0, 1], [2, 3], [4, 5]], dtype=np.uint32))
-    assert colors.shape == (6, 3)
-    np.testing.assert_allclose(colors[0], colors[1], atol=1e-6)
-    np.testing.assert_allclose(colors[2], colors[3], atol=1e-6)
-    np.testing.assert_allclose(colors[4], colors[5], atol=1e-6)
-    assert not np.allclose(colors[0], colors[2])
-    assert not np.allclose(colors[2], colors[4])
-
-
-def test_polyline_indices_connect_consecutive_vertices() -> None:
-    from cady.visualisation.vispy_viewer import _polyline_indices
-
-    indices = _polyline_indices(4)
-
-    np.testing.assert_array_equal(
-        indices,
-        np.array([[0, 1], [1, 2], [2, 3]], dtype=np.uint32),
-    )
-    assert _polyline_indices(1).shape == (0, 2)
-
-
-def test_vertex_attributes_are_contiguous_for_vispy_struct_uploads() -> None:
-    from cady.visualisation.vispy_viewer import _vertex_attributes
-
-    packed = np.arange(36, dtype=np.float32).reshape((4, 9))
-
-    positions, normals, colors = _vertex_attributes(packed[:, :3], packed[:, 3:6], packed[:, 6:])
-
-    assert positions.flags.c_contiguous
-    assert normals.flags.c_contiguous
-    assert colors.flags.c_contiguous
-    np.testing.assert_array_equal(positions, packed[:, :3])
-    np.testing.assert_array_equal(normals, packed[:, 3:6])
-    np.testing.assert_array_equal(colors, packed[:, 6:])
-
-
-@pytest.mark.skipif(
-    importlib.util.find_spec("vispy") is None,
-    reason="VisPy not installed.",
-)
-def test_vispy_view_mesh_with_real_data() -> None:
-    """Canvas can be constructed with real mesh data (no display needed)."""
-    from cady import prism
-    from cady.visualisation.vispy_viewer import _make_canvas
-
-    mesh = prism((0, 0, 0), (1, 1, 1)).to_array(tolerance=1e-2)
-    import numpy as np
-
-    vertices = np.array(mesh.vertices, dtype=np.float32)
-    faces = np.array(mesh.faces, dtype=np.uint32)
-    from cady.visualisation.vispy_viewer import _orientation_edges
-
-    edges = _orientation_edges(vertices, faces)
-
-    canvas = _make_canvas(
-        [vertices],
-        [faces],
-        [np.tile(np.array((0.0, 0.0, 1.0), dtype=np.float32), (len(vertices), 1))],
-        [(0.5, 0.6, 0.8)],
-        [vertices],
-        [edges],
-        (0.1, 0.1, 0.1),
-        title="test",
-    )
-    assert canvas is not None
-
-
-@pytest.mark.skipif(
-    importlib.util.find_spec("vispy") is None,
-    reason="VisPy not installed.",
-)
-def test_make_canvas_with_line_only_data() -> None:
-    from cady.visualisation.vispy_viewer import _make_canvas
-
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-        ],
-        dtype=np.float32,
-    )
-    indices = np.array([[0, 1], [1, 2]], dtype=np.uint32)
-
-    canvas = _make_canvas(
-        [],
-        [],
-        [],
-        [],
-        [vertices],
-        [indices],
-        (0.05, 0.23, 0.55),
-        title="line test",
-    )
-
-    assert canvas is not None

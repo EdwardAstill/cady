@@ -1,32 +1,36 @@
 # Examples
 
-`scripts/` contains runnable example programs.
+`scripts/` contains runnable example programs. `gallery/` contains generated
+DXF, STL, and STEP artifacts.
 
-`gallery/` contains generated DXF and STL products from those scripts. The
-production DXF gallery file demonstrates hatch holes/islands and native editable
-dimensions.
+Examples use the current value API directly:
 
-Examples use object-level write methods such as `model.write_dxf(...)`. The
-public format facade is available as `cady.files` when code needs named read
-targets such as `step.read_faces(...)` or explicit file modules.
+- `Drawing2D` for 2D drawings;
+- `Body3D`, `Part`, and `Assembly` for meshable geometry;
+- `Document` for optional named grouping;
+- `Scene`, `Camera`, `Light`, and `DisplayStyle` for view descriptions;
+- `cady.files.dxf`, `cady.files.stl`, and `cady.files.step` for file I/O.
 
-Run all gallery examples from the repository root:
-
-```bash
-PYTHONPATH=src python examples/scripts/plate_with_hole.py
-PYTHONPATH=src python examples/scripts/model_plate.py
-PYTHONPATH=src python examples/scripts/production_dxf.py
-PYTHONPATH=src python examples/scripts/production_step.py
-```
-
-Each script accepts `--out <dir>` when you want to write products somewhere
-other than `examples/gallery`.
-
-Run the visualisation example after installing the optional plotting backend:
+Run gallery examples from the repository root:
 
 ```bash
-PYTHONPATH=src python examples/scripts/visualise_plate.py --out /tmp/cady-visualisation
+PYTHONPATH=src .venv/bin/python examples/scripts/plate_with_hole.py
+PYTHONPATH=src .venv/bin/python examples/scripts/model_plate.py
+PYTHONPATH=src .venv/bin/python examples/scripts/production_dxf.py
+PYTHONPATH=src .venv/bin/python examples/scripts/production_step.py
 ```
 
-It writes a 2D profile plot and a static 3D preview image when
-`cady.plotting`, `cady.numeric`, and the selected backend are available.
+Each script accepts `--out <dir>` when you want products somewhere other than
+`examples/gallery`.
+
+View-related examples:
+
+```bash
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_plate.py --out /tmp/cady-visualisation
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape plate
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_linesplan_9m.py
+```
+
+The linesplan example first opens the imported DXF wires directly, then opens a
+second scene built from `Mesh3D.from_dxf(...)`. Both scenes are shifted so their
+bounding-box centre sits at the world origin before fitting the profile camera.

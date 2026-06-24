@@ -21,8 +21,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-from cady.domain.vec import Vec3
 from cady.files.step.faces import StepFace
+from cady.vec import Vec3
 
 
 def _empty_dimensions() -> Mapping[str, float]:

@@ -1,63 +1,21 @@
+from cady.ops.curves2d import arc_points, circle_points, segments_for_circle
 from cady.ops.mesh_cut import cut_mesh_by_plane
+from cady.ops.meshes3d import sphere_triangles
+from cady.ops.polygons2d import area2, dedupe_closed, triangulate_polygon
 from cady.ops.profiles import midpoint, offset_point, perpendicular
-from cady.ops.tessellate import (
-    Triangle2,
-    Triangle3,
-    curves_to_polyline,
-    extrusion_to_triangles,
-    normal_for_triangle,
-    polygon_to_triangles,
-    prism_to_triangles,
-    revolution_to_triangles,
-    sphere_to_triangles,
-    triangles_for_solid,
-)
-from cady.ops.transforms import (
-    mirror2,
-    mirror3,
-    mirror_point2,
-    mirror_point3,
-    rotate2,
-    rotate3,
-    rotate_point2,
-    rotate_point3,
-    scale2,
-    scale_point2,
-    translate2,
-    translate3,
-    translate_point2,
-    translate_point3,
-)
 from cady.ops.triangulation import triangulate_float32
 
 __all__ = [
-    "Triangle2",
-    "Triangle3",
+    "arc_points",
+    "circle_points",
     "cut_mesh_by_plane",
-    "curves_to_polyline",
-    "extrusion_to_triangles",
+    "dedupe_closed",
     "midpoint",
-    "normal_for_triangle",
     "offset_point",
     "perpendicular",
-    "polygon_to_triangles",
-    "prism_to_triangles",
-    "revolution_to_triangles",
-    "sphere_to_triangles",
-    "triangles_for_solid",
+    "area2",
+    "segments_for_circle",
+    "sphere_triangles",
     "triangulate_float32",
-    "mirror2",
-    "mirror3",
-    "mirror_point2",
-    "mirror_point3",
-    "rotate2",
-    "rotate3",
-    "rotate_point2",
-    "rotate_point3",
-    "scale2",
-    "scale_point2",
-    "translate2",
-    "translate3",
-    "translate_point2",
-    "translate_point3",
+    "triangulate_polygon",
 ]

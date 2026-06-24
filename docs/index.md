@@ -1,45 +1,37 @@
 # cady Documentation
 
-## Overview
+cady is organised around small immutable value objects. Build the object you
+need directly, convert to arrays or meshes only at explicit boundaries, and use
+the file facades for DXF, STL, and STEP I/O.
 
-Start here when you need more than the README. Each section gives a short
-overview first, then the practical details.
+## Start here
 
-## Details
-
-## Section Index
-
-| Section | Covers |
+| Page | Covers |
 |---|---|
-| [Getting started](getting-started.md) | Install, first model, exports, and reads. |
-| [Object model](object-model.md) | Key objects, how they are created, and how they relate. |
-| [New API sketch](../new-api.md) | Proposed simpler object model and representation rules. |
-| [Architecture](architecture.md) | Package layout and dependency boundaries. |
-| [API guide](api.md) | Public imports and common methods. |
-| [File formats](files/index.md) | DXF, STL, STEP support and limits. |
-| [Plotting and visualisation](visualisation.md) | Static plots and interactive viewing. |
-| [Examples](examples.md) | Runnable scripts and gallery outputs. |
+| [Getting started](getting-started.md) | Install, first drawing/part, file output, and reads. |
+| [Object model](object-model.md) | How geometry, drawings, parts, assemblies, scenes, and documents relate. |
+| [API guide](api.md) | Public imports, constructors, methods, and file facades. |
+| [File formats](files/index.md) | Supported DXF, STL, and STEP behavior. |
+| [Examples](examples.md) | Runnable scripts and generated outputs. |
+| [Architecture](architecture.md) | Package boundaries and conversion flow. |
 | [Development](development.md) | Setup, gates, and contribution rules. |
+| [Visualisation](visualisation.md) | Current scene/view model and example viewer artifacts. |
 
-## Fast Paths
+## Core idea
 
-New users should read [Getting started](getting-started.md), then
-[Object model](object-model.md), then [API guide](api.md).
-
-Contributors should read [Architecture](architecture.md) and
-[Development](development.md).
-
-## Core Idea
-
-cady keeps CAD authoring semantic:
+Use semantic objects while authoring:
 
 ```python
-from cady import Model, circle, rectangle
+from cady import Drawing2D, Part, Profile2D, circle2d, profile_rectangle
 ```
 
-Convert to arrays only at calculation, plotting, tessellation, or export
-boundaries:
+Convert only when an operation needs evaluated geometry:
 
 ```text
-domain.to_array(tolerance=...) -> ops function -> numeric result
+Profile2D.to_array(tolerance=...) -> ArrayPolygon2
+Body3D.to_mesh(tolerance=...)     -> Mesh3D
+Part.to_mesh(tolerance=...)       -> ArrayMesh3
 ```
+
+Use `Document` only when you want one named registry of drawings, parts,
+assemblies, and scenes. It is not required for ordinary authoring or export.

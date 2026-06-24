@@ -1,141 +1,203 @@
 # API Guide
 
-## Overview
+Import the common value objects from `cady`. Import subpackages when you need a
+specific facade or lower-level numeric type.
 
-Import common authoring objects from `cady`. Import subpackages when you need
-file facades, numeric types, transforms, plotting, or visualisation.
-For the higher-level relationship between objects, see
-[Object model](object-model.md).
-
-## Details
-
-## Object Relationships
-
-Use `Model` as the top-level object when one source should produce drawings,
-meshes, and solid exports:
-
-```text
-Model
-  -> Drawing2D
-      -> Layer
-          -> Shape2D: Line, Arc, Circle, Rectangle, Polyline, Spline, Path
-      -> text, hatches, blocks, inserts, dimensions
-  -> Part
-      -> Shape3D: Prism, Sphere, Extrusion, Revolution
-  -> Assembly
-      -> named Part references
-```
-
-The authoring objects are semantic. A `Circle` is still a circle, an
-`Extrusion` still knows its profile and distance, and a `Drawing2D` still knows
-its layers. Convert with `to_array(tolerance=...)` only when numeric geometry
-is needed for plotting, tessellation, mesh processing, or STL-style output.
-
-## Object Glossary
-
-`Shape2D` is the base type for 2D authoring geometry. Concrete shapes include
-`Line`, `Arc`, `Circle`, `Rectangle`, `Polyline`, `Spline`, and `Path`.
-Closed 2D shapes can carry holes and can be extruded into 3D solids.
-
-`Shape3D` is the base type for 3D authoring geometry. `Prism` and `Extrusion`
-are supported by STEP export; `Sphere` and `Revolution` can be tessellated for
-STL, plotting, and viewing.
-
-`Drawing2D` groups 2D entities for DXF output. It contains named layers plus
-drawing annotations such as text, hatches, blocks, inserts, and dimensions.
-
-`Part` groups 3D solids for STL and STEP output.
-
-`Assembly` stores named part references. It is model organisation, not a
-boolean or placement engine.
-
-`Model` is the preferred public container. It owns named drawings, parts,
-assemblies, and metadata, and provides `write_dxf`, `write_stl`, and
-`write_step`.
-
-`DxfDrawing` and `StlMesh` are lower-level format objects. Use them directly
-only when you are working with one format rather than a model.
-
-`ArrayPolyline2`, `ArrayPolygon2`, `ArrayMesh3`, `Transform2`, and
-`Transform3` are numeric objects. They represent evaluated geometry and matrix
-operations, not authoring intent.
-
-## Common Imports
+## Common imports
 
 ```python
-from cady import Model, circle, line, prism, rectangle, sphere
+from cady import (
+    Assembly,
+    Body3D,
+    Camera,
+    Document,
+    Drawing2D,
+    Part,
+    Profile2D,
+    Scene,
+    circle2d,
+    line2d,
+    profile_rectangle,
+)
 from cady.files import dxf, step, stl
 from cady.numeric import Transform3
 ```
 
-## Factories
+## 2D geometry
 
-2D:
+Classes:
 
-- `line((x1, y1), (x2, y2))`
-- `arc((cx, cy), radius, start_rad, end_rad)`
-- `circle((cx, cy), radius)`
-- `rectangle((x, y), (width, height))`
-- `polyline(points, closed=False)`
-- `spline(control_points)`
+- `Line2D(start, end)`
+- `Arc2D(centre, radius, start_rad, end_rad)`
+- `Polyline2D(vertices)`
+- `ClosedPolyline2D(vertices)`
+- `Circle2D(centre, radius)`
+- `Ellipse2D(centre, radius_x, radius_y, rotation_rad=0.0)`
+- `Spline2D(control_points, closed=False)`
+- `Profile2D(outer, holes=())`
 
-3D:
+Factories:
 
-- `sphere((x, y, z), radius)`
-- `prism((x, y, z), (dx, dy, dz))`
-
-Closed 2D shapes can be extruded:
-
-```python
-solid = rectangle((0, 0), (1, 0.5)).extrude("+z", 0.04)
-```
-
-## Model API
-
-```python
-model = Model("plate")
-model.drawing("front").layer("PLATE").add(profile)
-model.part("plate").add(profile.extrude("+z", 0.04))
-```
+- `line2d(start, end)`
+- `arc2d(centre, radius, start_rad, end_rad)`
+- `circle2d(centre, radius)`
+- `polyline2d(vertices, closed=False)`
+- `profile_rectangle(width, height, origin=(0.0, 0.0))`
+- `profile_circle(radius, centre=(0.0, 0.0))`
 
 Useful methods:
 
-- `model.drawing(name)` and `model.part(name)` create or return named groups;
-- `model.write_dxf(path, tolerance=...)` writes drawings;
-- `model.write_stl(path, ascii=False, tolerance=...)` writes part meshes;
-- `model.write_step(path)` writes supported solids;
-- `model.to_array(tolerance=...)` returns part meshes;
-- `model.drawing_arrays(tolerance=...)` returns drawing arrays.
+- `bounds()`
+- `points()`
+- `to_array(tolerance=...)`
 
-## Drawing API
+Closed curves and profiles evaluate to `ArrayPolygon2`; open curves evaluate to
+`ArrayPolyline2`.
+
+## 3D geometry
+
+Classes:
+
+- `Frame3D(origin, x_axis, normal)`
+- `Face3D(profile, frame)`
+- `Body3D(name=None, features=(), metadata={})`
+- `Mesh3D(vertices, faces, edges=())`
+
+Factories:
+
+- `box(width, depth, height, frame=None)`
+- `cylinder(radius, height, frame=None)`
+- `sphere(radius, centre=(0.0, 0.0, 0.0))`
+
+Useful constructors and methods:
+
+- `Frame3D.world_xy()`
+- `Frame3D.from_normal(origin, normal, x_axis=None)`
+- `Face3D.from_profile(profile, frame=None, origin=None, normal=None, x_axis=None)`
+- `Face3D.from_points(points)`
+- `Face3D.convex_hull(points)`
+- `Body3D.from_profile(profile, frame=None)`
+- `Body3D.extrude(distance, profile=None, frame=None)`
+- `Body3D.transformed(transform)`
+- `Body3D.to_mesh(tolerance=...)`
+- `Mesh3D.from_dxf(path)`
+- `Mesh3D.to_array(tolerance=...)`
+- `Mesh3D.transformed(transform)`
+- `Mesh3D.bounds()`
+- `Mesh3D.view(...)`, `Body3D.view(...)`, `Face3D.view(...)`
+
+## Drawings
 
 ```python
-front = model.drawing("front")
-front.layer("PLATE", color=7).add(profile)
-front.layer("SECTION").hatch(profile, pattern="ANSI31", scale=0.025)
-front.add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="TEXT")
+drawing = (
+    Drawing2D("front")
+    .add_layer("PLATE", color=7)
+    .add(profile.outer, layer="PLATE")
+    .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
+)
 ```
 
-Drawings also support blocks, inserts, linear/aligned/radius/diameter
-dimensions, angular dimensions, layer colours, and linetypes.
+Key drawing methods:
 
-## File Facade
+- `add_layer(layer_or_name, color=7, linetype="CONTINUOUS")`
+- `add(geometry, layer="0")`
+- `add_entity(entity)`
+- `add_text(text, at=..., height=..., layer="0", rotation=0.0)`
+- `hatch(boundary, layer="0", pattern="ANSI31", angle=45.0, scale=1.0)`
+- `add_block(block)`
+- `insert(name, at=..., layer="0", scale=1.0, rotation=0.0)`
+- `with_dim_style(style)`
+- `linear_dimension(...)`, `aligned_dimension(...)`, `radius_dimension(...)`,
+  `diameter_dimension(...)`, `angular_dimension(...)`
+- `bounds()`
+- `to_arrays(tolerance=...)`
+
+Supported linetypes are `CONTINUOUS`, `HIDDEN`, and `CENTER`.
+
+## Product structure
 
 ```python
-dxf.write_model(model, "plate.dxf", tolerance=1e-3)
-stl.write_model(model, "plate.stl", tolerance=1e-3)
-step.write_model(model, "plate.step")
+from cady import Assembly, Material, Part
 
-drawing = dxf.read_drawing("profile.dxf")
-mesh = dxf.read_mesh("faceted.dxf")
+part = (
+    Part("plate")
+    .with_body(body)
+    .with_material(Material("steel", density=7850.0, color=(0.6, 0.6, 0.62)))
+    .with_metadata(item="P-001")
+)
+
+assembly = Assembly("assy").add(part, name="plate", pose=(0.0, 0.0, 0.0))
+```
+
+Key methods:
+
+- `Part.with_body(body)`, `Part.with_bodies(*bodies)`
+- `Part.with_material(material)`
+- `Part.with_metadata(**metadata)`
+- `Part.to_mesh(tolerance=...)`
+- `Part.view(...)`
+- `Assembly.add(part_or_assembly, name=None, pose=None)`
+- `Assembly.flatten()`
+- `Assembly.to_mesh(tolerance=...)`
+- `Assembly.view(...)`
+
+## Documents
+
+```python
+document = (
+    Document("job", units="m")
+    .add_drawing(drawing, name="front")
+    .add_part(part)
+    .add_assembly(assembly)
+    .add_scene(scene, name="review")
+)
+
+document.names("part")
+document.get("drawing", "front")
+```
+
+Kinds are `"drawing"`, `"part"`, `"assembly"`, and `"scene"`.
+
+## Scenes
+
+```python
+from cady import Camera, DirectionalLight, DisplayStyle, Scene
+
+scene = (
+    Scene.from_target(part, name="review")
+    .with_camera(Camera.look_at(position=(2, -2, 1), target=(0, 0, 0)), name="iso")
+    .with_light(DirectionalLight(direction=(-1, -1, -2)))
+)
+```
+
+Scene objects carry a target, optional pose, optional style, and metadata.
+Scenes are backend-independent and do not import viewer libraries.
+
+## File facades
+
+```python
+dxf.write(drawing, "front.dxf", tolerance=1e-3)
+rendered = dxf.render(drawing, tolerance=1e-3)
+imported = dxf.read_drawing("front.dxf")
+mesh = dxf.read_mesh("mesh.dxf")
+result = dxf.read("mixed.dxf")
+
+stl.write(part, "plate.stl", tolerance=1e-3)
+stl.write(assembly, "assembly-ascii.stl", ascii=True, tolerance=1e-3)
+
+step.write(part, "plate.step", tolerance=1e-3)
+text = step.render(assembly, tolerance=1e-3)
 faces = step.read_faces("member.step")
+members = step.read_members("member.step")
 ```
+
+The old `write_model(...)` facade functions are intentionally absent.
 
 ## Errors
 
 ```python
-from cady import CadError, ReadError, SceneError, WriteError
+from cady import CadError, DrawingError, GeometryError, ProductError, ReadError, ViewError, WriteError
 ```
 
-Use `SceneError` for invalid model composition, `ReadError` for read failures,
-and `WriteError` for writer failures.
+Use the specific error tier when raising from package code and catch `CadError`
+when user code wants one shared base exception.

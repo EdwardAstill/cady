@@ -1,67 +1,32 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
-from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, cast
 
-from model_plate import build_model
+from example_geometry import GALLERY_DIR, plate_document, scene_for_target, scene_summary
 
-GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
-
-
-class ArrayMesh3Class(Protocol):
-    @classmethod
-    def merged(cls, meshes: object) -> object: ...
-
-
-PlotArrayMesh3 = Callable[..., object]
-PlotDrawing2D = Callable[..., object]
-
-
-def _load_visualisation() -> tuple[type[ArrayMesh3Class], PlotArrayMesh3, PlotDrawing2D] | str:
-    for module in ("numpy", "matplotlib"):
-        if importlib.util.find_spec(module) is None:
-            return module
-    try:
-        from cady.numeric import ArrayMesh3
-        from cady.plotting import plot_array_mesh3, plot_drawing2d
-    except ImportError as exc:
-        return str(exc)
-    return cast(type[ArrayMesh3Class], ArrayMesh3), plot_array_mesh3, plot_drawing2d
+from cady import Drawing2D, Part
+from cady.files import dxf, stl
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=GALLERY_DIR)
     parser.add_argument("--tolerance", type=float, default=1e-3)
-    parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    visualisation = _load_visualisation()
-    if isinstance(visualisation, str):
-        print(f"cady visualisation prerequisites are not available: {visualisation}")
-        return
+    document = plate_document()
+    drawing = document.get("drawing", "front")
+    part = document.get("part", "plate")
+    if not isinstance(drawing, Drawing2D) or not isinstance(part, Part):
+        raise TypeError("plate document has unexpected contents")
 
-    ArrayMesh3, plot_array_mesh3, plot_drawing2d = visualisation
-    model = build_model()
-
-    plot_drawing2d(
-        model.drawing("front"),
-        tolerance=args.tolerance,
-        save_path=args.out / "visualise_plate_2d.png",
-        show=args.show,
-    )
-
-    meshes = model.to_array(tolerance=args.tolerance)
-    mesh = meshes[0] if len(meshes) == 1 else ArrayMesh3.merged(meshes)
-    plot_array_mesh3(
-        mesh,
-        save_path=args.out / "visualise_plate_3d.png",
-        show=args.show,
-    )
+    scene = scene_for_target(part, name="plate_scene")
+    (args.out / "visualise_plate_scene.txt").write_text(scene_summary(scene), encoding="utf-8")
+    dxf.write(drawing, args.out / "visualise_plate.dxf", tolerance=args.tolerance)
+    stl.write(part, args.out / "visualise_plate.stl", tolerance=args.tolerance)
+    print(scene_summary(scene).rstrip())
 
 
 if __name__ == "__main__":

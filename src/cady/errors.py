@@ -1,9 +1,21 @@
 class CadError(Exception):
-    """Base class for cady scene and writer failures."""
+    """Base class for cady failures."""
 
 
-class SceneError(CadError):
-    """Raised when a shape is added to an incompatible scene."""
+class GeometryError(CadError):
+    """Raised when geometry is invalid or cannot be evaluated."""
+
+
+class DrawingError(CadError):
+    """Raised when drawing composition is invalid."""
+
+
+class ProductError(CadError):
+    """Raised when part or assembly structure is invalid."""
+
+
+class ViewError(CadError):
+    """Raised when scene, camera, or light state is invalid."""
 
 
 class ReadError(CadError):
