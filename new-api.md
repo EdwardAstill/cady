@@ -8,14 +8,45 @@ This is a design sketch for a simpler object model. The main split is:
 - 2D profiles describe filled regions.
 - 3D faces place profiles in space.
 - 3D bodies are made by features such as extrude, revolve, and boolean union.
+- Parts are named manufacturable objects made from one or more bodies.
+- Assemblies place parts and subassemblies without automatically merging them.
+- Scenes are for viewing and presentation: cameras, lights, visibility, and
+  display overrides.
+- Documents are optional top-level registries for files and named objects, not
+  the object users must start with.
 - Meshes are evaluated triangle data, not the main authoring format.
 
 ## Object Hierarchy
 
 ```text
-Model
-  objects -> Object2D | Object3D
-  layers/groups -> named collections of objects
+Document
+  units, metadata
+  drawings -> Drawing2D[]
+  parts -> Part[]
+  assemblies -> Assembly[]
+  scenes -> Scene[]
+
+Part
+  bodies -> Body3D[]
+  material/display metadata
+
+Assembly
+  instances -> PartInstance | AssemblyInstance
+
+PartInstance
+  part -> Part
+  pose -> Pose3D or Transform3D
+
+AssemblyInstance
+  assembly -> Assembly
+  pose -> Pose3D or Transform3D
+
+Scene
+  objects -> SceneObject[]
+  cameras -> Camera[]
+  active_camera -> Camera
+  lights -> Light[]
+  display defaults
 
 Object2D
   Curve2D
@@ -43,6 +74,134 @@ Object3D
   Compound3D
   Mesh3D
 ```
+
+## Containers, Assemblies, And Viewing
+
+The new API should not require a `Model` object as the main user-facing entry
+point. A user should be able to work directly with a profile, body, part,
+assembly, or scene:
+
+```python
+profile = Profile2D.rectangle(width=10, height=5)
+body = profile.extrude(distance=20)
+part = Part("plate", bodies=[body])
+```
+
+If cady still needs one object that stores named drawings, parts, assemblies,
+scenes, units, and metadata, call it `Document` rather than `Model`.
+`Document` is a project/file registry. It should not be the only way to author
+geometry.
+
+### Body Versus Part
+
+`Body3D` is geometric and editable. It owns feature history and evaluates to a
+solid boundary or mesh.
+
+`Part` is product structure. It gives one manufacturable item a name, metadata,
+default display style, material, and one or more bodies:
+
+```text
+Part
+  name
+  bodies -> Body3D[]
+  material
+  display_style
+  metadata
+```
+
+Allowing multiple bodies in one part is useful for multibody CAD and imported
+files, but the rule should be explicit: use multiple bodies in a part only when
+they are still one item. Use an assembly when the objects are separate items.
+
+### Assembly
+
+`Assembly` is a tree of placed instances. It does not merge solids:
+
+```text
+Assembly
+  name
+  instances -> Instance[]
+
+Instance
+  name
+  target -> Part | Assembly
+  pose -> Pose3D or Transform3D
+  metadata
+```
+
+This makes repeated parts cheap and gives cady a clean path to BOM-style
+metadata later. If the user wants one merged solid, they should call a boolean
+operation and produce a `Body3D`:
+
+```python
+merged = body_a.union(body_b)
+```
+
+Assembly export can start by flattening instances into evaluated solids or
+meshes. Preserving STEP product structure can come later.
+
+### Scene
+
+`Scene` is for viewing, screenshots, and presentation. It can include bodies,
+parts, assemblies, meshes, and drawings, but it should not own the CAD truth.
+It owns view-specific state:
+
+```text
+Scene
+  name
+  objects -> SceneObject[]
+  cameras -> Camera[]
+  active_camera -> Camera
+  lights -> Light[]
+  background/display defaults
+
+SceneObject
+  target -> Body3D | Part | Assembly | Mesh3D | Drawing2D
+  pose -> optional Pose3D or Transform3D
+  visible -> bool
+  display_style -> optional override
+```
+
+This lets the same assembly be shown normally, exploded, sectioned, hidden, or
+colored for review without changing the assembly itself:
+
+```python
+scene = Scene.from_assembly(assembly)
+scene = scene.with_camera(Camera.look_at(
+    position=(80, -100, 60),
+    target=(0, 0, 0),
+    fov_degrees=35,
+))
+scene = scene.with_light(Light.directional(direction=(-1, -1, -2), intensity=2))
+```
+
+`Camera` should support:
+
+- projection: `perspective` or `orthographic`;
+- position;
+- orientation, preferably through `look_at(position, target, up=...)` plus a
+  lower-level frame/orientation constructor;
+- field of view for perspective cameras;
+- orthographic scale for orthographic cameras;
+- near and far clipping planes.
+
+`Light` should start small:
+
+- ambient light: color and intensity;
+- directional light: direction, color, intensity;
+- point light: position, color, intensity.
+
+Camera and light objects should be frozen, import-light value objects. They can
+live in a `cady.view` module or a domain submodule, but they must not import
+matplotlib, pyvista, or other visualisation backends. Backend adapters translate
+them when `cady.visualisation` renders a scene.
+
+### Compound3D
+
+`Compound3D` overlaps with `Assembly`. Prefer `Assembly` for user-facing product
+structure. Keep `Compound3D` only if cady needs a pure geometry grouping type,
+for example for imported geometry or intermediate operation results where
+there is no named part/assembly structure.
 
 ## 2D Representation
 
@@ -251,9 +410,14 @@ indexes.
 Two objects next to each other are not automatically one solid.
 
 ```text
-Compound3D = grouped objects, separate geometry
+Assembly = named product structure, separate geometry
+Compound3D = pure geometry group, separate geometry
 BooleanUnionFeature = merged solid body
 ```
+
+Prefer `Assembly` when the objects are separate parts or subassemblies. Use
+`Compound3D` only for geometry-level grouping when names, instances, BOM-style
+metadata, and product structure are irrelevant.
 
 For two squares in the same 2D plane, prefer a 2D profile union first:
 
@@ -301,3 +465,104 @@ Meshes are useful for STL export, visualisation, collision checks, and numeric
 work. They should not replace semantic objects like `Circle2D`, `Profile2D`,
 `Face3D`, or `Body3D` while the user is still authoring CAD geometry.
 
+## Example API Shape
+
+```python
+profile = Profile2D.rectangle(width=120, height=80)
+plate_body = profile.extrude(distance=8)
+plate = Part("plate", bodies=[plate_body])
+
+bolt = Part("m8_bolt", bodies=[Body3D.cylinder(radius=4, height=30)])
+
+assembly = Assembly("plate_with_bolts")
+assembly = assembly.add(plate, name="plate")
+assembly = assembly.add(bolt, name="bolt_a", pose=Pose3D.at(20, 20, 8))
+assembly = assembly.add(bolt, name="bolt_b", pose=Pose3D.at(100, 20, 8))
+
+scene = Scene.from_assembly(assembly)
+scene = scene.with_camera(Camera.look_at(
+    position=(160, -180, 120),
+    target=(60, 40, 0),
+    fov_degrees=35,
+))
+scene = scene.with_light(Light.directional(direction=(-1, -1, -2)))
+
+stl.write(plate, "plate.stl", tolerance=1e-3)
+step.write(assembly, "plate_with_bolts.step")
+view(scene, tolerance=1e-3)
+```
+
+This keeps the main concepts separate:
+
+- `Body3D` is editable geometry.
+- `Part` is one item.
+- `Assembly` places items.
+- `Scene` views items.
+- `Document` collects named objects when a project/file-level object is useful.
+
+## Implementation Plan
+
+1. Decide public names and compatibility.
+   - Prefer `Document` over `Model` for the new top-level registry.
+   - Keep the old `Model` API as a compatibility wrapper or deprecated alias
+     until the migration is complete.
+   - Decide whether `Compound3D` remains public or becomes internal.
+   - Verify with `PYTHONPATH=src .venv/bin/pytest -q tests/model tests/conventions`.
+
+2. Add import-light value objects.
+   - Add `Pose3D`/placement support if the existing transform API is not enough.
+   - Add frozen `Part`, `PartInstance`, `Assembly`, and `AssemblyInstance`.
+   - Add frozen `Camera`, `Light`, `Scene`, `SceneObject`, and `DisplayStyle`.
+   - Do not import visualisation backends from these modules.
+   - Verify with `PYTHONPATH=src .venv/bin/pytest -q tests/domain tests/model tests/conventions`.
+
+3. Implement assembly flattening.
+   - Traverse nested assemblies.
+   - Apply instance poses.
+   - Return evaluated bodies or meshes for writers and visualisation.
+   - Verify with focused assembly tests plus `PYTHONPATH=src .venv/bin/pytest -q tests/model tests/write`.
+
+4. Implement scene evaluation.
+   - Resolve scene objects into drawable/evaluable targets.
+   - Apply scene-level pose and display overrides after assembly placement.
+   - Keep cameras and lights out of STL/STEP/DXF export paths unless a future
+     format explicitly uses them.
+   - Verify with `PYTHONPATH=src .venv/bin/pytest -q tests/visualisation tests/conventions`.
+
+5. Update file facades.
+   - Writers should accept direct geometry where sensible: `Body3D`, `Part`,
+     `Assembly`, `Drawing2D`, and `Document`.
+   - STL can flatten parts and assemblies into meshes.
+   - STEP can initially flatten assemblies, then later preserve product
+     structure.
+   - DXF should remain drawing-focused.
+   - Verify with `PYTHONPATH=src .venv/bin/pytest -q tests/write tests/examples`.
+
+6. Update public docs and examples.
+   - Lead with direct object usage, not `Model`.
+   - Show `Part` for a single exported item.
+   - Show `Assembly` for multiple placed items.
+   - Show `Scene` only for viewing/presentation.
+   - Verify with `PYTHONPATH=src .venv/bin/pytest -q tests/examples`.
+
+7. Run full gates.
+   - `.venv/bin/pytest -q`
+   - `.venv/bin/pyright src/cady`
+   - `.venv/bin/ruff check src/cady tests`
+
+## Open Design Questions
+
+- Should the replacement top-level registry be named `Document`,
+  `CadDocument`, or something else?
+- Should `Part` allow multiple bodies in the first new-API release, or should
+  it start as exactly one body and expand later?
+- Should `Camera`, `Light`, and `Scene` live in `cady.view`, `cady.domain.view`,
+  or `cady.visualisation`? The recommended answer is `cady.view` because these
+  are backend-independent value objects.
+- Should STEP assembly export preserve product structure immediately, or should
+  the first implementation flatten assemblies and add structured STEP later?
+- Should camera orientation be stored as a frame, quaternion, matrix, or
+  position/target/up? The recommended public constructor is `look_at(...)`,
+  with a lower-level frame/orientation form for exact CAD views.
+- How should layers, materials, and display styles interact across drawings,
+  parts, assemblies, and scenes?
