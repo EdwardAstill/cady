@@ -7,6 +7,8 @@ from math import pi
 from cady.domain.base import AxisString, Shape2D, Shape3D, parse_axis
 from cady.domain.vec import Vec3, promote3
 
+DEFAULT_EVALUATED_BOUNDS_TOLERANCE = 1e-3
+
 
 def _bounds(points: tuple[Vec3, ...]) -> tuple[Vec3, Vec3]:
     return (
@@ -99,11 +101,25 @@ class Extrusion(Shape3D):
             raise ValueError("Extrusion distance must be non-zero")
 
     def bounds(self) -> tuple[Vec3, Vec3]:
-        from cady.ops.tessellate import extrusion_to_triangles
+        from cady.domain.base import axis_vector
+        from cady.ops.meshes3d import basis_for_axis
 
-        return _bounds(
-            tuple(point for tri in extrusion_to_triangles(self, tolerance=1e-2) for point in tri)
+        mn, mx = self.profile.bounds()
+        u_raw, v_raw, w_raw = basis_for_axis(
+            axis_vector(self.axis).tuple(),
+            self.axis if isinstance(self.axis, str) else None,
         )
+        u, v, w = Vec3(*u_raw), Vec3(*v_raw), Vec3(*w_raw)
+        start = self.offset
+        end = self.offset + w * self.distance
+        corners = (
+            (mn.x, mn.y),
+            (mx.x, mn.y),
+            (mx.x, mx.y),
+            (mn.x, mx.y),
+        )
+        points = tuple(origin + u * x + v * y for origin in (start, end) for x, y in corners)
+        return _bounds(points)
 
     def _transform3(self, fn: Callable[[Vec3], Vec3]) -> Shape3D:
         return replace(self, offset=fn(self.offset))
@@ -130,10 +146,17 @@ class Revolution(Shape3D):
             raise ValueError("Revolution angle must be non-zero")
 
     def bounds(self) -> tuple[Vec3, Vec3]:
+        return self.evaluated_bounds(tolerance=DEFAULT_EVALUATED_BOUNDS_TOLERANCE)
+
+    def evaluated_bounds(self, *, tolerance: float) -> tuple[Vec3, Vec3]:
         from cady.ops.tessellate import revolution_to_triangles
 
         return _bounds(
-            tuple(point for tri in revolution_to_triangles(self, tolerance=1e-2) for point in tri)
+            tuple(
+                point
+                for tri in revolution_to_triangles(self, tolerance=tolerance)
+                for point in tri
+            )
         )
 
     def _transform3(self, fn: Callable[[Vec3], Vec3]) -> Shape3D:

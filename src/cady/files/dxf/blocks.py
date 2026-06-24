@@ -6,7 +6,7 @@ from cady.files.dxf.emit import pairs
 from cady.files.dxf.entities import mtext_entity, shape_entities
 
 
-def block_definition(block: BlockDefinition) -> list[str]:
+def block_definition(block: BlockDefinition, *, tolerance: float = 1e-3) -> list[str]:
     body = pairs(
         (
             (0, "BLOCK"),
@@ -24,7 +24,7 @@ def block_definition(block: BlockDefinition) -> list[str]:
     )
     for layer in block.layers.values():
         for shape in layer.entities:
-            body.extend(shape_entities(shape, layer.name))
+            body.extend(shape_entities(shape, layer.name, tolerance=tolerance))
     for text in block.texts:
         body.extend(mtext_entity(text))
     body.extend(
@@ -78,11 +78,11 @@ def dimension_block_definition(name: str) -> list[str]:
 
 
 def blocks_section_body(
-    drawing: DxfDrawing, dim_block_names: tuple[str, ...]
+    drawing: DxfDrawing, dim_block_names: tuple[str, ...], *, tolerance: float = 1e-3
 ) -> list[str]:
     body: list[str] = []
     for block in drawing.blocks.values():
-        body.extend(block_definition(block))
+        body.extend(block_definition(block, tolerance=tolerance))
     for name in dim_block_names:
         body.extend(dimension_block_definition(name))
     return body

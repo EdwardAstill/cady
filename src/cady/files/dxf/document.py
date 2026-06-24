@@ -47,15 +47,15 @@ def _header(bounds: tuple[Vec2, Vec2], drawing: DxfDrawing) -> list[str]:
     return section("HEADER", pairs(tuple(fixed)))
 
 
-def _entities(drawing: DxfDrawing, plan: DxfRenderPlan) -> list[str]:
+def _entities(drawing: DxfDrawing, plan: DxfRenderPlan, *, tolerance: float) -> list[str]:
     body: list[str] = []
     for layer in plan.layers:
         for shape in layer.entities:
-            body.extend(shape_entities(shape, layer.name))
+            body.extend(shape_entities(shape, layer.name, tolerance=tolerance))
     for text in drawing.texts:
         body.extend(mtext_entity(text))
     for hatch in drawing.hatches:
-        body.extend(hatch_entity(hatch))
+        body.extend(hatch_entity(hatch, tolerance=tolerance))
     for insert in drawing.inserts:
         body.extend(insert_entity(insert))
     for dimension, block_name in zip(
@@ -130,7 +130,7 @@ def _entity_count(drawing: DxfDrawing) -> int:
     )
 
 
-def render_document(drawing: DxfDrawing) -> str:
+def render_document(drawing: DxfDrawing, *, tolerance: float = 1e-3) -> str:
     if _entity_count(drawing) == 0:
         raise WriteError("cannot write empty DXF drawing")
 
@@ -148,8 +148,13 @@ def render_document(drawing: DxfDrawing) -> str:
             ],
         )
     )
-    lines.extend(section("BLOCKS", blocks_section_body(drawing, plan.dimension_block_names)))
-    lines.extend(_entities(drawing, plan))
+    lines.extend(
+        section(
+            "BLOCKS",
+            blocks_section_body(drawing, plan.dimension_block_names, tolerance=tolerance),
+        )
+    )
+    lines.extend(_entities(drawing, plan, tolerance=tolerance))
     lines.extend(section("OBJECTS", []))
     lines.extend(("0", "EOF"))
     return "\n".join(lines) + "\n"

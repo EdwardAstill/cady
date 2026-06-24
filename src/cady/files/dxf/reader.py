@@ -21,12 +21,11 @@ from cady.files.dxf.codes import (
     Y,
     Z,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class DxfPair:
-    code: int
-    value: str
+from cady.files.dxf.parser import DxfPair
+from cady.files.dxf.parser import chunks as _chunks
+from cady.files.dxf.parser import entity_chunks as _entity_chunks
+from cady.files.dxf.parser import pairs as _pairs
+from cady.files.dxf.parser import sections as _sections
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,42 +130,6 @@ def parse_dxf_3d(text: str) -> Dxf3DImportResult:
     return Dxf3DImportResult(tuple(meshes), tuple(wires), tuple(skipped))
 
 
-def _pairs(text: str) -> list[DxfPair]:
-    lines = text.splitlines()
-    if len(lines) % 2 != 0:
-        raise ReadError("malformed DXF: expected group-code/value line pairs")
-    pairs: list[DxfPair] = []
-    for index in range(0, len(lines), 2):
-        try:
-            code = int(lines[index].strip())
-        except ValueError as exc:
-            line_number = index + 1
-            raise ReadError(f"malformed DXF: invalid group code on line {line_number}") from exc
-        pairs.append(DxfPair(code, lines[index + 1].strip()))
-    return pairs
-
-
-def _sections(pairs: list[DxfPair]) -> list[tuple[str, list[DxfPair]]]:
-    sections: list[tuple[str, list[DxfPair]]] = []
-    index = 0
-    while index < len(pairs):
-        pair = pairs[index]
-        if pair.code == 0 and pair.value == "SECTION":
-            if index + 1 >= len(pairs) or pairs[index + 1].code != 2:
-                raise ReadError("malformed DXF: SECTION missing name")
-            name = pairs[index + 1].value.upper()
-            index += 2
-            body: list[DxfPair] = []
-            while index < len(pairs):
-                if pairs[index].code == 0 and pairs[index].value == "ENDSEC":
-                    break
-                body.append(pairs[index])
-                index += 1
-            sections.append((name, body))
-        index += 1
-    return sections
-
-
 def _layer_records(pairs: list[DxfPair]) -> dict[str, LayerRecord]:
     records: dict[str, LayerRecord] = {}
     for section_name, body in _sections(pairs):
@@ -185,34 +148,6 @@ def _layer_records(pairs: list[DxfPair]) -> dict[str, LayerRecord]:
                 linetype=linetype,
             )
     return records
-
-
-def _entity_chunks(pairs: list[DxfPair]) -> list[tuple[str, list[DxfPair]]]:
-    entities: list[tuple[str, list[DxfPair]]] = []
-    for section_name, body in _sections(pairs):
-        if section_name == "ENTITIES":
-            entities.extend(_chunks(body))
-    return entities
-
-
-def _chunks(pairs: list[DxfPair]) -> list[tuple[str, list[DxfPair]]]:
-    chunks: list[tuple[str, list[DxfPair]]] = []
-    index = 0
-    while index < len(pairs):
-        pair = pairs[index]
-        if pair.code != 0:
-            index += 1
-            continue
-        entity_type = pair.value.upper()
-        index += 1
-        chunk: list[DxfPair] = []
-        while index < len(pairs) and pairs[index].code != 0:
-            chunk.append(pairs[index])
-            index += 1
-        chunks.append((entity_type, chunk))
-    return chunks
-
-
 def _add_entity(
     drawing: DxfDrawing,
     layers: dict[str, LayerRecord],

@@ -8,10 +8,10 @@ from cady.files.dxf.emit import pairs
 from cady.ops.tessellate import curves_to_polyline
 
 
-def hatch_boundary_points(boundary: Shape2D) -> tuple[Vec2, ...]:
+def hatch_boundary_points(boundary: Shape2D, *, tolerance: float = 1e-3) -> tuple[Vec2, ...]:
     points = boundary.points()
     if len(points) < 4 or points[0] == points[1]:
-        points = curves_to_polyline(boundary, tolerance=1e-3).points()
+        points = curves_to_polyline(boundary, tolerance=tolerance).points()
     if points[0] == points[-1]:
         points = points[:-1]
     return points
@@ -30,7 +30,7 @@ def _boundary_path(points: tuple[Vec2, ...], flags: int) -> list[tuple[int, obje
     return items
 
 
-def hatch_entity(hatch: HatchEntity) -> list[str]:
+def hatch_entity(hatch: HatchEntity, *, tolerance: float = 1e-3) -> list[str]:
     loops = (hatch.boundary, *hatch.boundary.inner_loops)
     items: list[tuple[int, object]] = [
         (0, "HATCH"),
@@ -49,7 +49,12 @@ def hatch_entity(hatch: HatchEntity) -> list[str]:
         (91, len(loops)),
     ]
     for index, loop in enumerate(loops):
-        items.extend(_boundary_path(hatch_boundary_points(loop), 3 if index == 0 else 18))
+        items.extend(
+            _boundary_path(
+                hatch_boundary_points(loop, tolerance=tolerance),
+                3 if index == 0 else 18,
+            )
+        )
     items.extend(
         (
             (75, 1),

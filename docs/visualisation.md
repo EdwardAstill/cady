@@ -82,6 +82,7 @@ Number keys provide fixed orientation controls:
 - `1`, `2`, and `3` rotate 90 degrees about the object's local X, Y, and Z
   axes;
 - `6`, `7`, `8`, and `9` snap to four isometric views.
+- `a` toggles the local XYZ axis overlay, sized relative to the camera view.
 
 ## Saving Output
 

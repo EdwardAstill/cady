@@ -48,7 +48,7 @@ def _normalise_linetype(linetype: str) -> str:
     return value
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class TextEntity:
     text: str
     at: Vec2
@@ -63,7 +63,7 @@ def _format_measurement(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class DimensionEntity:
     kind: DimensionKind
     a: Vec2
@@ -102,7 +102,7 @@ class AngularDimensionEntity:
             object.__setattr__(self, "measurement_text", _format_measurement(angle_deg))
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class HatchEntity:
     boundary: Shape2D
     layer: str
@@ -111,7 +111,7 @@ class HatchEntity:
     scale: float = 1.0
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class InsertEntity:
     name: str
     at: Vec2
@@ -479,8 +479,8 @@ class DxfDrawing:
         )
         return self
 
-    def write(self, path: str | Path) -> DxfDrawing:
+    def write(self, path: str | Path, *, tolerance: float = 1e-3) -> DxfDrawing:
         from cady.files.dxf.sections import write_dxf
 
-        write_dxf(self, Path(path))
+        write_dxf(self, Path(path), tolerance=tolerance)
         return self

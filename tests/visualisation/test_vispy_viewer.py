@@ -11,8 +11,9 @@ import pytest
 
 def test_vispy_viewer_module_imports() -> None:
     """The module must be importable regardless of vispy presence."""
-    from cady.visualisation.vispy_viewer import vispy_view_mesh, vispy_view_meshes
+    from cady.visualisation.vispy_viewer import vispy_view_lines, vispy_view_mesh, vispy_view_meshes
 
+    assert vispy_view_lines
     assert vispy_view_mesh
     assert vispy_view_meshes
 
@@ -249,6 +250,44 @@ def test_model_matrix_maps_local_centre_to_global_origin() -> None:
     np.testing.assert_allclose(transformed, [0.0, 0.0, 0.0, 1.0], atol=1e-6)
 
 
+def test_projection_clip_planes_scale_to_large_geometry() -> None:
+    from cady.visualisation.vispy_viewer import _projection_clip_planes
+
+    radius = 218_087.2
+    distance = radius * 2.5
+
+    near, far = _projection_clip_planes(radius, distance)
+
+    assert 0.0 < near < distance - radius
+    assert far > distance + radius
+
+
+def test_view_relative_axis_length_uses_perspective_window_size() -> None:
+    from cady.visualisation.vispy_viewer import _view_relative_axis_length
+
+    length = _view_relative_axis_length(
+        10.0,
+        (1000, 500),
+        fov_degrees=90.0,
+        view_fraction=0.25,
+    )
+
+    assert length == pytest.approx(5.0)
+
+
+def test_view_relative_axis_length_scales_with_camera_distance_not_object_size() -> None:
+    from cady.visualisation.vispy_viewer import _view_relative_axis_length
+
+    near = _view_relative_axis_length(5.0, (900, 700))
+    far = _view_relative_axis_length(10.0, (900, 700))
+    same_view_larger_framebuffer = _view_relative_axis_length(10.0, (1800, 1400))
+    narrow_window = _view_relative_axis_length(10.0, (350, 700))
+
+    assert far == pytest.approx(near * 2.0)
+    assert same_view_larger_framebuffer == pytest.approx(far)
+    assert narrow_window == pytest.approx(far * 0.5)
+
+
 def test_view_orbit_uses_screen_axes_after_existing_local_rotation() -> None:
     from cady.visualisation.vispy_viewer import _apply_view_orbit, _rotation_matrix
 
@@ -342,6 +381,63 @@ def test_number_key_name_handles_digit_and_numpad_names() -> None:
     assert _number_key_name("A") is None
 
 
+def test_axis_toggle_key_name_handles_a_key_variants() -> None:
+    from cady.visualisation.vispy_viewer import _axis_toggle_key_pressed
+
+    class Key:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    assert _axis_toggle_key_pressed("a")
+    assert _axis_toggle_key_pressed("A")
+    assert _axis_toggle_key_pressed("KeyA")
+    assert _axis_toggle_key_pressed(Key("A"))
+    assert not _axis_toggle_key_pressed("1")
+
+
+def test_local_axis_line_data_is_centred_and_colored_by_axis() -> None:
+    from cady.visualisation.vispy_viewer import _local_axis_line_data
+
+    origin = np.array([2.0, -1.0, 0.5], dtype=np.float32)
+
+    vertices, indices, colors = _local_axis_line_data(origin, 0.25)
+
+    np.testing.assert_allclose(
+        vertices,
+        np.array(
+            [
+                [2.0, -1.0, 0.5],
+                [2.25, -1.0, 0.5],
+                [2.0, -1.0, 0.5],
+                [2.0, -0.75, 0.5],
+                [2.0, -1.0, 0.5],
+                [2.0, -1.0, 0.75],
+            ],
+            dtype=np.float32,
+        ),
+        atol=1e-6,
+    )
+    np.testing.assert_array_equal(indices, np.array([[0, 1], [2, 3], [4, 5]], dtype=np.uint32))
+    assert colors.shape == (6, 3)
+    np.testing.assert_allclose(colors[0], colors[1], atol=1e-6)
+    np.testing.assert_allclose(colors[2], colors[3], atol=1e-6)
+    np.testing.assert_allclose(colors[4], colors[5], atol=1e-6)
+    assert not np.allclose(colors[0], colors[2])
+    assert not np.allclose(colors[2], colors[4])
+
+
+def test_polyline_indices_connect_consecutive_vertices() -> None:
+    from cady.visualisation.vispy_viewer import _polyline_indices
+
+    indices = _polyline_indices(4)
+
+    np.testing.assert_array_equal(
+        indices,
+        np.array([[0, 1], [1, 2], [2, 3]], dtype=np.uint32),
+    )
+    assert _polyline_indices(1).shape == (0, 2)
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("vispy") is None,
     reason="VisPy not installed.",
@@ -370,4 +466,35 @@ def test_vispy_view_mesh_with_real_data() -> None:
         (0.1, 0.1, 0.1),
         title="test",
     )
+    assert canvas is not None
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("vispy") is None,
+    reason="VisPy not installed.",
+)
+def test_make_canvas_with_line_only_data() -> None:
+    from cady.visualisation.vispy_viewer import _make_canvas
+
+    vertices = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    indices = np.array([[0, 1], [1, 2]], dtype=np.uint32)
+
+    canvas = _make_canvas(
+        [],
+        [],
+        [],
+        [],
+        [vertices],
+        [indices],
+        (0.05, 0.23, 0.55),
+        title="line test",
+    )
+
     assert canvas is not None

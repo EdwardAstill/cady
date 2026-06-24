@@ -22,21 +22,26 @@ def _as_dxf_drawing(drawing: Drawing2D | DxfDrawing) -> DxfDrawing:
     return drawing
 
 
-def render_drawing(drawing: Drawing2D | DxfDrawing) -> str:
-    return render_dxf(_as_dxf_drawing(drawing))
+def render_drawing(drawing: Drawing2D | DxfDrawing, *, tolerance: float = 1e-3) -> str:
+    return render_dxf(_as_dxf_drawing(drawing), tolerance=tolerance)
 
 
 def read_drawing(path: str | Path) -> DxfDrawing:
     return read_dxf(path)
 
 
-def write_drawing(drawing: Drawing2D | DxfDrawing, path: str | Path) -> Drawing2D | DxfDrawing:
-    write_dxf(_as_dxf_drawing(drawing), Path(path))
+def write_drawing(
+    drawing: Drawing2D | DxfDrawing,
+    path: str | Path,
+    *,
+    tolerance: float = 1e-3,
+) -> Drawing2D | DxfDrawing:
+    write_dxf(_as_dxf_drawing(drawing), Path(path), tolerance=tolerance)
     return drawing
 
 
-def write_model(model: Model, path: str | Path) -> Model:
-    return model.write_dxf(path)
+def write_model(model: Model, path: str | Path, *, tolerance: float = 1e-3) -> Model:
+    return model.write_dxf(path, tolerance=tolerance)
 
 
 __all__ = [

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class StepFace:
     """A face extracted from a STEP file with resolved geometry."""
 
@@ -141,7 +141,10 @@ def _direction(entity: Any) -> tuple[float, float, float]:
     return (float(coords[0]), float(coords[1]), float(coords[2]))
 
 
-def _axis2_placement(entity: Any) -> tuple[
+def _axis2_placement(
+    entity: Any,
+    resolver: _EntityResolver,
+) -> tuple[
     tuple[float, float, float],  # origin
     tuple[float, float, float],  # axis (Z direction)
     tuple[float, float, float],  # ref_direction (X direction)
@@ -153,8 +156,8 @@ def _axis2_placement(entity: Any) -> tuple[
         If optional ref_direction is missing, returns (1,0,0) as default.
     """
     # params: (name, cartesian_point_ref, axis_ref, [ref_direction_ref])
-    origin_entity = _resolve_ref_in_context(entity, entity.params[1])
-    axis_entity = _resolve_ref_in_context(entity, entity.params[2])
+    origin_entity = resolver.resolve_entity(entity.params[1])
+    axis_entity = resolver.resolve_entity(entity.params[2])
 
     origin = _point_from_cartesian(origin_entity) if origin_entity else (0.0, 0.0, 0.0)
     axis = _direction(axis_entity) if axis_entity else (0.0, 0.0, 1.0)
@@ -162,38 +165,11 @@ def _axis2_placement(entity: Any) -> tuple[
     # ref_direction is optional (param[3] may be None or missing)
     ref_dir = (1.0, 0.0, 0.0)
     if len(entity.params) > 3:
-        ref_entity = _resolve_ref_in_context(entity, entity.params[3])
+        ref_entity = resolver.resolve_entity(entity.params[3])
         if ref_entity is not None:
             ref_dir = _direction(ref_entity)
 
     return origin, axis, ref_dir
-
-
-def _resolve_ref_in_context(entity: Any, param: Any) -> Any | None:
-    """Best-effort reference resolution using the entity's parent data section.
-
-    This is a workaround — the entity objects don't carry a back-reference
-    to their DataSection. We use a module-level registry set by _extract_faces.
-    """
-    if not isinstance(param, str) or not param.startswith("#"):
-        return None
-    # Try the global registry
-    reg = _get_global_resolver()
-    if reg is not None:
-        return reg.resolve_entity(param)
-    return None
-
-
-_global_resolver: _EntityResolver | None = None
-
-
-def _get_global_resolver() -> _EntityResolver | None:
-    return _global_resolver
-
-
-def _set_global_resolver(r: _EntityResolver) -> None:
-    global _global_resolver
-    _global_resolver = r
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +179,6 @@ def _set_global_resolver(r: _EntityResolver) -> None:
 
 def _extract_faces(data_section: Any, resolver: _EntityResolver):
     """Yield StepFace objects from all ADVANCED_FACE entities in the data section."""
-    _set_global_resolver(resolver)
-
     # Walk: MANIFOLD_SOLID_BREP → CLOSED_SHELL → ADVANCED_FACE
     for inst in data_section.instances.values():
         entities: list[Any] = []
@@ -283,7 +257,7 @@ def _extract_plane(
     normal = (0.0, 0.0, 1.0)
 
     if axis_entity is not None:
-        origin, axis_dir, _ = _axis2_placement(axis_entity)
+        origin, axis_dir, _ = _axis2_placement(axis_entity, resolver)
         normal = axis_dir
 
     centroid = _approximate_centroid(face_entity, resolver, origin)
@@ -316,7 +290,7 @@ def _extract_cylinder(
     axis_dir = (0.0, 0.0, 1.0)
 
     if axis_entity is not None:
-        origin, axis_dir, _ = _axis2_placement(axis_entity)
+        origin, axis_dir, _ = _axis2_placement(axis_entity, resolver)
 
     centroid = _approximate_centroid(face_entity, resolver, origin)
 
@@ -347,7 +321,7 @@ def _extract_cone(
     axis_dir = (0.0, 0.0, 1.0)
 
     if axis_entity is not None:
-        origin, axis_dir, _ = _axis2_placement(axis_entity)
+        origin, axis_dir, _ = _axis2_placement(axis_entity, resolver)
 
     centroid = _approximate_centroid(face_entity, resolver, origin)
 

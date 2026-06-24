@@ -107,7 +107,7 @@ def mtext_entity(text: TextEntity) -> list[str]:
     )
 
 
-def shape_entities(shape: Shape2D, layer: str) -> list[str]:
+def shape_entities(shape: Shape2D, layer: str, *, tolerance: float = 1e-3) -> list[str]:
     out: list[str] = []
     if isinstance(shape, Line):
         out.extend(line_entity(shape, layer))
@@ -120,14 +120,14 @@ def shape_entities(shape: Shape2D, layer: str) -> list[str]:
     elif isinstance(shape, Polyline):
         out.extend(lwpolyline_entity(shape.points(), shape.closed, layer))
     elif isinstance(shape, Spline):
-        flat = curves_to_polyline(shape, tolerance=1e-3)
+        flat = curves_to_polyline(shape, tolerance=tolerance)
         out.extend(lwpolyline_entity(flat.points(), flat.closed, layer))
     elif isinstance(shape, Path):
         for segment in shape.segments:
-            out.extend(shape_entities(segment, layer))
+            out.extend(shape_entities(segment, layer, tolerance=tolerance))
     else:
-        flat = curves_to_polyline(shape, tolerance=1e-3)
+        flat = curves_to_polyline(shape, tolerance=tolerance)
         out.extend(lwpolyline_entity(flat.points(), flat.closed, layer))
     for hole in getattr(shape, "inner_loops", ()):
-        out.extend(shape_entities(hole, layer))
+        out.extend(shape_entities(hole, layer, tolerance=tolerance))
     return out

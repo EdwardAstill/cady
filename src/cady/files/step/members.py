@@ -17,24 +17,26 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from cady.domain.vec import Vec3
 from cady.files.step.faces import StepFace
 
 
-def _empty_dimensions() -> dict[str, float]:
-    return {}
+def _empty_dimensions() -> Mapping[str, float]:
+    return MappingProxyType({})
 
 
-def _empty_faces() -> list[StepFace]:
-    return []
+def _empty_faces() -> tuple[StepFace, ...]:
+    return ()
 
 
 # ── Data types ──────────────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ExtrudedSection:
     """Cross-section of an extruded structural member.
 
@@ -45,10 +47,13 @@ class ExtrudedSection:
     """
 
     section_type: str
-    dimensions: dict[str, float] = field(default_factory=_empty_dimensions)
+    dimensions: Mapping[str, float] = field(default_factory=_empty_dimensions)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dimensions", MappingProxyType(dict(self.dimensions)))
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ExtrudedMember:
     """A structural member reconstructed from a STEP solid extrusion.
 
@@ -64,7 +69,10 @@ class ExtrudedMember:
     axis_start: tuple[float, float, float]
     axis_end: tuple[float, float, float]
     section: ExtrudedSection
-    faces: list[StepFace] = field(default_factory=_empty_faces)
+    faces: tuple[StepFace, ...] = field(default_factory=_empty_faces)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "faces", tuple(self.faces))
 
 
 # ── End-cap detection ───────────────────────────────────────────────────────
@@ -219,7 +227,7 @@ def extract_members_from_faces(faces: list[StepFace]) -> list[ExtrudedMember]:
                 axis_start=axis_start,
                 axis_end=axis_end,
                 section=section,
-                faces=[cap_a, cap_b] + side_faces,
+                faces=(cap_a, cap_b, *side_faces),
             )
         )
 
@@ -319,7 +327,7 @@ def group_cylinders_into_members(
                     section_type="tubular",
                     dimensions={"diameter": radius * 2},
                 ),
-                faces=group,
+                faces=tuple(group),
             )
         )
 

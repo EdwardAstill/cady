@@ -178,10 +178,10 @@ class Drawing2D:
     def to_dxf_drawing(self) -> DxfDrawing:
         return self._drawing
 
-    def write_dxf(self, path: str | Path) -> Drawing2D:
+    def write_dxf(self, path: str | Path, *, tolerance: float = 1e-3) -> Drawing2D:
         from cady.files.dxf import write_drawing
 
-        write_drawing(self, path)
+        write_drawing(self, path, tolerance=tolerance)
         return self
 
     def to_array(self, *, tolerance: float = 1e-3) -> list[object]:
@@ -305,7 +305,7 @@ class Model:
             self._assemblies[name] = assembly
         return assembly
 
-    def write_dxf(self, path: str | Path) -> Model:
+    def write_dxf(self, path: str | Path, *, tolerance: float = 1e-3) -> Model:
         drawing = DxfDrawing()
         for source in self._drawings.values():
             dxf = source.to_dxf_drawing()
@@ -342,7 +342,7 @@ class Model:
                     scale=insert.scale,
                     rotation=insert.rotation,
                 )
-        drawing.write(path)
+        drawing.write(path, tolerance=tolerance)
         return self
 
     def write_stl(self, path: str | Path, *, ascii: bool = False, tolerance: float = 1e-3) -> Model:

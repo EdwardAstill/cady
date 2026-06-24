@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-from math import cos, sin
-
 from cady.domain.base import Shape2D, Shape3D
 from cady.domain.vec import Vec2, Vec3, promote2, promote3
+from cady.ops import point_transforms as primitive
 
 
 def translate_point2(point: Vec2, dx: float, dy: float) -> Vec2:
-    return point + Vec2(dx, dy)
+    return Vec2(*primitive.translate_point2(point.tuple(), dx, dy))
 
 
 def rotate_point2(point: Vec2, centre: Vec2 | tuple[float, float], angle: float) -> Vec2:
     c = promote2(centre)
-    ca = cos(angle)
-    sa = sin(angle)
-    rel = point - c
-    return Vec2(c.x + rel.x * ca - rel.y * sa, c.y + rel.x * sa + rel.y * ca)
+    return Vec2(*primitive.rotate_point2(point.tuple(), c.tuple(), angle))
 
 
 def scale_point2(
@@ -26,7 +22,7 @@ def scale_point2(
 ) -> Vec2:
     c = promote2(centre)
     y_scale = sx if sy is None else sy
-    return Vec2(c.x + (point.x - c.x) * sx, c.y + (point.y - c.y) * y_scale)
+    return Vec2(*primitive.scale_point2(point.tuple(), sx, y_scale, c.tuple()))
 
 
 def mirror_point2(
@@ -38,14 +34,11 @@ def mirror_point2(
     end = promote2(b)
     if start == end:
         raise ValueError("mirror axis must have two distinct points")
-    axis = (end - start).normalised()
-    rel = point - start
-    projected = start + axis * rel.dot(axis)
-    return projected * 2 - point
+    return Vec2(*primitive.mirror_point2(point.tuple(), start.tuple(), end.tuple()))
 
 
 def translate_point3(point: Vec3, dx: float, dy: float, dz: float) -> Vec3:
-    return point + Vec3(dx, dy, dz)
+    return Vec3(*primitive.translate_point3(point.tuple(), dx, dy, dz))
 
 
 def rotate_point3(
@@ -55,16 +48,8 @@ def rotate_point3(
     angle: float,
 ) -> Vec3:
     origin = promote3(axis_origin)
-    direction = promote3(axis_dir).normalised()
-    ca = cos(angle)
-    sa = sin(angle)
-    rel = point - origin
-    return (
-        origin
-        + rel * ca
-        + direction.cross(rel) * sa
-        + direction * (direction.dot(rel) * (1 - ca))
-    )
+    direction = promote3(axis_dir)
+    return Vec3(*primitive.rotate_point3(point.tuple(), origin.tuple(), direction.tuple(), angle))
 
 
 def mirror_point3(
@@ -73,8 +58,8 @@ def mirror_point3(
     plane_normal: Vec3 | tuple[float, float, float],
 ) -> Vec3:
     origin = promote3(plane_origin)
-    normal = promote3(plane_normal).normalised()
-    return point - normal * (2 * (point - origin).dot(normal))
+    normal = promote3(plane_normal)
+    return Vec3(*primitive.mirror_point3(point.tuple(), origin.tuple(), normal.tuple()))
 
 
 def translate2(shape: Shape2D, dx: float, dy: float) -> Shape2D:

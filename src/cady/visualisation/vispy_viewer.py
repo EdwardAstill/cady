@@ -8,12 +8,14 @@ from __future__ import annotations
 import importlib
 import importlib.util
 from collections.abc import Sequence
-from math import cos, radians
+from math import cos, radians, tan
 from typing import Any, Protocol, cast
 
 import numpy as np
 
-from cady.visualisation.styles import MESH_COLOR, MESH_EDGE_COLOR
+from cady.visualisation.mesh_buffers import orientation_edges as _orientation_edges
+from cady.visualisation.mesh_buffers import shaded_face_buffers as _shaded_face_buffers
+from cady.visualisation.styles import LINE_COLOR, MESH_COLOR, MESH_EDGE_COLOR
 
 _VERT_SHADER = """
 uniform mat4 u_model;
@@ -47,10 +49,7 @@ void main() {
 """
 
 _HAS_VISPY = importlib.util.find_spec("vispy") is not None
-_EDGE_ANGLE_TOLERANCE_DEGREES = 15.0
-_CURVED_PATCH_ANGLE_TOLERANCE_DEGREES = 35.0
-_MIN_CURVED_PATCH_ROOTS = 4
-_MAX_CURVED_PATCH_ROOT_FACES = 4
+_VIEW_FOV_DEGREES = 45.0
 _ISOMETRIC_PITCH_DEGREES = 35.26438968
 _ISOMETRIC_VIEW_ANGLES: dict[str, tuple[float, float]] = {
     "6": (45.0, _ISOMETRIC_PITCH_DEGREES),
@@ -63,6 +62,12 @@ _LOCAL_AXIS_TURN_KEYS: dict[str, tuple[float, float, float]] = {
     "2": (0.0, 1.0, 0.0),
     "3": (0.0, 0.0, 1.0),
 }
+_LOCAL_AXIS_COLORS: tuple[tuple[float, float, float], ...] = (
+    (0.9, 0.05, 0.05),
+    (0.05, 0.62, 0.18),
+    (0.1, 0.28, 0.95),
+)
+_LOCAL_AXIS_VIEW_FRACTION = 0.22
 
 
 class _MeshLike(Protocol):
@@ -72,6 +77,9 @@ class _MeshLike(Protocol):
 
 class _ToArrayLike(Protocol):
     def to_array(self, *, tolerance: float) -> _MeshLike: ...
+
+
+LineVertices = Sequence[Sequence[float]] | np.ndarray
 
 
 def _require_vispy() -> None:
@@ -87,229 +95,6 @@ def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
         int(hex_color[0:2], 16) / 255.0,
         int(hex_color[2:4], 16) / 255.0,
         int(hex_color[4:6], 16) / 255.0,
-    )
-
-
-def _face_normals(vertices: np.ndarray, faces: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    triangles = vertices[faces]
-    normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
-    lengths = np.linalg.norm(normals, axis=1)
-    valid = lengths > 1e-12
-    normals[valid] = normals[valid] / lengths[valid, None]
-    return normals.astype(np.float32, copy=False), valid
-
-
-def _coordinate_tolerance(vertices: np.ndarray) -> float:
-    if len(vertices) == 0:
-        return 1e-12
-    span = float(np.max(np.ptp(vertices, axis=0)))
-    return max(span * 1e-10, 1e-12)
-
-
-def _vertex_key(vertex: np.ndarray, coordinate_tolerance: float) -> tuple[int, int, int]:
-    scaled = np.rint(vertex / coordinate_tolerance).astype(np.int64)
-    return (int(scaled[0]), int(scaled[1]), int(scaled[2]))
-
-
-def _coordinate_edge_ownership(
-    vertices: np.ndarray, faces: np.ndarray, valid_faces: np.ndarray
-) -> tuple[
-    dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]],
-    dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]],
-]:
-    coordinate_tolerance = _coordinate_tolerance(vertices)
-    edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]] = {}
-    edge_indices: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
-    for face_index, face in enumerate(faces):
-        if not valid_faces[face_index]:
-            continue
-        face_edges = ((face[0], face[1]), (face[1], face[2]), (face[2], face[0]))
-        for start, end in face_edges:
-            start_index = int(start)
-            end_index = int(end)
-            start_key = _vertex_key(vertices[start_index], coordinate_tolerance)
-            end_key = _vertex_key(vertices[end_index], coordinate_tolerance)
-            if start_key == end_key:
-                continue
-            edge = (start_key, end_key) if start_key <= end_key else (end_key, start_key)
-            edge_faces.setdefault(edge, []).append(face_index)
-            edge_indices.setdefault(edge, (start_index, end_index))
-    return edge_faces, edge_indices
-
-
-def _smooth_face_roots(
-    normals: np.ndarray,
-    edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]],
-    *,
-    angle_tolerance_degrees: float,
-    curved_patch_angle_tolerance_degrees: float = _CURVED_PATCH_ANGLE_TOLERANCE_DEGREES,
-) -> np.ndarray:
-    cos_tolerance = cos(radians(angle_tolerance_degrees))
-    parents = list(range(len(normals)))
-
-    def find(face_index: int) -> int:
-        while parents[face_index] != face_index:
-            parents[face_index] = parents[parents[face_index]]
-            face_index = parents[face_index]
-        return face_index
-
-    def union(left: int, right: int) -> None:
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parents[right_root] = left_root
-
-    for owners in edge_faces.values():
-        for i, left in enumerate(owners):
-            for right in owners[i + 1 :]:
-                if abs(float(np.dot(normals[left], normals[right]))) >= cos_tolerance:
-                    union(left, right)
-
-    cos_curved_tolerance = cos(radians(curved_patch_angle_tolerance_degrees))
-    if cos_curved_tolerance < cos_tolerance:
-        roots = [find(face_index) for face_index in range(len(normals))]
-        root_face_counts = np.bincount(np.array(roots, dtype=np.int64), minlength=len(normals))
-        curved_adjacency: dict[int, set[int]] = {}
-        for owners in edge_faces.values():
-            for i, left in enumerate(owners):
-                for right in owners[i + 1 :]:
-                    left_root = find(left)
-                    right_root = find(right)
-                    if left_root == right_root:
-                        continue
-                    if (
-                        root_face_counts[left_root] > _MAX_CURVED_PATCH_ROOT_FACES
-                        or root_face_counts[right_root] > _MAX_CURVED_PATCH_ROOT_FACES
-                    ):
-                        continue
-                    dot = abs(float(np.dot(normals[left], normals[right])))
-                    if dot >= cos_curved_tolerance:
-                        curved_adjacency.setdefault(left_root, set()).add(right_root)
-                        curved_adjacency.setdefault(right_root, set()).add(left_root)
-
-        visited: set[int] = set()
-        for root in tuple(curved_adjacency):
-            if root in visited:
-                continue
-            component: list[int] = []
-            stack = [root]
-            visited.add(root)
-            while stack:
-                current = stack.pop()
-                component.append(current)
-                for neighbour in curved_adjacency.get(current, set()):
-                    if neighbour in visited:
-                        continue
-                    visited.add(neighbour)
-                    stack.append(neighbour)
-
-            if len(component) < _MIN_CURVED_PATCH_ROOTS:
-                continue
-            first = component[0]
-            for other in component[1:]:
-                union(first, other)
-
-    return np.array([find(face_index) for face_index in range(len(normals))], dtype=np.int64)
-
-
-def _orientation_edges(
-    vertices: np.ndarray,
-    faces: np.ndarray,
-    *,
-    angle_tolerance_degrees: float = _EDGE_ANGLE_TOLERANCE_DEGREES,
-    include_boundary_edges: bool = True,
-) -> np.ndarray:
-    """Boundaries between smooth face patches, excluding internal tessellation."""
-    if len(faces) == 0:
-        return np.empty((0, 2), dtype=np.uint32)
-
-    normals, valid_normals = _face_normals(vertices, faces)
-    edge_faces, edge_indices = _coordinate_edge_ownership(vertices, faces, valid_normals)
-    smooth_roots = _smooth_face_roots(
-        normals,
-        edge_faces,
-        angle_tolerance_degrees=angle_tolerance_degrees,
-    )
-
-    visible: list[tuple[int, int]] = []
-    for edge, owners in edge_faces.items():
-        representative = edge_indices[edge]
-        owner_roots = {int(smooth_roots[owner]) for owner in owners}
-        if len(owner_roots) > 1 or (len(owners) == 1 and include_boundary_edges):
-            visible.append(representative)
-
-    return np.array(sorted(visible), dtype=np.uint32).reshape((-1, 2))
-
-
-def _shaded_face_buffers(
-    vertices: np.ndarray,
-    faces: np.ndarray,
-    *,
-    angle_tolerance_degrees: float = _EDGE_ANGLE_TOLERANCE_DEGREES,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Duplicate hard-edge vertices and build smooth normals per face patch."""
-    if len(faces) == 0:
-        return (
-            np.empty((0, 3), dtype=np.float32),
-            np.empty((0, 3), dtype=np.uint32),
-            np.empty((0, 3), dtype=np.float32),
-        )
-
-    normals, valid_normals = _face_normals(vertices, faces)
-    edge_faces, _edge_indices = _coordinate_edge_ownership(vertices, faces, valid_normals)
-    smooth_roots = _smooth_face_roots(
-        normals,
-        edge_faces,
-        angle_tolerance_degrees=angle_tolerance_degrees,
-    )
-
-    coordinate_tolerance = _coordinate_tolerance(vertices)
-    render_indices_by_key: dict[tuple[tuple[int, int, int], int], int] = {}
-    render_vertices: list[np.ndarray] = []
-    normal_sums: list[np.ndarray] = []
-    render_faces: list[tuple[int, int, int]] = []
-
-    for face_index, face in enumerate(faces):
-        if not valid_normals[face_index]:
-            continue
-
-        root = int(smooth_roots[face_index])
-        face_render_indices: list[int] = []
-        for vertex_index in face:
-            original_index = int(vertex_index)
-            key = (_vertex_key(vertices[original_index], coordinate_tolerance), root)
-            render_index = render_indices_by_key.get(key)
-            if render_index is None:
-                render_index = len(render_vertices)
-                render_indices_by_key[key] = render_index
-                render_vertices.append(vertices[original_index])
-                normal_sums.append(np.zeros(3, dtype=np.float32))
-
-            face_normal = normals[face_index]
-            if float(np.dot(normal_sums[render_index], face_normal)) < 0.0:
-                face_normal = -face_normal
-            normal_sums[render_index] = normal_sums[render_index] + face_normal
-            face_render_indices.append(render_index)
-
-        render_faces.append(
-            (face_render_indices[0], face_render_indices[1], face_render_indices[2])
-        )
-
-    if not render_vertices:
-        return (
-            np.empty((0, 3), dtype=np.float32),
-            np.empty((0, 3), dtype=np.uint32),
-            np.empty((0, 3), dtype=np.float32),
-        )
-
-    render_normals = np.array(normal_sums, dtype=np.float32)
-    lengths = np.linalg.norm(render_normals, axis=1)
-    valid = lengths > 1e-12
-    render_normals[valid] = render_normals[valid] / lengths[valid, None]
-    return (
-        np.array(render_vertices, dtype=np.float32),
-        np.array(render_faces, dtype=np.uint32),
-        render_normals,
     )
 
 
@@ -382,9 +167,76 @@ def _number_key_name(key: object) -> str | None:
     return None
 
 
+def _axis_toggle_key_pressed(key: object) -> bool:
+    raw_name = getattr(key, "name", key)
+    return str(raw_name).lower() in {"a", "keya"}
+
+
 def _model_matrix(local_centre: np.ndarray, orientation: np.ndarray) -> np.ndarray:
     """Map local mesh coordinates to centred global/view coordinates."""
     return (_translation_matrix(-local_centre) @ orientation).astype(np.float32, copy=False)
+
+
+def _projection_clip_planes(radius: float, distance: float) -> tuple[float, float]:
+    near = max(radius * 0.001, 0.01)
+    far = max(distance + radius * 4.0, 1000.0)
+    return near, far
+
+
+def _view_relative_axis_length(
+    distance: float,
+    viewport_size: tuple[int, int],
+    *,
+    fov_degrees: float = _VIEW_FOV_DEGREES,
+    view_fraction: float = _LOCAL_AXIS_VIEW_FRACTION,
+) -> float:
+    """Return a world-space length that renders as a stable fraction of the viewport."""
+    width, height = viewport_size
+    width_px = max(float(width), 1.0)
+    height_px = max(float(height), 1.0)
+    target_pixels = min(width_px, height_px) * view_fraction
+    visible_world_height = 2.0 * max(float(distance), 1e-6) * tan(radians(fov_degrees) / 2.0)
+    return target_pixels * visible_world_height / height_px
+
+
+def _local_axis_line_data(
+    origin: np.ndarray,
+    length: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return vertices, indices, and per-vertex RGB colors for local XYZ axes."""
+    basis = np.eye(3, dtype=np.float32) * np.float32(length)
+    vertices: list[np.ndarray] = []
+    colors: list[tuple[float, float, float]] = []
+    for axis_index, rgb in enumerate(_LOCAL_AXIS_COLORS):
+        vertices.append(origin.astype(np.float32, copy=True))
+        vertices.append((origin + basis[axis_index]).astype(np.float32, copy=False))
+        colors.extend((rgb, rgb))
+    return (
+        np.array(vertices, dtype=np.float32),
+        np.array([[0, 1], [2, 3], [4, 5]], dtype=np.uint32),
+        np.array(colors, dtype=np.float32),
+    )
+
+
+def _rgb_from_color(color: str | tuple[float, float, float]) -> tuple[float, float, float]:
+    if isinstance(color, str):
+        return _hex_to_rgb(color)
+    return color
+
+
+def _polyline_indices(vertex_count: int) -> np.ndarray:
+    if vertex_count < 2:
+        return np.empty((0, 2), dtype=np.uint32)
+    starts = np.arange(0, vertex_count - 1, dtype=np.uint32)
+    ends = np.arange(1, vertex_count, dtype=np.uint32)
+    return np.column_stack((starts, ends)).astype(np.uint32, copy=False)
+
+
+def _prepare_polyline(vertices: LineVertices) -> tuple[np.ndarray, np.ndarray]:
+    points = np.asarray(vertices, dtype=np.float32)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("line vertices must be an (N, 3) array")
+    return points, _polyline_indices(len(points))
 
 
 def _make_canvas(
@@ -417,11 +269,12 @@ def _make_canvas(
 
             self._program = gloo.Program(_VERT_SHADER, _FRAG_SHADER)
 
-            # ── pack per-vertex position+color arrays ──────────────────────
             self._face_data: list[tuple[np.ndarray, object]] = []  # (packed_vertices, index_buffer)
             for verts, indices, normals, rgb in zip(
                 face_vertices, face_indices, face_normals, face_rgb, strict=True
             ):
+                if len(indices) == 0:
+                    continue
                 n = len(verts)
                 colors = np.tile(np.array(rgb, dtype=np.float32), (n, 1))
                 packed = np.hstack([verts, normals, colors]).astype(np.float32)
@@ -429,19 +282,40 @@ def _make_canvas(
 
             self._edge_data: list[tuple[np.ndarray, object]] = []
             for verts, indices in zip(edge_vertices, edge_indices, strict=True):
+                if len(indices) == 0:
+                    continue
                 n = len(verts)
                 colors = np.tile(np.array(edge_rgb, dtype=np.float32), (n, 1))
                 normals = np.tile(np.array((0.0, 0.0, 1.0), dtype=np.float32), (n, 1))
                 packed = np.hstack([verts, normals, colors]).astype(np.float32)
                 self._edge_data.append((packed, gloo.IndexBuffer(indices)))
 
-            # ── bounding box ───────────────────────────────────────────────
-            all_v = np.vstack(face_vertices)
+            geometry_vertices = [
+                verts for verts in [*face_vertices, *edge_vertices] if len(verts) > 0
+            ]
+            if not geometry_vertices:
+                raise ValueError("viewer requires at least one vertex")
+            all_v = np.vstack(geometry_vertices)
             self._local_centre = (all_v.min(axis=0) + all_v.max(axis=0)) / 2.0
             spans = all_v.max(axis=0) - all_v.min(axis=0)
             self._radius = float(np.max(spans)) * 1.2 or 1.0
             self._distance = self._radius * 2.5
             self._pan = np.zeros(2, dtype=np.float32)
+            axis_vertices, axis_indices, axis_colors = _local_axis_line_data(
+                self._local_centre,
+                1.0,
+            )
+            axis_normals = np.tile(
+                np.array((0.0, 0.0, 1.0), dtype=np.float32),
+                (len(axis_vertices), 1),
+            )
+            self._axis_colors = axis_colors
+            self._axis_normals = axis_normals
+            self._axis_packed = np.hstack([axis_vertices, axis_normals, axis_colors]).astype(
+                np.float32
+            )
+            self._axis_index_buffer = gloo.IndexBuffer(axis_indices)
+            self._show_local_axes = False
 
             # ── orbit state ────────────────────────────────────────────────
             self._orientation = _apply_view_orbit(np.eye(4, dtype=np.float32), 25.0, 35.0)
@@ -466,13 +340,26 @@ def _make_canvas(
             self._update_matrices()
             self.show()
 
+        def _update_local_axis_length(self, length: float) -> None:
+            axis_vertices, _axis_indices, _axis_colors = _local_axis_line_data(
+                self._local_centre,
+                length,
+            )
+            self._axis_packed = np.hstack(
+                [axis_vertices, self._axis_normals, self._axis_colors]
+            ).astype(np.float32)
+
         def _update_matrices(self) -> None:
             width, height = cast(tuple[int, int], self.physical_size)
             gloo.set_viewport(0, 0, width, height)
 
-            projection = perspective(45.0, width / float(height), 0.01, 1000.0)
+            near, far = _projection_clip_planes(self._radius, self._distance)
+            projection = perspective(_VIEW_FOV_DEGREES, width / float(height), near, far)
             view = _translation_matrix((self._pan[0], self._pan[1], -self._distance))
             model = _model_matrix(self._local_centre, self._orientation)
+            self._update_local_axis_length(
+                _view_relative_axis_length(self._distance, (width, height))
+            )
 
             self._program["u_projection"] = projection
             self._program["u_view"] = view
@@ -499,6 +386,7 @@ def _make_canvas(
                 depth_test=True,
                 depth_mask=False,
                 polygon_offset_fill=False,
+                line_width=1.0,
             )
             self._program["u_lighting"] = 0.0
             for packed, ibuf in self._edge_data:
@@ -506,7 +394,19 @@ def _make_canvas(
                 self._program["a_normal"] = packed[:, 3:6]
                 self._program["a_color"] = packed[:, 6:]
                 self._program.draw("lines", ibuf)
-            gloo.set_state(depth_mask=True)
+            if self._show_local_axes:
+                gloo.set_state(
+                    blend=False,
+                    depth_test=False,
+                    depth_mask=False,
+                    polygon_offset_fill=False,
+                    line_width=3.0,
+                )
+                self._program["a_position"] = self._axis_packed[:, :3]
+                self._program["a_normal"] = self._axis_packed[:, 3:6]
+                self._program["a_color"] = self._axis_packed[:, 6:]
+                self._program.draw("lines", self._axis_index_buffer)
+            gloo.set_state(depth_mask=True, line_width=1.0)
 
         def on_resize(self, event: object) -> None:
             self._update_matrices()
@@ -544,6 +444,10 @@ def _make_canvas(
             self.update()
 
         def on_key_press(self, event: Any) -> None:
+            if _axis_toggle_key_pressed(event.key):
+                self._show_local_axes = not self._show_local_axes
+                self.update()
+                return
             digit = _number_key_name(event.key)
             if digit is None:
                 return
@@ -630,4 +534,38 @@ def vispy_view_meshes(
         eis.append(ei)
 
     _make_canvas(fvs, fis, fns, [face_rgb] * len(fvs), evs, eis, edge_rgb, title=title)
+    app.run()
+
+
+def vispy_view_lines(
+    lines: Sequence[LineVertices],
+    *,
+    title: str = "cady 3D wire viewer",
+    color: str | tuple[float, float, float] = LINE_COLOR,
+) -> None:
+    _require_vispy()
+    app = cast(Any, importlib.import_module("vispy.app"))
+
+    vertices: list[np.ndarray] = []
+    indices: list[np.ndarray] = []
+    segment_count = 0
+    for line in lines:
+        line_vertices, line_indices = _prepare_polyline(line)
+        vertices.append(line_vertices)
+        indices.append(line_indices)
+        segment_count += len(line_indices)
+
+    if segment_count == 0:
+        raise ValueError("vispy_view_lines requires at least one line segment")
+
+    _make_canvas(
+        [],
+        [],
+        [],
+        [],
+        vertices,
+        indices,
+        _rgb_from_color(color),
+        title=title,
+    )
     app.run()
