@@ -1,10 +1,11 @@
-# Visualisation
+# Plotting And Visualisation
 
-`cady.visualisation` is the optional plotting and viewing layer. It depends on
-domain and numeric geometry, while the core `cady` import stays independent of
-viewer libraries.
+`cady.plotting` owns static plot and figure outputs. `cady.visualisation` owns
+interactive object viewing. Both depend on domain and numeric geometry, while
+the core `cady` import stays independent of viewer libraries.
 
-Install `matplotlib` for 2D plotting and static 3D previews.
+Install `cady[plotting]` for Matplotlib plots and `cady[visualisation]` for
+the interactive VisPy viewer.
 
 ## 2D Plotting
 
@@ -14,7 +15,7 @@ axis, and return the figure/axis for caller customisation.
 
 ```python
 from cady import circle, rectangle
-from cady.visualisation import plot_shape2d
+from cady.plotting import plot_shape2d
 
 profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 
@@ -26,7 +27,7 @@ fig, ax = plot_shape2d(
 )
 ```
 
-Planned 2D helpers:
+2D helpers:
 
 - `plot_shape2d(shape, *, tolerance=1e-3, ax=None, show=False, save_path=None)`
 - `plot_drawing2d(drawing, *, tolerance=1e-3, ax=None, show=False, save_path=None)`
@@ -39,8 +40,9 @@ the provided tolerance.
 
 ## 3D Viewing
 
-Use `view_shape3d(...)` or `view_model(...)` for semantic objects, and
-`plot_array_mesh3(...)` when a mesh has already been evaluated.
+Use `view_shape3d(...)` or `view_model(...)` for semantic objects, and import
+`plot_array_mesh3(...)` from `cady.plotting` when a mesh has already been
+evaluated.
 
 ```python
 from cady import circle, rectangle
@@ -57,11 +59,13 @@ view_shape3d(
 )
 ```
 
-Planned 3D helpers:
+3D helpers:
 
 - `plot_array_mesh3(mesh, *, ax=None, show=False, save_path=None)`
 - `view_shape3d(shape, *, tolerance=1e-3, backend="matplotlib", show=True)`
+- `view_part(part, *, tolerance=1e-3, backend="matplotlib", show=True)`
 - `view_model(model, *, tolerance=1e-3, backend="matplotlib", show=True)`
+- `visualise(value, *, tolerance=1e-3, backend="matplotlib", show=True)`
 
 The baseline Matplotlib backend should work without an interactive display
 when saving images.
@@ -105,13 +109,15 @@ images when the visualisation layer and optional backends are available.
 
 ## Layering Rules
 
-Visualisation is a leaf package:
+Plotting and visualisation are leaf packages:
 
 ```text
+plotting -> domain
+plotting -> numeric
 visualisation -> domain
 visualisation -> numeric
 ```
 
 `domain`, `numeric`, `ops`, `files`, and the top-level `cady` package
-should not import `visualisation`. This keeps normal model construction and
-file export usable without plotting dependencies.
+should not import `plotting` or `visualisation` at module scope. This keeps
+normal model construction and file export usable without plotting dependencies.

@@ -29,4 +29,4 @@ PYTHONPATH=src python examples/scripts/visualise_plate.py --out /tmp/cady-visual
 ```
 
 It writes a 2D profile plot and a static 3D preview image when
-`cady.visualisation`, `cady.numeric`, and the selected backend are available.
+`cady.plotting`, `cady.numeric`, and the selected backend are available.

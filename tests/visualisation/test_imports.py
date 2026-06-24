@@ -7,4 +7,6 @@ def test_visualisation_package_imports_without_optional_backend_use() -> None:
 
     assert cady.visualisation.plot_shape2d
     assert cady.visualisation.view_shape3d
+    assert cady.visualisation.view_part
+    assert cady.visualisation.visualise
     assert cady

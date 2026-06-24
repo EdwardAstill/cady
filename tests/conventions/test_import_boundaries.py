@@ -32,7 +32,9 @@ def test_domain_does_not_import_visualisation_or_numpy_at_module_scope() -> None
         f"{path.relative_to(ROOT)} imports {name}"
         for path in _python_files("domain")
         for name in _imports(path)
-        if name == "numpy" or name.startswith("cady.visualisation")
+        if name == "numpy"
+        or name.startswith("cady.plotting")
+        or name.startswith("cady.visualisation")
     ]
     assert offenders == []
 
@@ -52,7 +54,9 @@ def test_files_do_not_import_visualisation_or_numpy_at_module_scope() -> None:
         f"{path.relative_to(ROOT)} imports {name}"
         for path in _python_files("files")
         for name in _imports(path)
-        if name == "numpy" or name.startswith("cady.visualisation")
+        if name == "numpy"
+        or name.startswith("cady.plotting")
+        or name.startswith("cady.visualisation")
     ]
     assert offenders == []
 

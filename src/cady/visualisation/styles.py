@@ -1,7 +1,19 @@
-LINE_COLOR = "#1f2937"
-FILL_COLOR = "#d7e3f4"
-EDGE_COLOR = "#111827"
-MESH_COLOR = "#86a9d8"
-MESH_EDGE_COLOR = "#293241"
-LINE_WIDTH = 1.5
-FACE_ALPHA = 0.45
+from cady.plotting.styles import (
+    EDGE_COLOR,
+    FACE_ALPHA,
+    FILL_COLOR,
+    LINE_COLOR,
+    LINE_WIDTH,
+    MESH_COLOR,
+    MESH_EDGE_COLOR,
+)
+
+__all__ = [
+    "EDGE_COLOR",
+    "FACE_ALPHA",
+    "FILL_COLOR",
+    "LINE_COLOR",
+    "LINE_WIDTH",
+    "MESH_COLOR",
+    "MESH_EDGE_COLOR",
+]

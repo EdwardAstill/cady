@@ -181,18 +181,21 @@ More detail:
 - [Array operations](docs/operations/array-ops.md)
 - [Tessellation](docs/operations/tessellation.md)
 
-## Visualisation
+## Plotting And Visualisation
 
-The planned `cady.visualisation` package is an optional layer for plotting and
-viewing. It depends on the semantic and numeric layers, while core cady imports
-does not require `matplotlib`.
+Static plotting lives in the optional `cady.plotting` package. Interactive
+viewing lives in `cady.visualisation`. Both depend on the semantic and numeric
+layers, while core cady imports do not require viewer libraries.
+
+Install `cady[plotting]` for Matplotlib plots and `cady[visualisation]` for
+the interactive VisPy viewer.
 
 2D plotting returns the Matplotlib figure/axis so callers can customise or
 save output:
 
 ```python
 from cady import circle, rectangle
-from cady.visualisation import plot_shape2d
+from cady.plotting import plot_shape2d
 
 profile = rectangle((0, 0), (1.0, 0.6)).with_hole(circle((0.5, 0.3), 0.12))
 fig, ax = plot_shape2d(profile, tolerance=1e-3, save_path="plate-profile.png")

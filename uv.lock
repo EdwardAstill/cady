@@ -26,8 +26,15 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-visualisation = [
+all = [
     { name = "matplotlib" },
+    { name = "pyqt6" },
+    { name = "vispy" },
+]
+plotting = [
+    { name = "matplotlib" },
+]
+visualisation = [
     { name = "pyqt6" },
     { name = "vispy" },
 ]
@@ -41,13 +48,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "matplotlib", marker = "extra == 'visualisation'", specifier = ">=3.10" },
+    { name = "cady", extras = ["plotting", "visualisation"], marker = "extra == 'all'" },
+    { name = "matplotlib", marker = "extra == 'plotting'", specifier = ">=3.10" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pyqt6", marker = "extra == 'visualisation'", specifier = ">=6.11.0" },
     { name = "steputils", specifier = ">=0.1" },
     { name = "vispy", marker = "extra == 'visualisation'", specifier = ">=0.14" },
 ]
-provides-extras = ["visualisation"]
+provides-extras = ["plotting", "visualisation", "all"]
 
 [package.metadata.requires-dev]
 dev = [

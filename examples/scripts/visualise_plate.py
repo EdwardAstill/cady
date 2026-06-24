@@ -26,7 +26,7 @@ def _load_visualisation() -> tuple[type[ArrayMesh3Class], PlotArrayMesh3, PlotDr
             return module
     try:
         from cady.numeric import ArrayMesh3
-        from cady.visualisation import plot_array_mesh3, plot_drawing2d
+        from cady.plotting import plot_array_mesh3, plot_drawing2d
     except ImportError as exc:
         return str(exc)
     return cast(type[ArrayMesh3Class], ArrayMesh3), plot_array_mesh3, plot_drawing2d

@@ -7,7 +7,7 @@ from cady import circle, rectangle
 matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
 
-from cady.visualisation import plot_shape2d  # noqa: E402
+from cady.plotting import plot_shape2d  # noqa: E402
 
 
 def test_plot_shape2d_saves_png(tmp_path) -> None:
