@@ -73,10 +73,7 @@ class Wireframe3D:
 
     def to_mesh(self, *, tolerance: float) -> Mesh3D:
         """Convert crossing-prone wire edges into a triangulated mesh."""
-        section_mesh = _loft_section_wireframe_to_mesh(self, tolerance=tolerance)
-        if section_mesh is not None:
-            return section_mesh
-        return self.triangulate(tolerance=tolerance)
+        return _mesh_from_triangulation(_triangulate_wireframe(self, tolerance=tolerance))
 
     def remove_dangling_edges(self) -> Wireframe3D:
         """Return a wireframe with recursively dangling edge branches removed."""
@@ -135,95 +132,27 @@ class Wireframe3D:
         self,
         *,
         tolerance: float = 1e-3,
-    ) -> Mesh3D:
+    ) -> Wireframe3D:
         """Split crossings, remove dangling branches, and triangulate loops."""
-        return (
-            self.split_crossing_edges(tolerance=tolerance)
-            .remove_dangling_edges()
-            .triangulate_loops(tolerance=tolerance)
+        return _wireframe_from_triangulation(
+            _triangulate_wireframe(self, tolerance=tolerance)
         )
 
     def triangulate_loops(
         self,
         *,
         tolerance: float = 1e-3,
-    ) -> Mesh3D:
-        """Detect closed edge cycles and triangulate each into a Mesh3D.
+    ) -> Wireframe3D:
+        """Detect closed edge cycles and triangulate each into a Wireframe3D.
 
         Builds an adjacency graph from edges, walks cycles via DFS, fits a
         best-fit plane (SVD) to each cycle, and triangulates. Dangling
-        wireframe branches are pruned from the returned mesh. Raises
+        wireframe branches are pruned from the returned wireframe. Raises
         ``GeometryError`` if no closed loops of length >= 3 are found.
         """
-        from cady.errors import GeometryError
-        from cady.ops.mesh_cut import (
-            fit_plane_svd,
-            max_plane_deviation,
-            project_loop,
-            triangulate_loop,
+        return _wireframe_from_triangulation(
+            _triangulate_loops_to_triangulation(self, tolerance=tolerance)
         )
-
-        _validate_tolerance(tolerance)
-
-        # Build adjacency map
-        neighbours: dict[int, set[int]] = {}
-        for a, b in self.edges:
-            neighbours.setdefault(a, set()).add(b)
-            neighbours.setdefault(b, set()).add(a)
-
-        # DFS cycle detection — edge-aware to handle connected components
-        used_cycle_edges: set[tuple[int, int]] = set()
-        cycles: list[list[int]] = []
-
-        for start in sorted(neighbours):
-            visited: set[int] = set()
-            stack: list[tuple[int, int | None, list[int]]] = [(start, None, [start])]
-            while stack:
-                vertex, parent, path = stack.pop()
-                if vertex in visited:
-                    continue
-                visited.add(vertex)
-                found_cycle = False
-                for neighbour in sorted(neighbours.get(vertex, set())):
-                    edge_key = (min(vertex, neighbour), max(vertex, neighbour))
-                    if edge_key in used_cycle_edges:
-                        continue
-                    if neighbour == parent:
-                        continue
-                    if neighbour == start and len(path) >= 3:
-                        cycle = path
-                        for i in range(len(cycle)):
-                            a, b = cycle[i], cycle[(i + 1) % len(cycle)]
-                            used_cycle_edges.add((min(a, b), max(a, b)))
-                        cycles.append(cycle)
-                        found_cycle = True
-                        break
-                    if neighbour not in visited:
-                        stack.append((neighbour, vertex, path + [neighbour]))
-                if found_cycle:
-                    break
-
-        cycles = [c for c in cycles if len(c) >= 3]
-        if not cycles:
-            raise GeometryError("no closed edge loops of length >= 3 found")
-
-        vertices_list = [np.array((v.x, v.y, v.z), dtype=np.float64) for v in self.vertices]
-
-        all_faces: list[tuple[int, int, int]] = []
-        for loop in cycles:
-            loop_points = np.array([vertices_list[i] for i in loop], dtype=np.float64)
-            loop_origin, loop_normal = fit_plane_svd(loop_points)
-            deviation = max_plane_deviation(loop_points, loop_origin, loop_normal)
-            if deviation > tolerance:
-                raise GeometryError(
-                    f"edge loop is non-planar (max deviation {deviation:.3e} > "
-                    f"tolerance {tolerance:.3e})"
-                )
-            projected = project_loop(loop, vertices_list, loop_origin, loop_normal)
-            for a, b, c in triangulate_loop(projected, tolerance):
-                all_faces.append((loop[a], loop[c], loop[b]))
-
-        return _mesh_without_dangling_edges(self.vertices, tuple(all_faces), self.edges)
 
     # -- Viewing ----------------------------------------------------------
 
@@ -262,6 +191,30 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
     if len(value) != 2:
         raise ValueError("wireframe edges must have exactly two indices")
     return (int(value[0]), int(value[1]))
+
+
+@dataclass(frozen=True, slots=True)
+class _WireframeTriangulation:
+    vertices: tuple[Vec3, ...]
+    faces: tuple[tuple[int, int, int], ...]
+
+
+def _triangulate_wireframe(
+    wireframe: Wireframe3D,
+    *,
+    tolerance: float,
+) -> _WireframeTriangulation:
+    section_triangulation = _loft_section_wireframe_to_triangulation(
+        wireframe,
+        tolerance=tolerance,
+    )
+    if section_triangulation is not None:
+        return section_triangulation
+    split = wireframe.split_crossing_edges(tolerance=tolerance)
+    return _triangulate_loops_to_triangulation(
+        split.remove_dangling_edges(),
+        tolerance=tolerance,
+    )
 
 
 def _remove_dangling_edges(edges: tuple[EdgeIndex, ...]) -> tuple[EdgeIndex, ...]:
@@ -331,11 +284,11 @@ def _bounds_overlap(
     )
 
 
-def _loft_section_wireframe_to_mesh(
+def _loft_section_wireframe_to_triangulation(
     wireframe: Wireframe3D,
     *,
     tolerance: float,
-) -> Mesh3D | None:
+) -> _WireframeTriangulation | None:
     sections = _section_curves_from_wireframe(wireframe, tolerance=tolerance)
     if len(sections) < 2:
         return None
@@ -364,8 +317,7 @@ def _loft_section_wireframe_to_mesh(
 
     if not faces:
         return None
-    mesh_faces = tuple(faces)
-    return Mesh3D(vertices, mesh_faces, _edges_from_faces(mesh_faces))
+    return _WireframeTriangulation(vertices, tuple(faces))
 
 
 def _section_curves_from_wireframe(
@@ -518,6 +470,97 @@ def _edges_from_faces(faces: tuple[tuple[int, int, int], ...]) -> tuple[EdgeInde
     return tuple(sorted(edges))
 
 
+def _wireframe_from_triangulation(triangulation: _WireframeTriangulation) -> Wireframe3D:
+    return Wireframe3D(
+        triangulation.vertices,
+        _edges_from_faces(triangulation.faces),
+    )
+
+
+def _mesh_from_triangulation(triangulation: _WireframeTriangulation) -> Mesh3D:
+    return Mesh3D(
+        triangulation.vertices,
+        triangulation.faces,
+        _edges_from_faces(triangulation.faces),
+    )
+
+
+def _triangulate_loops_to_triangulation(
+    wireframe: Wireframe3D,
+    *,
+    tolerance: float,
+) -> _WireframeTriangulation:
+    from cady.errors import GeometryError
+    from cady.ops.mesh_cut import (
+        fit_plane_svd,
+        max_plane_deviation,
+        project_loop,
+        triangulate_loop,
+    )
+
+    neighbours: dict[int, set[int]] = {}
+    for a, b in wireframe.edges:
+        neighbours.setdefault(a, set()).add(b)
+        neighbours.setdefault(b, set()).add(a)
+
+    used_cycle_edges: set[tuple[int, int]] = set()
+    cycles: list[list[int]] = []
+
+    for start in sorted(neighbours):
+        visited: set[int] = set()
+        stack: list[tuple[int, int | None, list[int]]] = [(start, None, [start])]
+        while stack:
+            vertex, parent, path = stack.pop()
+            if vertex in visited:
+                continue
+            visited.add(vertex)
+            found_cycle = False
+            for neighbour in sorted(neighbours.get(vertex, set())):
+                edge_key = (min(vertex, neighbour), max(vertex, neighbour))
+                if edge_key in used_cycle_edges:
+                    continue
+                if neighbour == parent:
+                    continue
+                if neighbour == start and len(path) >= 3:
+                    cycle = path
+                    for index in range(len(cycle)):
+                        a, b = cycle[index], cycle[(index + 1) % len(cycle)]
+                        used_cycle_edges.add((min(a, b), max(a, b)))
+                    cycles.append(cycle)
+                    found_cycle = True
+                    break
+                if neighbour not in visited:
+                    stack.append((neighbour, vertex, path + [neighbour]))
+            if found_cycle:
+                break
+
+    cycles = [cycle for cycle in cycles if len(cycle) >= 3]
+    if not cycles:
+        raise GeometryError("no closed edge loops of length >= 3 found")
+
+    vertices_list = [np.array(vertex.tuple(), dtype=np.float64) for vertex in wireframe.vertices]
+
+    faces: list[tuple[int, int, int]] = []
+    for loop in cycles:
+        loop_points = np.array([vertices_list[index] for index in loop], dtype=np.float64)
+        loop_origin, loop_normal = fit_plane_svd(loop_points)
+        deviation = max_plane_deviation(loop_points, loop_origin, loop_normal)
+        if deviation > tolerance:
+            raise GeometryError(
+                f"edge loop is non-planar (max deviation {deviation:.3e} > "
+                f"tolerance {tolerance:.3e})"
+            )
+        projected = project_loop(loop, vertices_list, loop_origin, loop_normal)
+        for a, b, c in triangulate_loop(projected, tolerance):
+            faces.append((loop[a], loop[c], loop[b]))
+
+    return _triangulation_without_dangling_source_edges(
+        wireframe.vertices,
+        tuple(faces),
+        wireframe.edges,
+    )
+
+
 def _edge_crossing_points(
     vertices: tuple[Vec3, ...],
     left_edge: EdgeIndex,
@@ -659,17 +702,17 @@ def _distance(left: Vec3, right: Vec3) -> float:
     return float(np.linalg.norm(_array3(left) - _array3(right)))
 
 
-def _mesh_without_dangling_edges(
+def _triangulation_without_dangling_source_edges(
     vertices: tuple[Vec3, ...],
     faces: tuple[tuple[int, int, int], ...],
     edges: tuple[EdgeIndex, ...],
-) -> Mesh3D:
+) -> _WireframeTriangulation:
     live_edges = _remove_dangling_edges(edges)
 
     used_vertices = {index for face in faces for index in face}
     used_vertices.update(index for edge in live_edges for index in edge)
     if not used_vertices:
-        return Mesh3D((), (), ())
+        return _WireframeTriangulation((), ())
 
     ordered_vertices = tuple(sorted(used_vertices))
     remap = {old: new for new, old in enumerate(ordered_vertices)}
@@ -678,8 +721,7 @@ def _mesh_without_dangling_edges(
         (remap[a], remap[b], remap[c])
         for a, b, c in faces
     )
-    compact_edges = _edges_from_faces(compact_faces)
-    return Mesh3D(compact_vertices, compact_faces, compact_edges)
+    return _WireframeTriangulation(compact_vertices, compact_faces)
 
 
 def _validate_tolerance(tolerance: float) -> None:

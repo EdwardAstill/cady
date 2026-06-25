@@ -102,11 +102,15 @@ def test_wireframe_to_mesh_splits_crossings_and_uses_triangles_as_faces() -> Non
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
 
+    triangulated = wf.triangulate(tolerance=1e-6)
     mesh = wf.to_mesh(tolerance=1e-6)
 
+    assert isinstance(triangulated, Wireframe3D)
     assert len(mesh.vertices) == 5
     assert len(mesh.faces) == 2
     assert all(len(face) == 3 for face in mesh.faces)
+    assert triangulated.vertices == mesh.vertices
+    assert triangulated.edges == mesh.edges
     assert mesh.edges == ((0, 3), (0, 4), (1, 2), (1, 4), (2, 4), (3, 4))
 
 
@@ -126,10 +130,15 @@ def test_wireframe_to_mesh_lofts_open_section_curves() -> None:
     )
 
     mesh = wf.to_mesh(tolerance=1e-6)
+    triangulated = wf.triangulate(tolerance=1e-6)
 
+    assert isinstance(triangulated, Wireframe3D)
     assert len(mesh.vertices) == 8
     assert len(mesh.faces) == 6
+    assert len(triangulated.edges) == 13
     assert len(mesh.edges) == 13
+    assert triangulated.vertices == mesh.vertices
+    assert triangulated.edges == mesh.edges
     assert all(len(face) == 3 for face in mesh.faces)
 
 
@@ -245,7 +254,11 @@ def test_wireframe_triangulate_returns_loop_triangulation() -> None:
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
 
-    assert wf.triangulate(tolerance=1e-3) == wf.triangulate_loops(tolerance=1e-3)
+    triangulated = wf.triangulate(tolerance=1e-3)
+
+    assert isinstance(triangulated, Wireframe3D)
+    assert triangulated == wf.triangulate_loops(tolerance=1e-3)
+    assert len(triangulated.edges) == 5
 
 
 def test_wireframe_triangulate_loops_square() -> None:
@@ -253,9 +266,11 @@ def test_wireframe_triangulate_loops_square() -> None:
         (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
-    mesh = wf.triangulate_loops(tolerance=1e-3)
+    triangulated = wf.triangulate_loops(tolerance=1e-3)
+    mesh = wf.to_mesh(tolerance=1e-3)
     assert len(mesh.faces) == 2
-    assert len(mesh.vertices) == 4
+    assert len(triangulated.vertices) == 4
+    assert len(triangulated.edges) == 5
 
 
 def test_wireframe_triangulate_loops_prunes_dangling_branches() -> None:
@@ -271,11 +286,12 @@ def test_wireframe_triangulate_loops_prunes_dangling_branches() -> None:
         ((0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)),
     )
 
-    mesh = wf.triangulate_loops(tolerance=1e-3)
+    triangulated = wf.triangulate_loops(tolerance=1e-3)
+    mesh = wf.to_mesh(tolerance=1e-3)
 
     assert len(mesh.faces) == 2
     assert len(mesh.vertices) == 4
-    assert mesh.edges == ((0, 1), (0, 2), (0, 3), (1, 2), (2, 3))
+    assert triangulated.edges == ((0, 1), (0, 2), (0, 3), (1, 2), (2, 3))
 
 
 def test_wireframe_triangulate_loops_no_cycles() -> None:
@@ -311,7 +327,9 @@ def test_triangulate_loops_multiple_disjoint_cycles() -> None:
         ),
         ((0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4)),
     )
-    mesh = wf.triangulate_loops(tolerance=1e-3)
+    triangulated = wf.triangulate_loops(tolerance=1e-3)
+    mesh = wf.to_mesh(tolerance=1e-3)
+    assert isinstance(triangulated, Wireframe3D)
     assert len(mesh.faces) == 4
 
 
@@ -341,5 +359,7 @@ def test_triangulate_loops_two_connected_squares() -> None:
             (7, 2),  # square B
         ),
     )
-    mesh = wf.triangulate_loops(tolerance=1e-3)
+    triangulated = wf.triangulate_loops(tolerance=1e-3)
+    mesh = wf.to_mesh(tolerance=1e-3)
+    assert isinstance(triangulated, Wireframe3D)
     assert len(mesh.faces) == 4  # 2 triangles per square

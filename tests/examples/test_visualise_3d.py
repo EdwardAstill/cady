@@ -172,7 +172,7 @@ def test_linesplan_mesh_boundary_script_uses_wireframe_to_mesh(
     assert "cady mesh boundary demo" in completed.stdout
     assert "source wireframe: 9715 vertices, 9610 edges" in completed.stdout
     assert (
-        "mesh: 5915 vertices, 11674 edges, 11520 faces, "
+        "mesh: 5915 vertices, 17434 edges, 11520 faces, "
         "bounds=(0, -19300, 0)"
     ) in completed.stdout
     assert "boundary loops: 1 (308 edges)" in completed.stdout

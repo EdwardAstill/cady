@@ -326,8 +326,8 @@ wf.mirror(plane_origin, plane_normal)
 wf.to_array(tolerance=1e-3)  # ArrayMesh3 (empty faces, populated edges)
 wf.to_mesh(tolerance=1e-3)   # Mesh3D
 
-# Split crossings, remove dangling edges, and triangulate closed edge cycles
-mesh = wf.triangulate(tolerance=1e-3)
+# Split crossings, remove dangling edges, and triangulate to triangle wires
+triangulated = wf.triangulate(tolerance=1e-3)  # Wireframe3D
 
 # View
 wf.view(tolerance=1e-3)
