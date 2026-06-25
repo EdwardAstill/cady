@@ -85,7 +85,9 @@ def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
     assert merged.edges == ((0, 1), (2, 3))
 
 
-def test_mesh_from_dxf_converts_polyline_wires_to_edges(tmp_path: Path) -> None:
+def test_dxf_read_wireframe_converts_polyline_wires_to_wireframe(tmp_path: Path) -> None:
+    from cady.files import dxf
+
     path = tmp_path / "wire.dxf"
     path.write_text(
         "\n".join(
@@ -136,15 +138,14 @@ def test_mesh_from_dxf_converts_polyline_wires_to_edges(tmp_path: Path) -> None:
         encoding="ascii",
     )
 
-    mesh = Mesh3D.from_dxf(path)
+    wf = dxf.read_wireframe(path)
 
-    assert [point.tuple() for point in mesh.vertices] == [
+    assert [point.tuple() for point in wf.vertices] == [
         (0.0, 0.0, 1.0),
         (2.0, 0.0, 3.0),
         (4.0, 1.0, 5.0),
     ]
-    assert mesh.edges == ((0, 1), (1, 2))
-    assert mesh.faces == ()
+    assert wf.edges == ((0, 1), (1, 2))
 
 
 def test_mesh_rejects_out_of_range_faces() -> None:
@@ -155,3 +156,33 @@ def test_mesh_rejects_out_of_range_faces() -> None:
 def test_mesh_rejects_out_of_range_edges() -> None:
     with pytest.raises(ValueError, match="outside"):
         Mesh3D((Vec3(0.0, 0.0, 0.0),), (), ((0, 1),))
+
+
+def test_mesh_to_wireframe() -> None:
+    from cady.geometry3d import Wireframe3D
+
+    mesh = Mesh3D(
+        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)),
+        ((0, 1, 2),),
+    )
+    wf = mesh.to_wireframe()
+    assert isinstance(wf, Wireframe3D)
+    assert len(wf.vertices) == 3
+    assert len(wf.edges) == 3
+    assert (0, 1) in wf.edges
+    assert (1, 2) in wf.edges
+    assert (0, 2) in wf.edges
+
+
+def test_mesh_to_wireframe_empty_faces() -> None:
+    from cady.geometry3d import Wireframe3D
+
+    mesh = Mesh3D((Vec3(0, 0, 0), Vec3(1, 0, 0)), ())
+    wf = mesh.to_wireframe()
+    assert isinstance(wf, Wireframe3D)
+    assert len(wf.vertices) == 2
+    assert len(wf.edges) == 0
+
+
+def test_mesh_from_dxf_removed() -> None:
+    assert not hasattr(Mesh3D, "from_dxf")

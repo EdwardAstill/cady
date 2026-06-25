@@ -33,6 +33,7 @@ def test_smoke_import() -> None:
         "Spline2D",
         "Vec2",
         "Vec3",
+        "Wireframe3D",
         "line2d",
         "profile_rectangle",
         "box",
@@ -55,7 +56,7 @@ def test_preferred_package_imports() -> None:
 
     assert all((Drawing2D, Line2D, Profile2D, Body3D, Mesh3D, Part, Assembly))
     assert all((Camera, Scene, profile_rectangle, box, files))
-    assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh))
+    assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
     assert all((stl.write, step.render, step.write, step.read_faces))
 
 

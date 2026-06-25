@@ -1,8 +1,8 @@
-"""Mirror the 9 m linesplan DXF mesh about a plane.
+"""Mirror a DXF wireframe about a plane.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/scripts/mirror-mesh.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/scripts/mirror-mesh.py
+    PYTHONPATH=src .venv/bin/python examples/linesplan/mirror-mesh.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/linesplan/mirror-mesh.py
 """
 
 from __future__ import annotations
@@ -10,7 +10,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene
+from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3D
+from cady.files import dxf
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -25,7 +26,7 @@ Point3 = tuple[float, float, float]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Mirror the linesplan DXF mesh about a plane.",
+        description="Mirror a DXF wireframe about a plane.",
     )
     parser.add_argument(
         "--input",
@@ -45,7 +46,7 @@ def main() -> None:
         "--plane-normal",
         nargs=3,
         type=float,
-        default=(1.0, 0.0, 0.0),
+        default=(0.0, 1.0, 0.0),
         metavar=("X", "Y", "Z"),
         help="Mirror plane normal.",
     )
@@ -58,15 +59,15 @@ def main() -> None:
 
     plane_origin = _point3(args.plane_origin)
     plane_normal = _point3(args.plane_normal)
-    source = Mesh3D.from_dxf(args.input)
+    source = dxf.read_wireframe(args.input)
     mirrored = source.mirror(plane_origin, plane_normal)
 
-    print("cady mirror mesh demo")
+    print("cady mirror wireframe demo")
     print(f"input: {args.input}")
     print(f"plane origin: {_format_point(plane_origin)}")
     print(f"plane normal: {_format_point(plane_normal)}")
-    print_mesh_summary("source", source)
-    print_mesh_summary("mirrored", mirrored)
+    print_wireframe_summary("source", source)
+    print_wireframe_summary("mirrored", mirrored)
 
     if args.no_view:
         print("VisPy viewer skipped.")
@@ -74,10 +75,10 @@ def main() -> None:
 
     from cady.visualisation import view_scene
 
-    view_scene(build_scene(source, mirrored), title="linesplan 9m - mirrored mesh")
+    view_scene(build_scene(source, mirrored), title="linesplan 9m - mirrored wireframe")
 
 
-def build_scene(source: Mesh3D, mirrored: Mesh3D) -> Scene:
+def build_scene(source: Wireframe3D, mirrored: Wireframe3D) -> Scene:
     lower, upper = _combined_bounds((source, mirrored))
     centre = _bounds_centre(lower, upper)
     camera = _fit_profile_camera(lower, upper)
@@ -91,11 +92,11 @@ def build_scene(source: Mesh3D, mirrored: Mesh3D) -> Scene:
     )
 
 
-def print_mesh_summary(label: str, mesh: Mesh3D) -> None:
-    lower, upper = mesh.bounds()
+def print_wireframe_summary(label: str, wf: Wireframe3D) -> None:
+    lower, upper = wf.bounds()
     print(
-        f"{label}: {len(mesh.vertices)} vertices, {len(mesh.edges)} edges, "
-        f"{len(mesh.faces)} faces, bounds={_format_point(_point_tuple(lower))} "
+        f"{label}: {len(wf.vertices)} vertices, {len(wf.edges)} edges, "
+        f"bounds={_format_point(_point_tuple(lower))} "
         f"to {_format_point(_point_tuple(upper))}"
     )
 
@@ -112,11 +113,11 @@ def _fit_profile_camera(lower: Point3, upper: Point3) -> Camera:
     )
 
 
-def _combined_bounds(meshes: tuple[Mesh3D, ...]) -> tuple[Point3, Point3]:
+def _combined_bounds(objects: tuple[Wireframe3D, ...]) -> tuple[Point3, Point3]:
     lowers: list[Point3] = []
     uppers: list[Point3] = []
-    for mesh in meshes:
-        lower, upper = mesh.bounds()
+    for obj in objects:
+        lower, upper = obj.bounds()
         lowers.append(_point_tuple(lower))
         uppers.append(_point_tuple(upper))
     return (

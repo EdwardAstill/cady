@@ -13,6 +13,7 @@ from cady.geometry3d.features import (
 )
 from cady.geometry3d.frame import Frame3D
 from cady.geometry3d.mesh import Mesh3D
+from cady.geometry3d.wireframe import Wireframe3D
 
 __all__ = [
     "Body3D",
@@ -27,6 +28,7 @@ __all__ = [
     "PrimitiveFeature",
     "ProfileFeature",
     "RevolveFeature",
+    "Wireframe3D",
     "box",
     "cylinder",
     "sphere",

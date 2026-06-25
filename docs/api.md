@@ -1,203 +1,120 @@
-# API Guide
+# API reference
 
-Import the common value objects from `cady`. Import subpackages when you need a
-specific facade or lower-level numeric type.
+## Top-level exports
 
-## Common imports
+### 2D geometry
 
-```python
-from cady import (
-    Assembly,
-    Body3D,
-    Camera,
-    Document,
-    Drawing2D,
-    Part,
-    Profile2D,
-    Scene,
-    circle2d,
-    line2d,
-    profile_rectangle,
-)
-from cady.files import dxf, step, stl
-from cady.numeric import Transform3
-```
+| Name | Description |
+|------|-------------|
+| `Line2D` | Line segment between two points. |
+| `Arc2D` | Circular arc (centre, radius, start/end angle). |
+| `Spline2D` | Bezier spline curve. |
+| `Polyline2D` | Open polyline. |
+| `Circle2D` | Full circle. |
+| `Ellipse2D` | Ellipse. |
+| `ClosedPolyline2D` | Closed polyline loop. |
+| `Profile2D` | Filled region (outer boundary + holes). |
+| `Curve2D` | Protocol for open curves. |
+| `ClosedCurve2D` | Protocol for closed boundaries. |
 
-## 2D geometry
+### 3D geometry
 
-Classes:
+| Name | Description |
+|------|-------------|
+| `Frame3D` | Coordinate frame in 3D space. |
+| `Face3D` | Profile placed in a 3D frame. |
+| `Body3D` | Editable solid with feature history. |
+| `Mesh3D` | Evaluated triangle mesh. |
 
-- `Line2D(start, end)`
-- `Arc2D(centre, radius, start_rad, end_rad)`
-- `Polyline2D(vertices)`
-- `ClosedPolyline2D(vertices)`
-- `Circle2D(centre, radius)`
-- `Ellipse2D(centre, radius_x, radius_y, rotation_rad=0.0)`
-- `Spline2D(control_points, closed=False)`
-- `Profile2D(outer, holes=())`
+### Product
 
-Factories:
+| Name | Description |
+|------|-------------|
+| `Part` | Named manufacturable item with bodies. |
+| `PartInstance` | Placed part reference. |
+| `Assembly` | Tree of placed parts and subassemblies. |
+| `AssemblyInstance` | Placed subassembly reference. |
+| `Material` | Material name and density. |
 
-- `line2d(start, end)`
-- `arc2d(centre, radius, start_rad, end_rad)`
-- `circle2d(centre, radius)`
-- `polyline2d(vertices, closed=False)`
-- `profile_rectangle(width, height, origin=(0.0, 0.0))`
-- `profile_circle(radius, centre=(0.0, 0.0))`
+### Drawing
 
-Useful methods:
+| Name | Description |
+|------|-------------|
+| `Drawing2D` | 2D drafting document. |
+| `DrawingEntity` | Curve/profile with layer assignment. |
+| `Layer` | Named layer with color and linetype. |
+| `Text2D` | Text entity. |
+| `Hatch2D` | Hatch fill entity. |
+| `Insert2D` | Block insertion entity. |
+| `BlockDefinition` | Reusable block definition. |
+| `DimStyle` | Dimension style. |
+| `LinearDimension2D` | Horizontal/vertical dimension. |
+| `AlignedDimension2D` | Aligned dimension. |
+| `RadiusDimension2D` | Radius dimension. |
+| `DiameterDimension2D` | Diameter dimension. |
+| `AngularDimension2D` | Angular dimension. |
 
-- `bounds()`
-- `points()`
-- `to_array(tolerance=...)`
+### View
 
-Closed curves and profiles evaluate to `ArrayPolygon2`; open curves evaluate to
-`ArrayPolyline2`.
+| Name | Description |
+|------|-------------|
+| `Scene` | Named collection of view targets, cameras, lights. |
+| `SceneObject` | Target reference with pose and visibility. |
+| `Camera` | Perspective or orthographic camera. |
+| `AmbientLight` | Ambient light. |
+| `DirectionalLight` | Directional light. |
+| `PointLight` | Point light. |
+| `DisplayStyle` | Color, alpha, and edge visibility. |
 
-## 3D geometry
+### Other
 
-Classes:
+| Name | Description |
+|------|-------------|
+| `Document` | Optional project registry. |
+| `Vec2`, `Vec3` | 2D and 3D vector/point values. |
+| `Pose3D` | 3D position and orientation. |
 
-- `Frame3D(origin, x_axis, normal)`
-- `Face3D(profile, frame)`
-- `Body3D(name=None, features=(), metadata={})`
-- `Mesh3D(vertices, faces, edges=())`
+## Factory functions
 
-Factories:
-
-- `box(width, depth, height, frame=None)`
-- `cylinder(radius, height, frame=None)`
-- `sphere(radius, centre=(0.0, 0.0, 0.0))`
-
-Useful constructors and methods:
-
-- `Frame3D.world_xy()`
-- `Frame3D.from_normal(origin, normal, x_axis=None)`
-- `Face3D.from_profile(profile, frame=None, origin=None, normal=None, x_axis=None)`
-- `Face3D.from_points(points)`
-- `Face3D.convex_hull(points)`
-- `Body3D.from_profile(profile, frame=None)`
-- `Body3D.extrude(distance, profile=None, frame=None)`
-- `Body3D.transformed(transform)`
-- `Body3D.to_mesh(tolerance=...)`
-- `Mesh3D.from_dxf(path)`
-- `Mesh3D.to_array(tolerance=...)`
-- `Mesh3D.transformed(transform)`
-- `Mesh3D.bounds()`
-- `Mesh3D.view(...)`, `Body3D.view(...)`, `Face3D.view(...)`
-
-## Drawings
-
-```python
-drawing = (
-    Drawing2D("front")
-    .add_layer("PLATE", color=7)
-    .add(profile.outer, layer="PLATE")
-    .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
-)
-```
-
-Key drawing methods:
-
-- `add_layer(layer_or_name, color=7, linetype="CONTINUOUS")`
-- `add(geometry, layer="0")`
-- `add_entity(entity)`
-- `add_text(text, at=..., height=..., layer="0", rotation=0.0)`
-- `hatch(boundary, layer="0", pattern="ANSI31", angle=45.0, scale=1.0)`
-- `add_block(block)`
-- `insert(name, at=..., layer="0", scale=1.0, rotation=0.0)`
-- `with_dim_style(style)`
-- `linear_dimension(...)`, `aligned_dimension(...)`, `radius_dimension(...)`,
-  `diameter_dimension(...)`, `angular_dimension(...)`
-- `bounds()`
-- `to_arrays(tolerance=...)`
-
-Supported linetypes are `CONTINUOUS`, `HIDDEN`, and `CENTER`.
-
-## Product structure
-
-```python
-from cady import Assembly, Material, Part
-
-part = (
-    Part("plate")
-    .with_body(body)
-    .with_material(Material("steel", density=7850.0, color=(0.6, 0.6, 0.62)))
-    .with_metadata(item="P-001")
-)
-
-assembly = Assembly("assy").add(part, name="plate", pose=(0.0, 0.0, 0.0))
-```
-
-Key methods:
-
-- `Part.with_body(body)`, `Part.with_bodies(*bodies)`
-- `Part.with_material(material)`
-- `Part.with_metadata(**metadata)`
-- `Part.to_mesh(tolerance=...)`
-- `Part.view(...)`
-- `Assembly.add(part_or_assembly, name=None, pose=None)`
-- `Assembly.flatten()`
-- `Assembly.to_mesh(tolerance=...)`
-- `Assembly.view(...)`
-
-## Documents
-
-```python
-document = (
-    Document("job", units="m")
-    .add_drawing(drawing, name="front")
-    .add_part(part)
-    .add_assembly(assembly)
-    .add_scene(scene, name="review")
-)
-
-document.names("part")
-document.get("drawing", "front")
-```
-
-Kinds are `"drawing"`, `"part"`, `"assembly"`, and `"scene"`.
-
-## Scenes
-
-```python
-from cady import Camera, DirectionalLight, DisplayStyle, Scene
-
-scene = (
-    Scene.from_target(part, name="review")
-    .with_camera(Camera.look_at(position=(2, -2, 1), target=(0, 0, 0)), name="iso")
-    .with_light(DirectionalLight(direction=(-1, -1, -2)))
-)
-```
-
-Scene objects carry a target, optional pose, optional style, and metadata.
-Scenes are backend-independent and do not import viewer libraries.
-
-## File facades
-
-```python
-dxf.write(drawing, "front.dxf", tolerance=1e-3)
-rendered = dxf.render(drawing, tolerance=1e-3)
-imported = dxf.read_drawing("front.dxf")
-mesh = dxf.read_mesh("mesh.dxf")
-result = dxf.read("mixed.dxf")
-
-stl.write(part, "plate.stl", tolerance=1e-3)
-stl.write(assembly, "assembly-ascii.stl", ascii=True, tolerance=1e-3)
-
-step.write(part, "plate.step", tolerance=1e-3)
-text = step.render(assembly, tolerance=1e-3)
-faces = step.read_faces("member.step")
-members = step.read_members("member.step")
-```
-
-The old `write_model(...)` facade functions are intentionally absent.
+| Function | Returns | Signature |
+|----------|---------|-----------|
+| `line2d(start, end)` | `Line2D` | Two points. |
+| `arc2d(centre, radius, start_angle, end_angle)` | `Arc2D` | Angles in radians. |
+| `circle2d(centre, radius)` | `Circle2D` | Centre point and radius. |
+| `polyline2d(points, *, closed=False)` | `Polyline2D` or `ClosedPolyline2D` | Sequence of points. |
+| `profile_rectangle(width, height, *, origin=(0,0))` | `Profile2D` | Width and height. |
+| `profile_circle(radius, *, centre=(0,0))` | `Profile2D` | Radius. |
+| `box(*, width, depth, height, frame=None)` | `Body3D` | Dimensions in 3D. |
+| `cylinder(*, radius, height, frame=None)` | `Body3D` | Radius and height. |
+| `sphere(*, radius, centre=(0,0,0))` | `Body3D` | Radius. |
 
 ## Errors
 
+| Exception | Use |
+|-----------|-----|
+| `CadError` | Base package error. |
+| `GeometryError` | Invalid curve, profile, or body construction. |
+| `DrawingError` | Invalid drawing composition or layers. |
+| `ProductError` | Invalid part/assembly structure or cycles. |
+| `ViewError` | Invalid camera, light, or scene reference. |
+| `ReadError` | File import failure. |
+| `WriteError` | File export failure. |
+
+## File I/O
+
 ```python
-from cady import CadError, DrawingError, GeometryError, ProductError, ReadError, ViewError, WriteError
+from cady.files import dxf, stl, step
 ```
 
-Use the specific error tier when raising from package code and catch `CadError`
-when user code wants one shared base exception.
+| Function | Accepts | Action |
+|----------|---------|--------|
+| `dxf.read(path)` | file path | Returns `DxfImportResult`. |
+| `dxf.read_drawing(path)` | file path | Returns `Drawing2D`. |
+| `dxf.read_mesh(path)` | file path | Returns `Mesh3D`. |
+| `dxf.write(drawing, path, *, tolerance)` | `Drawing2D` | Writes DXF R2018. |
+| `dxf.render(drawing, *, tolerance)` | `Drawing2D` | Returns DXF string. |
+| `stl.write(target, path, *, ascii, tolerance)` | `Mesh3D\|Body3D\|Part\|Assembly\|Document` | Writes binary or ASCII STL. |
+| `step.write(target, path, *, tolerance)` | `Body3D\|Part\|Assembly\|Document` | Writes STEP. |
+| `step.render(target, *, tolerance)` | `Body3D\|Part\|Assembly\|Document` | Returns STEP string. |
+| `step.read_faces(path)` | file path | Returns list of parsed faces. |
+| `step.read_members(path)` | file path | Returns list of extruded members. |

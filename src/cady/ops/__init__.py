@@ -1,5 +1,5 @@
 from cady.ops.curves2d import arc_points, circle_points, segments_for_circle
-from cady.ops.mesh_cut import cut_mesh_by_plane
+from cady.ops.mesh_cut import close_boundary, close_planar_cap, cut_mesh_by_plane
 from cady.ops.meshes3d import sphere_triangles
 from cady.ops.polygons2d import area2, dedupe_closed, triangulate_polygon
 from cady.ops.profiles import midpoint, offset_point, perpendicular
@@ -8,6 +8,8 @@ from cady.ops.triangulation import triangulate_float32
 __all__ = [
     "arc_points",
     "circle_points",
+    "close_boundary",
+    "close_planar_cap",
     "cut_mesh_by_plane",
     "dedupe_closed",
     "midpoint",

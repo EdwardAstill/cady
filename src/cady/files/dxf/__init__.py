@@ -9,7 +9,7 @@ from typing import cast
 from cady.drawing import Drawing2D, DrawingEntity, Text2D
 from cady.errors import ReadError, WriteError
 from cady.geometry2d import Arc2D, Circle2D, ClosedPolyline2D, Line2D, Polyline2D
-from cady.geometry3d import Mesh3D
+from cady.geometry3d import Mesh3D, Wireframe3D
 from cady.vec import Vec2, Vec3
 
 Point2 = tuple[float, float]
@@ -26,7 +26,7 @@ class DxfSkippedEntity:
 class DxfImportResult:
     drawing: Drawing2D | None = None
     meshes: tuple[Mesh3D, ...] = ()
-    wires: tuple[tuple[Vec3, ...], ...] = ()
+    wireframes: tuple[Wireframe3D, ...] = ()
     skipped: tuple[DxfSkippedEntity, ...] = ()
 
 
@@ -40,11 +40,11 @@ def read(path: str | Path) -> DxfImportResult:
     text = Path(path).read_text(encoding="ascii")
     pairs = _pairs(text)
     drawing = _parse_drawing(pairs)
-    meshes, wires, skipped = _parse_meshes(pairs)
+    meshes, wireframes, skipped = _parse_meshes(pairs)
     return DxfImportResult(
         drawing=drawing if drawing.entities else None,
         meshes=meshes,
-        wires=wires,
+        wireframes=wireframes,
         skipped=skipped,
     )
 
@@ -61,6 +61,24 @@ def read_mesh(path: str | Path) -> Mesh3D:
     if not result.meshes:
         raise ReadError("DXF contained no supported mesh geometry")
     return Mesh3D.merged(result.meshes)
+
+
+def read_wireframe(path: str | Path) -> Wireframe3D:
+    result = read(path)
+    if not result.wireframes:
+        raise ReadError("DXF contained no supported 3D wire geometry")
+    return _merge_wireframes(result.wireframes)
+
+
+def _merge_wireframes(wireframes: Iterable[Wireframe3D]) -> Wireframe3D:
+    vertices: list[Vec3] = []
+    edges: list[tuple[int, int]] = []
+    offset = 0
+    for wf in wireframes:
+        vertices.extend(wf.vertices)
+        edges.extend((a + offset, b + offset) for a, b in wf.edges)
+        offset += len(wf.vertices)
+    return Wireframe3D(tuple(vertices), tuple(edges))
 
 
 def render(drawing: Drawing2D, *, tolerance: float = 1e-3) -> str:
@@ -266,9 +284,9 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2D:
 
 def _parse_meshes(
     pairs: tuple[_Pair, ...],
-) -> tuple[tuple[Mesh3D, ...], tuple[tuple[Vec3, ...], ...], tuple[DxfSkippedEntity, ...]]:
+) -> tuple[tuple[Mesh3D, ...], tuple[Wireframe3D, ...], tuple[DxfSkippedEntity, ...]]:
     meshes: list[Mesh3D] = []
-    wires: list[tuple[Vec3, ...]] = []
+    wireframes: list[Wireframe3D] = []
     skipped: list[DxfSkippedEntity] = []
     chunks = _entity_chunks(pairs)
     index = 0
@@ -286,7 +304,8 @@ def _parse_meshes(
                     vertices.append(_vec3(child, 10, 20, 30))
                 index += 1
             if len(vertices) >= 2:
-                wires.append(tuple(vertices))
+                edges = tuple((i, i + 1) for i in range(len(vertices) - 1))
+                wireframes.append(Wireframe3D(tuple(vertices), edges))
             else:
                 skipped.append(
                     DxfSkippedEntity(
@@ -304,7 +323,7 @@ def _parse_meshes(
                 )
             )
         index += 1
-    return tuple(meshes), tuple(wires), tuple(skipped)
+    return tuple(meshes), tuple(wireframes), tuple(skipped)
 
 
 def _mesh_from_3dface(chunk: tuple[_Pair, ...]) -> Mesh3D:
@@ -459,6 +478,7 @@ __all__ = [
     "read",
     "read_drawing",
     "read_mesh",
+    "read_wireframe",
     "render",
     "write",
 ]

@@ -40,7 +40,7 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     opened_scenes: list[tuple[object, str | None]] = []
-    module = _load_example_script("visualise_linesplan_9m")
+    module = _load_linesplan_script("visualise_linesplan_9m")
     visualisation = pytest.importorskip("cady.visualisation")
 
     def fake_view_scene(
@@ -56,21 +56,20 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
     module.main()
 
     stdout = capsys.readouterr().out
-    assert "loaded 105 wire polylines and 0 meshes" in stdout
+    assert "loaded 105 wireframes and 0 meshes" in stdout
     assert "scene objects: 105" in stdout
     assert "active camera: profile" in stdout
     assert "camera target: (0.0, 0.0, 0.0)" in stdout
     assert "camera scale: 152661" in stdout
-    assert "mesh vertices: 9715" in stdout
-    assert "mesh edges: 9610" in stdout
-    assert "mesh faces: 0" in stdout
+    assert "wireframe vertices: 9715" in stdout
+    assert "wireframe edges: 9610" in stdout
     assert [title for _scene, title in opened_scenes] == [
         "linesplan 9m - DXF wires",
-        "linesplan 9m - Mesh3D",
+        "linesplan 9m - Wireframe3D",
     ]
-    mesh_scene = opened_scenes[1][0]
-    assert len(mesh_scene.objects) == 1
-    assert mesh_scene.objects[0].object_name == "Mesh3D"
+    wf_scene = opened_scenes[1][0]
+    assert len(wf_scene.objects) == 1
+    assert wf_scene.objects[0].object_name == "Wireframe3D"
 
 
 def test_mirror_mesh_script_prints_mirrored_summary(
@@ -79,7 +78,7 @@ def test_mirror_mesh_script_prints_mirrored_summary(
     completed = subprocess.run(
         [
             sys.executable,
-            "examples/scripts/mirror-mesh.py",
+            "examples/linesplan/mirror-mesh.py",
             "--no-view",
         ],
         cwd=Path(__file__).resolve().parents[2],
@@ -91,12 +90,21 @@ def test_mirror_mesh_script_prints_mirrored_summary(
     )
 
     assert completed.returncode == 0, completed.stdout
-    assert "cady mirror mesh demo" in completed.stdout
-    assert "plane normal: (1, 0, 0)" in completed.stdout
-    assert "source: 9715 vertices, 9610 edges, 0 faces" in completed.stdout
-    assert "mirrored: 9715 vertices, 9610 edges, 0 faces" in completed.stdout
-    assert "bounds=(-181739" in completed.stdout
+    assert "cady mirror wireframe demo" in completed.stdout
+    assert "plane normal: (0, 1, 0)" in completed.stdout
+    assert "source: 9715 vertices, 9610 edges, bounds=(0, -7.276e-12" in completed.stdout
+    assert "mirrored: 9715 vertices, 9610 edges, bounds=(0, -19300" in completed.stdout
     assert "VisPy viewer skipped." in completed.stdout
+
+
+def _load_linesplan_script(name: str) -> ModuleType:
+    path = Path(__file__).resolve().parents[2] / "examples" / "linesplan" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_example_script(name: str) -> ModuleType:

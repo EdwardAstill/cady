@@ -105,8 +105,13 @@ def test_dxf_read_polyline_wires(tmp_path: Path) -> None:
 
     result = dxf.read(path)
 
-    assert len(result.wires) == 1
-    assert [point.tuple() for point in result.wires[0]] == [(0.0, 0.0, 1.0), (2.0, 0.0, 3.0)]
+    assert len(result.wireframes) == 1
+    assert [point.tuple() for point in result.wireframes[0].vertices] == [
+        (0.0, 0.0, 1.0),
+        (2.0, 0.0, 3.0),
+    ]
+    assert result.wireframes[0].edges == ((0, 1),)
+    assert not hasattr(result, "wires")
 
 
 def test_stl_write_mesh(tmp_path: Path) -> None:

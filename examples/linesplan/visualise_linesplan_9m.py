@@ -1,8 +1,14 @@
+"""Visualise the 9m linesplan DXF wireframe.
+
+Usage:
+    PYTHONPATH=src .venv/bin/python examples/linesplan/visualise_linesplan_9m.py
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene
+from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3D
 from cady.files import dxf
 from cady.numeric import Transform3
 from cady.view import Camera as CameraType
@@ -25,9 +31,9 @@ def main() -> None:
     print_wire_summary(result, wire_scene)
     view_scene(wire_scene, title="linesplan 9m - DXF wires")
 
-    mesh = Mesh3D.from_dxf(LINESPLAN_DXF)
-    print_mesh_summary(mesh)
-    mesh.view(title="linesplan 9m - Mesh3D", style=MESH_STYLE)
+    wf = dxf.read_wireframe(LINESPLAN_DXF)
+    print_wireframe_summary(wf)
+    wf.view(title="linesplan 9m - Wireframe3D", style=MESH_STYLE)
 
 
 def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
@@ -36,10 +42,10 @@ def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
     origin_pose = Transform3.translation(-centre[0], -centre[1], -centre[2])
     scene = Scene(name="linesplan_9m_wires")
 
-    for index, wire in enumerate(result.wires, start=1):
+    for index, wf in enumerate(result.wireframes, start=1):
         scene = scene.add(
-            wire,
-            name=f"wire_{index}",
+            wf,
+            name=f"wireframe_{index}",
             pose=origin_pose,
             style=WIRE_STYLE,
         )
@@ -58,7 +64,7 @@ def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
 
 def print_wire_summary(result: dxf.DxfImportResult, scene: Scene) -> None:
     print(
-        f"loaded {len(result.wires)} wire polylines and {len(result.meshes)} meshes "
+        f"loaded {len(result.wireframes)} wireframes and {len(result.meshes)} meshes "
         f"from {LINESPLAN_DXF}"
     )
     if result.skipped:
@@ -71,14 +77,13 @@ def print_wire_summary(result: dxf.DxfImportResult, scene: Scene) -> None:
     print(f"camera scale: {camera.orthographic_scale:g}")
 
 
-def print_mesh_summary(mesh: Mesh3D) -> None:
-    print(f"mesh vertices: {len(mesh.vertices)}")
-    print(f"mesh edges: {len(mesh.edges)}")
-    print(f"mesh faces: {len(mesh.faces)}")
+def print_wireframe_summary(wf: Wireframe3D) -> None:
+    print(f"wireframe vertices: {len(wf.vertices)}")
+    print(f"wireframe edges: {len(wf.edges)}")
 
 
 def _reject_empty_linesplan(result: dxf.DxfImportResult) -> None:
-    if not result.wires and not result.meshes:
+    if not result.wireframes and not result.meshes:
         raise SystemExit(f"{LINESPLAN_DXF} contains no supported DXF 3D wires or meshes")
 
 
@@ -100,8 +105,9 @@ def _result_bounds(
     result: dxf.DxfImportResult,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     points: list[tuple[float, float, float]] = []
-    for wire in result.wires:
-        points.extend((point.x, point.y, point.z) for point in wire)
+    for wf in result.wireframes:
+        lower, upper = wf.bounds()
+        points.extend((_point_tuple(lower), _point_tuple(upper)))
     for mesh in result.meshes:
         lower, upper = mesh.bounds()
         points.extend((_point_tuple(lower), _point_tuple(upper)))

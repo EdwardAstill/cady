@@ -15,7 +15,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from cady.geometry3d import Mesh3D
+from cady.geometry3d import Mesh3D, Wireframe3D
 from cady.numeric.mesh3d import ArrayMesh3
 from cady.numeric.transform import Transform3
 from cady.product import Assembly, Part
@@ -769,6 +769,8 @@ def _mesh_from_target(target: object, *, tolerance: float) -> ArrayMesh3:
         return target
     if isinstance(target, Mesh3D):
         return target.to_array(tolerance=tolerance)
+    if isinstance(target, Wireframe3D):
+        return target.to_array(tolerance=tolerance)
     to_mesh = getattr(target, "to_mesh", None)
     if callable(to_mesh):
         mesh = to_mesh(tolerance=tolerance)
@@ -777,9 +779,7 @@ def _mesh_from_target(target: object, *, tolerance: float) -> ArrayMesh3:
     if callable(to_array):
         mesh = to_array(tolerance=tolerance)
         return _mesh_from_target(mesh, tolerance=tolerance)
-    raise TypeError(
-        "scene target must be Mesh3D, ArrayMesh3, or expose to_mesh(tolerance=...)"
-    )
+    raise TypeError("scene target must be Mesh3D, ArrayMesh3, or expose to_mesh(tolerance=...)")
 
 
 def _line_from_target(

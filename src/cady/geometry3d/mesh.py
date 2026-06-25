@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -12,6 +11,7 @@ from cady.numeric.transform import Transform3
 from cady.vec import Vec3, promote3
 
 if TYPE_CHECKING:
+    from cady.geometry3d.wireframe import Wireframe3D
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -56,17 +56,6 @@ class Mesh3D:
         return cls(vertices, faces, edges)  # type: ignore[arg-type]
 
     @classmethod
-    def from_dxf(cls, path: str | Path) -> Mesh3D:
-        from cady.errors import ReadError
-        from cady.files import dxf
-
-        result = dxf.read(path)
-        meshes = [*result.meshes, *(_mesh_from_wire(wire) for wire in result.wires)]
-        if not meshes:
-            raise ReadError("DXF contained no supported 3D mesh or wire geometry")
-        return cls.merged(meshes)
-
-    @classmethod
     def merged(cls, meshes: Iterable[Mesh3D]) -> Mesh3D:
         vertices: list[Vec3] = []
         faces: list[FaceIndex] = []
@@ -82,8 +71,7 @@ class Mesh3D:
     @property
     def triangles(self) -> tuple[tuple[Vec3, Vec3, Vec3], ...]:
         return tuple(
-            (self.vertices[a], self.vertices[b], self.vertices[c])
-            for a, b, c in self.faces
+            (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
         )
 
     def to_array(self, *, tolerance: float) -> ArrayMesh3:
@@ -123,6 +111,87 @@ class Mesh3D:
                 max(vertex.z for vertex in self.vertices),
             ),
         )
+
+    def close_planar(
+        self,
+        plane_origin: object,
+        plane_normal: object,
+        *,
+        tolerance: float = 1e-3,
+        snap_tolerance: float | None = None,
+    ) -> Mesh3D:
+        """Cap an open mesh at an explicit plane.
+
+        Detects boundary edges on the plane and triangulates the resulting
+        loops. Returns a new ``Mesh3D`` with the cap faces added.
+
+        When *snap_tolerance* is ``None`` (default), only boundary vertices
+        already on the plane (within *tolerance*) are used for the cap.
+
+        When *snap_tolerance* is set, boundary vertices within that distance
+        of the plane but not already on it are projected onto the plane.
+        New projected vertices are appended and used for the cap while the
+        originals stay connected, creating thin gaps that ``close_boundary``
+        can fill.
+        """
+        from cady.ops.mesh_cut import close_planar_cap
+
+        _validate_tolerance(tolerance)
+        if snap_tolerance is not None and snap_tolerance <= 0.0:
+            raise ValueError("snap_tolerance must be positive")
+        array = self.to_array(tolerance=tolerance)
+        capped = close_planar_cap(
+            array,
+            plane_origin,
+            plane_normal,
+            tolerance=tolerance,
+            snap_tolerance=snap_tolerance,
+        )
+        return Mesh3D.from_array(capped)
+
+    def close_boundary(
+        self,
+        *,
+        tolerance: float = 1e-3,
+    ) -> Mesh3D:
+        """Close all planar boundary holes in the mesh.
+
+        Detects boundary edges (edges appearing in exactly one face), stitches
+        them into loops, fits a best-fit plane to each loop, and triangulates
+        planar loops.
+
+        Raises ``ValueError`` if any boundary loop is non-planar.
+        """
+        from cady.ops.mesh_cut import close_boundary as _close_boundary_ops
+
+        _validate_tolerance(tolerance)
+        array = self.to_array(tolerance=tolerance)
+        closed = _close_boundary_ops(array, tolerance=tolerance)
+        return Mesh3D.from_array(closed)
+
+    def close_holes(
+        self,
+        *,
+        tolerance: float = 1e-3,
+        max_hole_edges: int | None = None,
+    ) -> Mesh3D:
+        """Fill non-planar holes via advancing-front triangulation.
+
+        Not yet implemented.
+        """
+        raise NotImplementedError(
+            "close_holes is not implemented; use close_boundary for planar hole filling"
+        )
+
+    def to_wireframe(self) -> Wireframe3D:
+        """Extract all edges from faces as a Wireframe3D."""
+        from cady.geometry3d.wireframe import Wireframe3D as WF
+
+        edge_set: set[tuple[int, int]] = set()
+        for a, b, c in self.faces:
+            for start, end in ((a, b), (b, c), (c, a)):
+                edge_set.add((min(start, end), max(start, end)))
+        return WF(self.vertices, tuple(sorted(edge_set)))
 
     def view(
         self,
@@ -169,11 +238,6 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
 
 def _reverse_face_winding(faces: tuple[FaceIndex, ...]) -> tuple[FaceIndex, ...]:
     return tuple((a, c, b) for a, b, c in faces)
-
-
-def _mesh_from_wire(wire: tuple[Vec3, ...]) -> Mesh3D:
-    edges = tuple((index, index + 1) for index in range(len(wire) - 1))
-    return Mesh3D(wire, (), edges)
 
 
 def _validate_tolerance(tolerance: float) -> None:
