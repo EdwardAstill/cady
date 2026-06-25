@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from cady.errors import ReadError
 from cady.geometry3d import Mesh3D
 from cady.numeric.mesh3d import ArrayMesh3
 from cady.numeric.transform import Transform3
@@ -146,6 +147,214 @@ def test_dxf_read_wireframe_converts_polyline_wires_to_wireframe(tmp_path: Path)
         (4.0, 1.0, 5.0),
     ]
     assert wf.edges == ((0, 1), (1, 2))
+
+
+def test_dxf_read_mesh_can_convert_polyline_wires_to_mesh(tmp_path: Path) -> None:
+    from cady.files import dxf
+
+    path = tmp_path / "wire_mesh.dxf"
+    path.write_text(
+        "\n".join(
+            [
+                "0",
+                "SECTION",
+                "2",
+                "ENTITIES",
+                "0",
+                "POLYLINE",
+                "8",
+                "WATERLINES",
+                "66",
+                "1",
+                "0",
+                "VERTEX",
+                "10",
+                "0",
+                "20",
+                "1",
+                "30",
+                "0",
+                "0",
+                "VERTEX",
+                "10",
+                "2",
+                "20",
+                "1",
+                "30",
+                "0",
+                "0",
+                "SEQEND",
+                "0",
+                "ENDSEC",
+                "0",
+                "EOF",
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
+
+    with pytest.raises(ReadError, match="could not be converted to mesh faces"):
+        dxf.read_mesh(
+            path,
+            mirror_origin=(0.0, 0.0, 0.0),
+            mirror_normal=(1.0, 0.0, 0.0),
+        )
+
+    mesh = dxf.read_mesh(
+        path,
+        mirror_origin=(0.0, 0.0, 0.0),
+        mirror_normal=(1.0, 0.0, 0.0),
+        close_origin=(0.0, 0.0, 0.0),
+        close_normal=(0.0, 1.0, 0.0),
+        max_distance=2.0,
+    )
+
+    assert isinstance(mesh, Mesh3D)
+    assert len(mesh.vertices) == 4
+    assert mesh.faces == ((0, 1, 3), (0, 3, 2))
+    assert mesh.edges == ()
+    assert [point.tuple() for point in mesh.vertices] == [
+        (0.0, 1.0, 0.0),
+        (-2.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (-2.0, 0.0, 0.0),
+    ]
+
+
+def test_dxf_read_mesh_lofts_section_wires_to_faces(tmp_path: Path) -> None:
+    from cady.files import dxf
+
+    path = tmp_path / "section_mesh.dxf"
+    path.write_text(
+        "\n".join(
+            [
+                "0",
+                "SECTION",
+                "2",
+                "ENTITIES",
+                *_section_polyline_dxf(x=0.0),
+                *_section_polyline_dxf(x=2.0),
+                "0",
+                "ENDSEC",
+                "0",
+                "EOF",
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
+
+    mesh = dxf.read_mesh(
+        path,
+        mirror_origin=(0.0, 0.0, 0.0),
+        mirror_normal=(1.0, 0.0, 0.0),
+    )
+
+    assert isinstance(mesh, Mesh3D)
+    assert len(mesh.vertices) == 16
+    assert len(mesh.faces) == 6
+    assert len(mesh.edges) == 16
+    assert mesh.faces
+    assert {point.x for point in mesh.vertices} == {0.0, -2.0}
+
+
+def test_dxf_read_mesh_preserves_source_wires_as_display_edges(
+    tmp_path: Path,
+) -> None:
+    from cady.files import dxf
+
+    path = tmp_path / "section_mesh_with_guide.dxf"
+    path.write_text(
+        "\n".join(
+            [
+                "0",
+                "SECTION",
+                "2",
+                "ENTITIES",
+                *_section_polyline_dxf(x=0.0),
+                *_section_polyline_dxf(x=2.0),
+                *_guide_polyline_dxf(),
+                "0",
+                "ENDSEC",
+                "0",
+                "EOF",
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
+
+    mesh = dxf.read_mesh(
+        path,
+        mirror_origin=(0.0, 0.0, 0.0),
+        mirror_normal=(0.0, 1.0, 0.0),
+    )
+
+    face_x_values = {
+        mesh.vertices[index].x for face in mesh.faces for index in face
+    }
+    assert max(face_x_values) == 2.0
+    assert mesh.bounds()[1].x == 3.0
+    assert any(
+        mesh.vertices[a].x == 0.0 and mesh.vertices[b].x == 3.0
+        for a, b in mesh.edges
+    )
+
+
+def _section_polyline_dxf(*, x: float) -> list[str]:
+    lines = [
+        "0",
+        "POLYLINE",
+        "8",
+        "SECTIONS",
+        "66",
+        "1",
+    ]
+    for y, z in ((0.0, 0.0), (0.5, 1.0), (1.0, 2.0), (1.5, 3.0)):
+        lines.extend(
+            [
+                "0",
+                "VERTEX",
+                "10",
+                str(x),
+                "20",
+                str(y),
+                "30",
+                str(z),
+            ]
+        )
+    lines.extend(["0", "SEQEND"])
+    return lines
+
+
+def _guide_polyline_dxf() -> list[str]:
+    return [
+        "0",
+        "POLYLINE",
+        "8",
+        "GUIDES",
+        "66",
+        "1",
+        "0",
+        "VERTEX",
+        "10",
+        "0",
+        "20",
+        "0",
+        "30",
+        "4",
+        "0",
+        "VERTEX",
+        "10",
+        "3",
+        "20",
+        "0",
+        "30",
+        "4",
+        "0",
+        "SEQEND",
+    ]
 
 
 def test_mesh_rejects_out_of_range_faces() -> None:

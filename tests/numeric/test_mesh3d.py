@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from cady.errors import GeometryError
 from cady.numeric.mesh3d import ArrayMesh3, ArrayPolyline3
 from cady.numeric.transform import Transform3
 
@@ -29,6 +30,71 @@ def test_mesh_triangles_bounds_and_transform_keeps_faces() -> None:
     transformed = mesh.transformed(Transform3.translation(0.0, 0.0, 1.0))
     np.testing.assert_array_equal(transformed.faces, mesh.faces)
     np.testing.assert_allclose(transformed.triangles[0, 0], [0.0, 0.0, 1.0])
+
+
+def test_mesh_boundary_returns_closed_polyline3() -> None:
+    mesh = ArrayMesh3(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        [[0, 1, 2]],
+    )
+
+    boundary = mesh.boundary
+
+    assert isinstance(boundary, ArrayPolyline3)
+    assert boundary.vertices.shape == (4, 3)
+    np.testing.assert_allclose(boundary.vertices[0], boundary.vertices[-1])
+    assert {tuple(row) for row in boundary.vertices[:-1]} == {
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    }
+    loops = mesh.boundary_loops
+    assert len(loops) == 1
+    np.testing.assert_allclose(loops[0].vertices, boundary.vertices)
+
+
+def test_mesh_boundary_raises_when_mesh_has_no_faces() -> None:
+    mesh = ArrayMesh3(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        np.empty((0, 3), dtype=np.int64),
+        [[0, 1]],
+    )
+
+    with pytest.raises(GeometryError, match="no faces"):
+        _ = mesh.boundary
+
+    with pytest.raises(GeometryError, match="no faces"):
+        _ = mesh.boundary_loops
+
+
+def test_mesh_boundary_loops_returns_empty_tuple_when_mesh_is_closed() -> None:
+    mesh = ArrayMesh3(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]],
+    )
+
+    assert mesh.boundary_loops == ()
+
+
+def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
+    mesh = ArrayMesh3(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        [[0, 1, 2], [1, 0, 3], [0, 1, 4]],
+    )
+
+    with pytest.raises(GeometryError, match="non-manifold"):
+        _ = mesh.boundary_loops
 
 
 def test_mesh_mirror_reflects_vertices_and_reverses_face_winding() -> None:

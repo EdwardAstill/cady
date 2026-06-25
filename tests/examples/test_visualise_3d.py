@@ -8,6 +8,9 @@ from types import ModuleType
 
 import pytest
 
+from cady import Vec3, Wireframe3D
+from cady.visualisation import prepare_scene
+
 
 def test_visualise_3d_prints_scene_summary_without_opening_viewer(
     import_env: dict[str, str],
@@ -33,6 +36,59 @@ def test_visualise_3d_prints_scene_summary_without_opening_viewer(
     assert "Plain box" in completed.stdout
     assert "mesh:" in completed.stdout
     assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_visualise_mesh_boundary_prints_boundary_summary(
+    import_env: dict[str, str],
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "examples/scripts/visualise_mesh_boundary.py",
+            "--no-view",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=import_env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert "cady mesh boundary demo" in completed.stdout
+    assert "mesh: 825 vertices, 2089 edges, 1332 faces" in completed.stdout
+    assert "boundary loops: 4 (112 edges, 26 edges, 22 edges, 22 edges)" in completed.stdout
+    assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_visualise_mesh_boundary_scene_overlays_boundary_loops() -> None:
+    module = _load_example_script("visualise_mesh_boundary")
+
+    mesh = module.build_complicated_mesh()
+    loops = mesh.boundary_loops
+    boundaries = module._wireframes_from_boundary_loops(loops)
+    scene = module.build_scene(mesh, boundaries)
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert [obj.object_name for obj in scene.objects] == [
+        "mesh",
+        "boundary_loop_1",
+        "boundary_loop_2",
+        "boundary_loop_3",
+        "boundary_loop_4",
+    ]
+    assert len(loops) == 4
+    assert [len(loop.vertices) - 1 for loop in loops] == [112, 26, 22, 22]
+    assert prepared.meshes[0].name == "mesh"
+    assert len(prepared.meshes[0].edges) == 2089
+    assert [mesh.name for mesh in prepared.meshes[1:]] == [
+        "boundary_loop_1",
+        "boundary_loop_2",
+        "boundary_loop_3",
+        "boundary_loop_4",
+    ]
+    assert all(mesh.render_mode == "wireframe" for mesh in prepared.meshes[1:])
 
 
 def test_visualise_linesplan_prints_summary_before_opening_viewer(
@@ -72,13 +128,13 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
     assert wf_scene.objects[0].object_name == "Wireframe3D"
 
 
-def test_mirror_mesh_script_prints_mirrored_summary(
+def test_linesplan_wireframe_script_prints_wireframe_summary(
     import_env: dict[str, str],
 ) -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            "examples/linesplan/mirror-mesh.py",
+            "examples/linesplan/wireframe.py",
             "--no-view",
         ],
         cwd=Path(__file__).resolve().parents[2],
@@ -90,11 +146,59 @@ def test_mirror_mesh_script_prints_mirrored_summary(
     )
 
     assert completed.returncode == 0, completed.stdout
-    assert "cady mirror wireframe demo" in completed.stdout
-    assert "plane normal: (0, 1, 0)" in completed.stdout
-    assert "source: 9715 vertices, 9610 edges, bounds=(0, -7.276e-12" in completed.stdout
-    assert "mirrored: 9715 vertices, 9610 edges, bounds=(0, -19300" in completed.stdout
+    assert "cady wireframe demo" in completed.stdout
+    assert "wireframe: 9715 vertices, 9610 edges" in completed.stdout
     assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_linesplan_mesh_boundary_script_preserves_dxf_wire_extents(
+    import_env: dict[str, str],
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "examples/linesplan/mesh-boundary.py",
+            "--no-view",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=import_env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert "cady mesh boundary demo" in completed.stdout
+    assert "mesh: 15630 vertices, 21284 edges, 11520 faces" in completed.stdout
+    assert "to (181739, 7.276e-12, 9000)" in completed.stdout
+    assert "boundary loops: 1 (308 edges)" in completed.stdout
+    assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_linesplan_wireframe_scene_draws_only_wireframe() -> None:
+    module = _load_linesplan_script("wireframe")
+    wireframe = Wireframe3D(
+        (
+            Vec3(0.0, 0.0, 0.0),
+            Vec3(1.0, 0.0, 0.0),
+            Vec3(1.0, 1.0, 0.0),
+        ),
+        ((0, 1), (1, 2)),
+    )
+
+    scene = module.build_scene(wireframe)
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert [obj.object_name for obj in scene.objects] == ["wireframe"]
+    assert isinstance(scene.objects[0].target, Wireframe3D)
+    assert scene.objects[0].target is wireframe
+    assert scene.objects[0].style == module.WIRE_STYLE
+    assert len(prepared.meshes) == 1
+    assert prepared.meshes[0].name == "wireframe"
+    assert prepared.meshes[0].render_mode == "wireframe"
+    assert len(prepared.meshes[0].edges) == 2
+    assert len(prepared.meshes[0].faces) == 0
 
 
 def _load_linesplan_script(name: str) -> ModuleType:

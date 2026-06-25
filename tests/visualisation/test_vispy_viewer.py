@@ -8,6 +8,7 @@ import pytest
 from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, box
 from cady.visualisation.vispy_viewer import (
     _camera_orientation,
+    _mesh_edge_color,
     _orientation_edges,
     _require_vispy,
     _shaded_face_buffers,
@@ -92,6 +93,22 @@ def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
     assert len(prepared.meshes) == 1
     np.testing.assert_array_equal(prepared.meshes[0].faces, np.empty((0, 3), dtype=np.uint32))
     np.testing.assert_array_equal(prepared.meshes[0].edges, [[0, 1], [1, 2]])
+
+
+def test_wireframe_mesh_edges_use_style_color() -> None:
+    mesh = Mesh3D(
+        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5)),
+        (),
+        ((0, 1),),
+    )
+    scene = Scene("orange edge").add(
+        mesh,
+        style=DisplayStyle(color=(1.0, 0.3, 0.1), render_mode="wireframe"),
+    )
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert _mesh_edge_color(prepared.meshes[0]) == (1.0, 0.3, 0.1)
 
 
 def test_camera_orientation_maps_camera_position_to_view_z() -> None:

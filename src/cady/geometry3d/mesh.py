@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cady.numeric.mesh3d import ArrayMesh3
+from cady.numeric.mesh3d import ArrayMesh3, ArrayPolyline3
 from cady.numeric.transform import Transform3
 from cady.vec import Vec3, promote3
 
@@ -73,6 +73,23 @@ class Mesh3D:
         return tuple(
             (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
         )
+
+    @property
+    def boundary(self) -> ArrayPolyline3:
+        return self._array_without_display_edges().boundary
+
+    @property
+    def boundary_loops(self) -> tuple[ArrayPolyline3, ...]:
+        return self._array_without_display_edges().boundary_loops
+
+    def _array_without_display_edges(self) -> ArrayMesh3:
+        vertices = np.array([vertex.tuple() for vertex in self.vertices], dtype=np.float64)
+        faces = np.array(self.faces, dtype=np.int64)
+        if len(vertices) == 0:
+            vertices = np.empty((0, 3), dtype=np.float64)
+        if len(faces) == 0:
+            faces = np.empty((0, 3), dtype=np.int64)
+        return ArrayMesh3(vertices, faces)
 
     def to_array(self, *, tolerance: float) -> ArrayMesh3:
         _validate_tolerance(tolerance)

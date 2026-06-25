@@ -295,6 +295,12 @@ def _prepare_polyline(vertices: LineVertices) -> tuple[np.ndarray, np.ndarray]:
     return points, _polyline_indices(len(points))
 
 
+def _mesh_edge_color(mesh: SceneMesh) -> tuple[float, float, float]:
+    if mesh.render_mode == "wireframe":
+        return mesh.color
+    return _DEFAULT_EDGE_COLOR
+
+
 def _polyline_point_row(point: object) -> object:
     as_tuple = getattr(point, "tuple", None)
     if callable(as_tuple):
@@ -389,7 +395,7 @@ def _make_canvas(
 
                 if mesh.render_mode in {"shaded", "wireframe"} and len(edge_indices) > 0:
                     edge_colors = np.tile(
-                        np.array(_DEFAULT_EDGE_COLOR, dtype=np.float32),
+                        np.array(_mesh_edge_color(mesh), dtype=np.float32),
                         (len(mesh.vertices), 1),
                     )
                     normals = np.tile(

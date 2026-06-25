@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import degrees, radians
+from math import degrees, dist, radians
 from pathlib import Path
 from typing import cast
 
@@ -56,8 +56,33 @@ def read_drawing(path: str | Path) -> Drawing2D:
     return result.drawing
 
 
-def read_mesh(path: str | Path) -> Mesh3D:
+def read_mesh(
+    path: str | Path,
+    *,
+    mirror_origin: object | None = None,
+    mirror_normal: object | None = None,
+    close_origin: object | None = None,
+    close_normal: object | None = None,
+    tolerance: float = 1e-3,
+    max_distance: float | None = None,
+) -> Mesh3D:
     result = read(path)
+    if _line_mesh_requested(
+        mirror_origin=mirror_origin,
+        mirror_normal=mirror_normal,
+        close_origin=close_origin,
+        close_normal=close_normal,
+        max_distance=max_distance,
+    ):
+        return _mesh_from_line_geometry(
+            result.wireframes,
+            mirror_origin=mirror_origin,
+            mirror_normal=mirror_normal,
+            close_origin=close_origin,
+            close_normal=close_normal,
+            tolerance=tolerance,
+            max_distance=max_distance,
+        )
     if not result.meshes:
         raise ReadError("DXF contained no supported mesh geometry")
     return Mesh3D.merged(result.meshes)
@@ -79,6 +104,224 @@ def _merge_wireframes(wireframes: Iterable[Wireframe3D]) -> Wireframe3D:
         edges.extend((a + offset, b + offset) for a, b in wf.edges)
         offset += len(wf.vertices)
     return Wireframe3D(tuple(vertices), tuple(edges))
+
+
+def _line_mesh_requested(
+    *,
+    mirror_origin: object | None,
+    mirror_normal: object | None,
+    close_origin: object | None,
+    close_normal: object | None,
+    max_distance: float | None,
+) -> bool:
+    return any(
+        value is not None
+        for value in (
+            mirror_origin,
+            mirror_normal,
+            close_origin,
+            close_normal,
+            max_distance,
+        )
+    )
+
+
+def _mesh_from_line_geometry(
+    wireframes: tuple[Wireframe3D, ...],
+    *,
+    mirror_origin: object | None,
+    mirror_normal: object | None,
+    close_origin: object | None,
+    close_normal: object | None,
+    tolerance: float,
+    max_distance: float | None,
+) -> Mesh3D:
+    if (mirror_origin is None) != (mirror_normal is None):
+        raise ValueError("mirror_origin and mirror_normal must be provided together")
+    has_close_plane = (
+        close_origin is not None or close_normal is not None or max_distance is not None
+    )
+    if has_close_plane and (
+        close_origin is None or close_normal is None or max_distance is None
+    ):
+        raise ValueError(
+            "line-geometry mesh conversion requires close_origin, close_normal, "
+            "and max_distance"
+        )
+    if not wireframes:
+        raise ReadError("DXF contained no supported line geometry for mesh conversion")
+
+    if not has_close_plane:
+        mesh = _loft_section_wireframes_to_mesh(wireframes, tolerance=tolerance)
+        if mesh is None:
+            raise ReadError("DXF line geometry could not be converted to mesh faces")
+        mesh = _mesh_with_wireframe_display_edges(mesh, wireframes)
+        if mirror_origin is not None and mirror_normal is not None:
+            mesh = mesh.mirror(mirror_origin, mirror_normal)
+        return mesh
+    assert close_origin is not None
+    assert close_normal is not None
+    assert max_distance is not None
+    wireframe = _merge_wireframes(wireframes)
+    if mirror_origin is not None and mirror_normal is not None:
+        wireframe = wireframe.mirror(mirror_origin, mirror_normal)
+    mesh = wireframe.close_to_plane(
+        close_origin,
+        close_normal,
+        tolerance=tolerance,
+        max_distance=max_distance,
+    )
+    return Mesh3D(mesh.vertices, mesh.faces)
+
+
+def _loft_section_wireframes_to_mesh(
+    wireframes: tuple[Wireframe3D, ...],
+    *,
+    tolerance: float,
+) -> Mesh3D | None:
+    sections = _section_curves(wireframes, tolerance=tolerance)
+    if len(sections) < 2:
+        return None
+
+    sample_count = min(max(len(vertices) for _x, vertices in sections), 96)
+    if sample_count < 2:
+        return None
+
+    rows = tuple(
+        _resample_polyline(_orient_section(vertices), sample_count)
+        for _x, vertices in sections
+    )
+    vertices = tuple(point for row in rows for point in row)
+    faces: list[tuple[int, int, int]] = []
+    edges: set[tuple[int, int]] = set()
+
+    for section_index in range(len(rows)):
+        row_start = section_index * sample_count
+        for sample_index in range(sample_count - 1):
+            edges.add((row_start + sample_index, row_start + sample_index + 1))
+
+    for section_index in range(len(rows) - 1):
+        left_start = section_index * sample_count
+        right_start = (section_index + 1) * sample_count
+        for sample_index in range(sample_count):
+            edges.add((left_start + sample_index, right_start + sample_index))
+        for sample_index in range(sample_count - 1):
+            a = left_start + sample_index
+            b = right_start + sample_index
+            c = left_start + sample_index + 1
+            d = right_start + sample_index + 1
+            _append_face_if_valid(faces, vertices, (a, b, d), tolerance)
+            _append_face_if_valid(faces, vertices, (a, d, c), tolerance)
+
+    if not faces:
+        return None
+    return Mesh3D(vertices, tuple(faces), tuple(sorted(edges)))
+
+
+def _mesh_with_wireframe_display_edges(
+    mesh: Mesh3D,
+    wireframes: tuple[Wireframe3D, ...],
+) -> Mesh3D:
+    vertices = list(mesh.vertices)
+    edges = list(mesh.edges)
+    offset = len(vertices)
+    for wireframe in wireframes:
+        vertices.extend(wireframe.vertices)
+        edges.extend((a + offset, b + offset) for a, b in wireframe.edges)
+        offset += len(wireframe.vertices)
+    return Mesh3D(tuple(vertices), mesh.faces, tuple(edges))
+
+
+def _section_curves(
+    wireframes: tuple[Wireframe3D, ...],
+    *,
+    tolerance: float,
+) -> tuple[tuple[float, tuple[Vec3, ...]], ...]:
+    x_tolerance = max(tolerance, 1e-3)
+    grouped: dict[int, list[tuple[float, tuple[Vec3, ...]]]] = {}
+    for wireframe in wireframes:
+        vertices = wireframe.vertices
+        if len(vertices) < 4:
+            continue
+        xs = [point.x for point in vertices]
+        ys = [point.y for point in vertices]
+        zs = [point.z for point in vertices]
+        if max(xs) - min(xs) > x_tolerance:
+            continue
+        if max(ys) - min(ys) <= x_tolerance or max(zs) - min(zs) <= x_tolerance:
+            continue
+        length = _polyline_length(vertices)
+        if length <= x_tolerance:
+            continue
+        x = sum(xs) / len(xs)
+        grouped.setdefault(round(x / x_tolerance), []).append((length, vertices))
+
+    sections: list[tuple[float, tuple[Vec3, ...]]] = []
+    for group in grouped.values():
+        _length, vertices = max(group, key=lambda item: item[0])
+        x = sum(point.x for point in vertices) / len(vertices)
+        sections.append((x, vertices))
+    return tuple(sorted(sections, key=lambda item: item[0]))
+
+
+def _orient_section(vertices: tuple[Vec3, ...]) -> tuple[Vec3, ...]:
+    if vertices[0].z > vertices[-1].z:
+        return tuple(reversed(vertices))
+    return vertices
+
+
+def _resample_polyline(vertices: tuple[Vec3, ...], count: int) -> tuple[Vec3, ...]:
+    if count < 2:
+        raise ValueError("count must be at least 2")
+    distances = [0.0]
+    for previous, current in zip(vertices, vertices[1:], strict=False):
+        distances.append(distances[-1] + dist(previous.tuple(), current.tuple()))
+    total = distances[-1]
+    if total == 0.0:
+        return tuple(vertices[0] for _ in range(count))
+
+    sampled: list[Vec3] = []
+    segment_index = 0
+    for sample_index in range(count):
+        target = total * sample_index / (count - 1)
+        while segment_index < len(distances) - 2 and distances[segment_index + 1] < target:
+            segment_index += 1
+        start = vertices[segment_index]
+        end = vertices[segment_index + 1]
+        start_distance = distances[segment_index]
+        segment_length = distances[segment_index + 1] - start_distance
+        ratio = 0.0 if segment_length == 0.0 else (target - start_distance) / segment_length
+        sampled.append(
+            Vec3(
+                start.x + (end.x - start.x) * ratio,
+                start.y + (end.y - start.y) * ratio,
+                start.z + (end.z - start.z) * ratio,
+            )
+        )
+    return tuple(sampled)
+
+
+def _polyline_length(vertices: tuple[Vec3, ...]) -> float:
+    return sum(
+        dist(previous.tuple(), current.tuple())
+        for previous, current in zip(vertices, vertices[1:], strict=False)
+    )
+
+
+def _append_face_if_valid(
+    faces: list[tuple[int, int, int]],
+    vertices: tuple[Vec3, ...],
+    face: tuple[int, int, int],
+    tolerance: float,
+) -> None:
+    a, b, c = (vertices[index] for index in face)
+    if (
+        dist(a.tuple(), b.tuple()) <= tolerance
+        or dist(b.tuple(), c.tuple()) <= tolerance
+        or dist(c.tuple(), a.tuple()) <= tolerance
+    ):
+        return
+    faces.append(face)
 
 
 def render(drawing: Drawing2D, *, tolerance: float = 1e-3) -> str:

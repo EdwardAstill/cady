@@ -6,6 +6,7 @@ from math import isclose
 import numpy as np
 import pytest
 
+from cady import GeometryError
 from cady.geometry3d import Mesh3D
 from cady.numeric.mesh3d import ArrayMesh3
 from cady.ops import close_planar_cap
@@ -183,6 +184,78 @@ def test_close_boundary_fills_multiple_holes() -> None:
     # 4 cap triangles (2 per missing quad face)
     assert len(result.faces) == len(mesh.faces) + 4
     assert _all_edges_manifold(result)
+
+
+def test_mesh_boundary_returns_single_closed_polyline3() -> None:
+    mesh = _cube_minus_top()
+
+    boundary = mesh.boundary
+
+    assert boundary.vertices.shape == (5, 3)
+    np.testing.assert_allclose(boundary.vertices[0], boundary.vertices[-1])
+    assert {tuple(point) for point in boundary.vertices[:-1]} == {
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (1.0, 1.0, 1.0),
+        (0.0, 1.0, 1.0),
+    }
+
+
+def test_mesh_boundary_raises_when_mesh_is_closed() -> None:
+    with pytest.raises(GeometryError, match="closed"):
+        _ = _cube_mesh().boundary
+
+
+def test_mesh_boundary_raises_for_multiple_boundary_loops() -> None:
+    vertices = _cube_vertices()
+    faces = tuple(
+        f
+        for f in _cube_faces()
+        if not (
+            all(isclose(vertices[i].z, 1.0) for i in f)
+            or all(isclose(vertices[i].z, 0.0) for i in f)
+        )
+    )
+    mesh = Mesh3D(vertices, faces)
+
+    with pytest.raises(GeometryError, match="2 boundary loops"):
+        _ = mesh.boundary
+
+
+def test_mesh_boundary_loops_returns_multiple_closed_polyline3_values() -> None:
+    vertices = _cube_vertices()
+    faces = tuple(
+        f
+        for f in _cube_faces()
+        if not (
+            all(isclose(vertices[i].z, 1.0) for i in f)
+            or all(isclose(vertices[i].z, 0.0) for i in f)
+        )
+    )
+    mesh = Mesh3D(vertices, faces)
+
+    loops = mesh.boundary_loops
+
+    assert len(loops) == 2
+    assert [loop.vertices.shape for loop in loops] == [(5, 3), (5, 3)]
+    for loop in loops:
+        np.testing.assert_allclose(loop.vertices[0], loop.vertices[-1])
+
+
+def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
+    mesh = Mesh3D(
+        (
+            Vec3(0.0, 0.0, 0.0),
+            Vec3(1.0, 0.0, 0.0),
+            Vec3(0.0, 1.0, 0.0),
+            Vec3(0.0, -1.0, 0.0),
+            Vec3(0.0, 0.0, 1.0),
+        ),
+        ((0, 1, 2), (1, 0, 3), (0, 1, 4)),
+    )
+
+    with pytest.raises(GeometryError, match="non-manifold"):
+        _ = mesh.boundary_loops
 
 
 # ── close_holes stub ──────────────────────────────────────────────────────
