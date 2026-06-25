@@ -1,7 +1,8 @@
-"""Demo: close a simple wireframe to a plane using close_to_plane.
+"""Demo: close simple edge geometry to a plane using Mesh3D.close_to_plane.
 
 Builds a 3D square wireframe elevated above the XY plane, visualises it,
-then projects the boundary edges to Z=0 and creates wall faces.
+then wraps the edges in an edge-only mesh, projects them to Z=0, and creates
+wall faces.
 
 Usage:
     PYTHONPATH=src .venv/bin/python examples/linesplan/demo_close_to_plane.py
@@ -71,7 +72,7 @@ def main() -> None:
     square.view(title="Wireframe square — before close_to_plane", style=SQUARE_STYLE)
 
     # Close to Z=0 plane
-    closed_square = square.close_to_plane(
+    closed_square = Mesh3D(square.vertices, (), square.edges).close_to_plane(
         plane_origin=(0, 0, 0),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,
@@ -86,7 +87,7 @@ def main() -> None:
     cube.view(title="Wireframe cube — before close_to_plane", style=SQUARE_STYLE)
 
     # Close bottom to Z=0 (already there, should be no-op or minimal)
-    closed_cube = cube.close_to_plane(
+    closed_cube = Mesh3D(cube.vertices, (), cube.edges).close_to_plane(
         plane_origin=(0, 0, 0),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,
@@ -96,7 +97,7 @@ def main() -> None:
     closed_cube.view(title="Wireframe cube — bottom to Z=0", style=CLOSED_STYLE)
 
     # Close top to Z=2
-    closed_cube_top = cube.close_to_plane(
+    closed_cube_top = Mesh3D(cube.vertices, (), cube.edges).close_to_plane(
         plane_origin=(0, 0, 2),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,

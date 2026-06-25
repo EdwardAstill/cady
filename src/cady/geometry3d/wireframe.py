@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import dist
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -70,70 +71,77 @@ class Wireframe3D:
             edges = np.empty((0, 2), dtype=np.int64)
         return ArrayMesh3(vertices, np.empty((0, 3), dtype=np.int64), edges)
 
-    # -- Edge-based closing → Mesh3D --------------------------------------
+    def to_mesh(self, *, tolerance: float) -> Mesh3D:
+        """Convert crossing-prone wire edges into a triangulated mesh."""
+        section_mesh = _loft_section_wireframe_to_mesh(self, tolerance=tolerance)
+        if section_mesh is not None:
+            return section_mesh
+        return self.triangulate(tolerance=tolerance)
 
-    def close_planar(
+    def remove_dangling_edges(self) -> Wireframe3D:
+        """Return a wireframe with recursively dangling edge branches removed."""
+        return _wireframe_from_edges(
+            self.vertices,
+            _remove_dangling_edges(self.edges),
+        )
+
+    def split_crossing_edges(self, *, tolerance: float = 1e-6) -> Wireframe3D:
+        """Return a wireframe with edges split at segment crossings."""
+        _validate_tolerance(tolerance)
+        if not self.edges:
+            return Wireframe3D(self.vertices, self.edges)
+
+        vertices = list(self.vertices)
+        split_points: list[list[tuple[float, int]]] = [
+            [(0.0, edge[0]), (1.0, edge[1])]
+            for edge in self.edges
+        ]
+        edge_bounds = tuple(_edge_bounds(self.vertices, edge) for edge in self.edges)
+
+        for left_index, left_edge in enumerate(self.edges):
+            for right_index in range(left_index + 1, len(self.edges)):
+                right_edge = self.edges[right_index]
+                if set(left_edge) & set(right_edge):
+                    continue
+                if not _bounds_overlap(
+                    edge_bounds[left_index],
+                    edge_bounds[right_index],
+                    tolerance,
+                ):
+                    continue
+
+                for left_param, right_param, point in _edge_crossing_points(
+                    self.vertices,
+                    left_edge,
+                    right_edge,
+                    tolerance,
+                ):
+                    vertex_index = _find_or_add_vertex(vertices, point, tolerance)
+                    split_points[left_index].append((left_param, vertex_index))
+                    split_points[right_index].append((right_param, vertex_index))
+
+        edges: list[EdgeIndex] = []
+        for points in split_points:
+            ordered = _unique_split_points(points, tolerance)
+            for (_, start), (_, end) in zip(ordered, ordered[1:], strict=False):
+                if start != end:
+                    edges.append((start, end))
+
+        return Wireframe3D(tuple(vertices), tuple(edges))
+
+    # -- Loop triangulation -------------------------------------------------
+
+    def triangulate(
         self,
-        plane_origin: object,
-        plane_normal: object,
         *,
         tolerance: float = 1e-3,
     ) -> Mesh3D:
-        """Cap open edges on a plane, returning a triangulated Mesh3D.
-
-        Finds edges whose both endpoints lie on the plane (within
-        ``tolerance``), stitches them into loops, and triangulates each loop.
-        Returns a ``Mesh3D`` with the cap faces and the original wireframe
-        edges preserved as display overlay.
-        """
-        from cady.errors import GeometryError
-        from cady.ops.mesh_cut import (
-            project_loop,
-            stitch_segments,
-            triangulate_loop,
-            unit3,
-            vector3,
+        """Split crossings, remove dangling branches, and triangulate loops."""
+        return (
+            self.split_crossing_edges(tolerance=tolerance)
+            .remove_dangling_edges()
+            .triangulate_loops(tolerance=tolerance)
         )
-
-        _validate_tolerance(tolerance)
-        origin_np = vector3(plane_origin, name="plane_origin")
-        normal_np = unit3(plane_normal, name="plane_normal")
-
-        vertices_list = [np.array((v.x, v.y, v.z), dtype=np.float64) for v in self.vertices]
-
-        # Filter edges where both endpoints are on the plane
-        plane_edges: list[tuple[int, int]] = []
-        for a, b in self.edges:
-            dist_a = float(np.dot(vertices_list[a] - origin_np, normal_np))
-            dist_b = float(np.dot(vertices_list[b] - origin_np, normal_np))
-            if abs(dist_a) <= tolerance and abs(dist_b) <= tolerance:
-                plane_edges.append((a, b))
-
-        if not plane_edges:
-            raise GeometryError("no edges lie on the specified plane")
-
-        loops = stitch_segments(plane_edges)
-        if not loops:
-            raise GeometryError("could not stitch planar edges into a closed loop")
-
-        # Validate each loop is closed — stitch_segments may return open chains
-        plane_edge_set = {(min(a, b), max(a, b)) for a, b in plane_edges}
-        closed_loops: list[list[int]] = []
-        for loop in loops:
-            closing_key = (min(loop[-1], loop[0]), max(loop[-1], loop[0]))
-            if closing_key in plane_edge_set:
-                closed_loops.append(loop)
-
-        if not closed_loops:
-            raise GeometryError("no closed planar edge loops found")
-
-        cap_faces: list[tuple[int, int, int]] = []
-        for loop in closed_loops:
-            projected = project_loop(loop, vertices_list, origin_np, normal_np)
-            for a, b, c in triangulate_loop(projected, tolerance):
-                cap_faces.append((loop[a], loop[c], loop[b]))
-
-        return Mesh3D(self.vertices, tuple(cap_faces), self.edges)
 
     def triangulate_loops(
         self,
@@ -143,7 +151,8 @@ class Wireframe3D:
         """Detect closed edge cycles and triangulate each into a Mesh3D.
 
         Builds an adjacency graph from edges, walks cycles via DFS, fits a
-        best-fit plane (SVD) to each cycle, and triangulates.  Raises
+        best-fit plane (SVD) to each cycle, and triangulates. Dangling
+        wireframe branches are pruned from the returned mesh. Raises
         ``GeometryError`` if no closed loops of length >= 3 are found.
         """
         from cady.errors import GeometryError
@@ -214,84 +223,7 @@ class Wireframe3D:
             for a, b, c in triangulate_loop(projected, tolerance):
                 all_faces.append((loop[a], loop[c], loop[b]))
 
-        return Mesh3D(self.vertices, tuple(all_faces), self.edges)
-
-    def close_to_plane(
-        self,
-        plane_origin: object,
-        plane_normal: object,
-        *,
-        tolerance: float = 1e-3,
-        max_distance: float,
-    ) -> Mesh3D:
-        """Project near-plane boundary edges to the plane and create wall faces.
-
-        For each edge where both endpoints are within ``max_distance`` of the
-        plane, projects the endpoints to the plane and creates two triangle
-        faces forming a quadrilateral wall between the original edge and its
-        projection.  Returns a ``Mesh3D`` with the wall faces and the
-        original wireframe edges preserved as a display overlay.
-
-        This does **not** triangulate the projected loop as a cap — only the
-        connecting wall faces are created.
-        """
-        from cady.errors import GeometryError
-        from cady.ops.mesh_cut import unit3, vector3
-
-        _validate_tolerance(tolerance)
-        if max_distance <= 0.0:
-            raise ValueError("max_distance must be positive")
-
-        origin_np = vector3(plane_origin, name="plane_origin")
-        normal_np = unit3(plane_normal, name="plane_normal")
-
-        # Collect edges near the plane
-        near_edges: list[tuple[int, int, float, float]] = []
-        for a, b in self.edges:
-            va = np.array(self.vertices[a].tuple(), dtype=np.float64)
-            vb = np.array(self.vertices[b].tuple(), dtype=np.float64)
-            dist_a = float(np.dot(va - origin_np, normal_np))
-            dist_b = float(np.dot(vb - origin_np, normal_np))
-            if abs(dist_a) <= max_distance and abs(dist_b) <= max_distance:
-                near_edges.append((a, b, dist_a, dist_b))
-
-        if not near_edges:
-            raise GeometryError("no edges found within max_distance of the plane")
-
-        # Build combined vertex list: originals + projected copies
-        proj_index: dict[int, int] = {}
-        all_vertices = list(self.vertices)
-
-        for a, b, dist_a, dist_b in near_edges:
-            if a not in proj_index:
-                proj_a = self.vertices[a].tuple()
-                proj = (
-                    proj_a[0] - dist_a * float(normal_np[0]),
-                    proj_a[1] - dist_a * float(normal_np[1]),
-                    proj_a[2] - dist_a * float(normal_np[2]),
-                )
-                proj_index[a] = len(all_vertices)
-                all_vertices.append(Vec3(*proj))
-            if b not in proj_index:
-                proj_b = self.vertices[b].tuple()
-                proj = (
-                    proj_b[0] - dist_b * float(normal_np[0]),
-                    proj_b[1] - dist_b * float(normal_np[1]),
-                    proj_b[2] - dist_b * float(normal_np[2]),
-                )
-                proj_index[b] = len(all_vertices)
-                all_vertices.append(Vec3(*proj))
-
-        # Create wall faces: two triangles per near edge
-        wall_faces: list[tuple[int, int, int]] = []
-        for a, b, _, _ in near_edges:
-            pa = proj_index[a]
-            pb = proj_index[b]
-            # Quad (a, b, pb, pa) -> triangles with outward normals
-            wall_faces.append((a, b, pb))
-            wall_faces.append((a, pb, pa))
-
-        return Mesh3D(tuple(all_vertices), tuple(wall_faces), self.edges)
+        return _mesh_without_dangling_edges(self.vertices, tuple(all_faces), self.edges)
 
     # -- Viewing ----------------------------------------------------------
 
@@ -330,6 +262,424 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
     if len(value) != 2:
         raise ValueError("wireframe edges must have exactly two indices")
     return (int(value[0]), int(value[1]))
+
+
+def _remove_dangling_edges(edges: tuple[EdgeIndex, ...]) -> tuple[EdgeIndex, ...]:
+    live_edges = list(edges)
+    live_vertices = {index for edge in live_edges for index in edge}
+
+    while live_edges:
+        degrees = {index: 0 for index in live_vertices}
+        for a, b in live_edges:
+            degrees[a] = degrees.get(a, 0) + 1
+            degrees[b] = degrees.get(b, 0) + 1
+
+        dangling = {index for index, degree in degrees.items() if degree == 1}
+        if not dangling:
+            break
+
+        live_vertices.difference_update(dangling)
+        live_edges = [
+            (a, b)
+            for a, b in live_edges
+            if a in live_vertices and b in live_vertices
+        ]
+
+    return tuple(live_edges)
+
+
+def _wireframe_from_edges(
+    vertices: tuple[Vec3, ...],
+    edges: tuple[EdgeIndex, ...],
+) -> Wireframe3D:
+    if not edges:
+        return Wireframe3D((), ())
+
+    ordered_vertices = tuple(sorted({index for edge in edges for index in edge}))
+    remap = {old: new for new, old in enumerate(ordered_vertices)}
+    compact_vertices = tuple(vertices[index] for index in ordered_vertices)
+    compact_edges = tuple((remap[a], remap[b]) for a, b in edges)
+    return Wireframe3D(compact_vertices, compact_edges)
+
+
+def _edge_bounds(
+    vertices: tuple[Vec3, ...],
+    edge: EdgeIndex,
+) -> tuple[Vec3, Vec3]:
+    start = vertices[edge[0]]
+    end = vertices[edge[1]]
+    return (
+        Vec3(min(start.x, end.x), min(start.y, end.y), min(start.z, end.z)),
+        Vec3(max(start.x, end.x), max(start.y, end.y), max(start.z, end.z)),
+    )
+
+
+def _bounds_overlap(
+    left: tuple[Vec3, Vec3],
+    right: tuple[Vec3, Vec3],
+    tolerance: float,
+) -> bool:
+    left_lower, left_upper = left
+    right_lower, right_upper = right
+    return not (
+        left_upper.x + tolerance < right_lower.x
+        or right_upper.x + tolerance < left_lower.x
+        or left_upper.y + tolerance < right_lower.y
+        or right_upper.y + tolerance < left_lower.y
+        or left_upper.z + tolerance < right_lower.z
+        or right_upper.z + tolerance < left_lower.z
+    )
+
+
+def _loft_section_wireframe_to_mesh(
+    wireframe: Wireframe3D,
+    *,
+    tolerance: float,
+) -> Mesh3D | None:
+    sections = _section_curves_from_wireframe(wireframe, tolerance=tolerance)
+    if len(sections) < 2:
+        return None
+
+    sample_count = min(max(len(vertices) for _x, vertices in sections), 96)
+    if sample_count < 2:
+        return None
+
+    rows = tuple(
+        _resample_polyline(_orient_section(vertices), sample_count)
+        for _x, vertices in sections
+    )
+    vertices = tuple(point for row in rows for point in row)
+    faces: list[tuple[int, int, int]] = []
+
+    for section_index in range(len(rows) - 1):
+        left_start = section_index * sample_count
+        right_start = (section_index + 1) * sample_count
+        for sample_index in range(sample_count - 1):
+            a = left_start + sample_index
+            b = right_start + sample_index
+            c = left_start + sample_index + 1
+            d = right_start + sample_index + 1
+            _append_face_if_valid(faces, vertices, (a, b, d), tolerance)
+            _append_face_if_valid(faces, vertices, (a, d, c), tolerance)
+
+    if not faces:
+        return None
+    mesh_faces = tuple(faces)
+    return Mesh3D(vertices, mesh_faces, _edges_from_faces(mesh_faces))
+
+
+def _section_curves_from_wireframe(
+    wireframe: Wireframe3D,
+    *,
+    tolerance: float,
+) -> tuple[tuple[float, tuple[Vec3, ...]], ...]:
+    x_tolerance = max(tolerance, 1e-3)
+    grouped: dict[int, list[tuple[float, tuple[Vec3, ...]]]] = {}
+    for vertices in _wireframe_polylines(wireframe):
+        if len(vertices) < 4:
+            continue
+        xs = [point.x for point in vertices]
+        ys = [point.y for point in vertices]
+        zs = [point.z for point in vertices]
+        if max(xs) - min(xs) > x_tolerance:
+            continue
+        if max(ys) - min(ys) <= x_tolerance or max(zs) - min(zs) <= x_tolerance:
+            continue
+        length = _polyline_length(vertices)
+        if length <= x_tolerance:
+            continue
+        x = sum(xs) / len(xs)
+        grouped.setdefault(round(x / x_tolerance), []).append((length, vertices))
+
+    sections: list[tuple[float, tuple[Vec3, ...]]] = []
+    for group in grouped.values():
+        _length, vertices = max(group, key=lambda item: item[0])
+        x = sum(point.x for point in vertices) / len(vertices)
+        sections.append((x, vertices))
+    return tuple(sorted(sections, key=lambda item: item[0]))
+
+
+def _wireframe_polylines(wireframe: Wireframe3D) -> tuple[tuple[Vec3, ...], ...]:
+    adjacency: dict[int, list[int]] = {}
+    for a, b in wireframe.edges:
+        adjacency.setdefault(a, []).append(b)
+        adjacency.setdefault(b, []).append(a)
+
+    visited_vertices: set[int] = set()
+    polylines: list[tuple[Vec3, ...]] = []
+    for vertex in sorted(adjacency):
+        if vertex in visited_vertices:
+            continue
+
+        stack = [vertex]
+        component: set[int] = set()
+        while stack:
+            current = stack.pop()
+            if current in component:
+                continue
+            component.add(current)
+            stack.extend(adjacency.get(current, ()))
+        visited_vertices.update(component)
+
+        endpoints = sorted(index for index in component if len(adjacency[index]) <= 1)
+        start = endpoints[0] if endpoints else min(component)
+        ordered = _walk_polyline_component(start, component, adjacency)
+        if len(ordered) >= 2:
+            polylines.append(tuple(wireframe.vertices[index] for index in ordered))
+    return tuple(polylines)
+
+
+def _walk_polyline_component(
+    start: int,
+    component: set[int],
+    adjacency: dict[int, list[int]],
+) -> tuple[int, ...]:
+    ordered = [start]
+    previous: int | None = None
+    current = start
+    while True:
+        candidates = [
+            index
+            for index in sorted(adjacency.get(current, ()))
+            if index in component and index != previous and index not in ordered
+        ]
+        if not candidates:
+            break
+        previous, current = current, candidates[0]
+        ordered.append(current)
+    return tuple(ordered)
+
+
+def _orient_section(vertices: tuple[Vec3, ...]) -> tuple[Vec3, ...]:
+    if vertices[0].z > vertices[-1].z:
+        return tuple(reversed(vertices))
+    return vertices
+
+
+def _resample_polyline(vertices: tuple[Vec3, ...], count: int) -> tuple[Vec3, ...]:
+    if count < 2:
+        raise ValueError("count must be at least 2")
+    distances = [0.0]
+    for previous, current in zip(vertices, vertices[1:], strict=False):
+        distances.append(distances[-1] + dist(previous.tuple(), current.tuple()))
+    total = distances[-1]
+    if total == 0.0:
+        return tuple(vertices[0] for _ in range(count))
+
+    sampled: list[Vec3] = []
+    segment_index = 0
+    for sample_index in range(count):
+        target = total * sample_index / (count - 1)
+        while segment_index < len(distances) - 2 and distances[segment_index + 1] < target:
+            segment_index += 1
+        start = vertices[segment_index]
+        end = vertices[segment_index + 1]
+        start_distance = distances[segment_index]
+        segment_length = distances[segment_index + 1] - start_distance
+        ratio = 0.0 if segment_length == 0.0 else (target - start_distance) / segment_length
+        sampled.append(
+            Vec3(
+                start.x + (end.x - start.x) * ratio,
+                start.y + (end.y - start.y) * ratio,
+                start.z + (end.z - start.z) * ratio,
+            )
+        )
+    return tuple(sampled)
+
+
+def _polyline_length(vertices: tuple[Vec3, ...]) -> float:
+    return sum(
+        dist(previous.tuple(), current.tuple())
+        for previous, current in zip(vertices, vertices[1:], strict=False)
+    )
+
+
+def _append_face_if_valid(
+    faces: list[tuple[int, int, int]],
+    vertices: tuple[Vec3, ...],
+    face: tuple[int, int, int],
+    tolerance: float,
+) -> None:
+    a, b, c = (vertices[index] for index in face)
+    if (
+        dist(a.tuple(), b.tuple()) <= tolerance
+        or dist(b.tuple(), c.tuple()) <= tolerance
+        or dist(c.tuple(), a.tuple()) <= tolerance
+    ):
+        return
+    faces.append(face)
+
+
+def _edges_from_faces(faces: tuple[tuple[int, int, int], ...]) -> tuple[EdgeIndex, ...]:
+    edges: set[EdgeIndex] = set()
+    for a, b, c in faces:
+        for start, end in ((a, b), (b, c), (c, a)):
+            edges.add((min(start, end), max(start, end)))
+    return tuple(sorted(edges))
+
+
+def _edge_crossing_points(
+    vertices: tuple[Vec3, ...],
+    left_edge: EdgeIndex,
+    right_edge: EdgeIndex,
+    tolerance: float,
+) -> tuple[tuple[float, float, Vec3], ...]:
+    left_start = _array3(vertices[left_edge[0]])
+    left_end = _array3(vertices[left_edge[1]])
+    right_start = _array3(vertices[right_edge[0]])
+    right_end = _array3(vertices[right_edge[1]])
+    left_direction = left_end - left_start
+    right_direction = right_end - right_start
+    left_length = float(np.linalg.norm(left_direction))
+    right_length = float(np.linalg.norm(right_direction))
+    if left_length <= tolerance or right_length <= tolerance:
+        return ()
+
+    cross = np.cross(left_direction, right_direction)
+    if float(np.linalg.norm(cross)) <= tolerance * left_length * right_length:
+        return _collinear_crossing_points(
+            left_start,
+            left_end,
+            right_start,
+            right_end,
+            tolerance,
+        )
+
+    matrix = np.column_stack((left_direction, -right_direction))
+    params, *_ = np.linalg.lstsq(matrix, right_start - left_start, rcond=None)
+    left_param = float(params[0])
+    right_param = float(params[1])
+    if not (
+        _param_in_segment(left_param, tolerance, left_length)
+        and _param_in_segment(right_param, tolerance, right_length)
+    ):
+        return ()
+
+    left_point = left_start + left_direction * left_param
+    right_point = right_start + right_direction * right_param
+    if float(np.linalg.norm(left_point - right_point)) > tolerance:
+        return ()
+
+    point = (left_point + right_point) / 2.0
+    return ((_clamp_unit(left_param), _clamp_unit(right_param), _vec3_from_array(point)),)
+
+
+def _collinear_crossing_points(
+    left_start: np.ndarray,
+    left_end: np.ndarray,
+    right_start: np.ndarray,
+    right_end: np.ndarray,
+    tolerance: float,
+) -> tuple[tuple[float, float, Vec3], ...]:
+    left_direction = left_end - left_start
+    right_direction = right_end - right_start
+    if (
+        float(np.linalg.norm(np.cross(left_direction, right_start - left_start))) > tolerance
+        or float(np.linalg.norm(np.cross(left_direction, right_end - left_start))) > tolerance
+    ):
+        return ()
+
+    points: list[tuple[float, float, Vec3]] = []
+    for point in (left_start, left_end, right_start, right_end):
+        left_param = _point_parameter(point, left_start, left_end)
+        right_param = _point_parameter(point, right_start, right_end)
+        if _param_in_segment(left_param, tolerance, float(np.linalg.norm(left_direction))) and (
+            _param_in_segment(right_param, tolerance, float(np.linalg.norm(right_direction)))
+        ):
+            _append_crossing_point(
+                points,
+                _clamp_unit(left_param),
+                _clamp_unit(right_param),
+                _vec3_from_array(point),
+                tolerance,
+            )
+    return tuple(points)
+
+
+def _append_crossing_point(
+    points: list[tuple[float, float, Vec3]],
+    left_param: float,
+    right_param: float,
+    point: Vec3,
+    tolerance: float,
+) -> None:
+    for _, _, existing in points:
+        if _distance(existing, point) <= tolerance:
+            return
+    points.append((left_param, right_param, point))
+
+
+def _unique_split_points(
+    points: list[tuple[float, int]],
+    tolerance: float,
+) -> tuple[tuple[float, int], ...]:
+    ordered = sorted(points, key=lambda item: (item[0], item[1]))
+    unique: list[tuple[float, int]] = []
+    for param, vertex_index in ordered:
+        if unique and (abs(param - unique[-1][0]) <= tolerance or vertex_index == unique[-1][1]):
+            continue
+        unique.append((_clamp_unit(param), vertex_index))
+    return tuple(unique)
+
+
+def _find_or_add_vertex(vertices: list[Vec3], point: Vec3, tolerance: float) -> int:
+    for index, vertex in enumerate(vertices):
+        if _distance(vertex, point) <= tolerance:
+            return index
+    vertices.append(point)
+    return len(vertices) - 1
+
+
+def _point_parameter(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+    direction = end - start
+    denominator = float(np.dot(direction, direction))
+    if denominator == 0.0:
+        return 0.0
+    return float(np.dot(point - start, direction) / denominator)
+
+
+def _param_in_segment(param: float, tolerance: float, segment_length: float) -> bool:
+    slack = tolerance / segment_length if segment_length > 0.0 else tolerance
+    return -slack <= param <= 1.0 + slack
+
+
+def _clamp_unit(value: float) -> float:
+    return min(1.0, max(0.0, value))
+
+
+def _array3(vertex: Vec3) -> np.ndarray:
+    return np.array(vertex.tuple(), dtype=np.float64)
+
+
+def _vec3_from_array(value: np.ndarray) -> Vec3:
+    return Vec3(float(value[0]), float(value[1]), float(value[2]))
+
+
+def _distance(left: Vec3, right: Vec3) -> float:
+    return float(np.linalg.norm(_array3(left) - _array3(right)))
+
+
+def _mesh_without_dangling_edges(
+    vertices: tuple[Vec3, ...],
+    faces: tuple[tuple[int, int, int], ...],
+    edges: tuple[EdgeIndex, ...],
+) -> Mesh3D:
+    live_edges = _remove_dangling_edges(edges)
+
+    used_vertices = {index for face in faces for index in face}
+    used_vertices.update(index for edge in live_edges for index in edge)
+    if not used_vertices:
+        return Mesh3D((), (), ())
+
+    ordered_vertices = tuple(sorted(used_vertices))
+    remap = {old: new for new, old in enumerate(ordered_vertices)}
+    compact_vertices = tuple(vertices[index] for index in ordered_vertices)
+    compact_faces = tuple(
+        (remap[a], remap[b], remap[c])
+        for a, b, c in faces
+    )
+    compact_edges = _edges_from_faces(compact_faces)
+    return Mesh3D(compact_vertices, compact_faces, compact_edges)
 
 
 def _validate_tolerance(tolerance: float) -> None:

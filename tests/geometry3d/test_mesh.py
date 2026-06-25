@@ -149,7 +149,7 @@ def test_dxf_read_wireframe_converts_polyline_wires_to_wireframe(tmp_path: Path)
     assert wf.edges == ((0, 1), (1, 2))
 
 
-def test_dxf_read_mesh_can_convert_polyline_wires_to_mesh(tmp_path: Path) -> None:
+def test_dxf_read_mesh_rejects_polyline_mesh_conversion_kwargs(tmp_path: Path) -> None:
     from cady.files import dxf
 
     path = tmp_path / "wire_mesh.dxf"
@@ -194,35 +194,18 @@ def test_dxf_read_mesh_can_convert_polyline_wires_to_mesh(tmp_path: Path) -> Non
         encoding="ascii",
     )
 
-    with pytest.raises(ReadError, match="could not be converted to mesh faces"):
+    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
         dxf.read_mesh(
             path,
             mirror_origin=(0.0, 0.0, 0.0),
             mirror_normal=(1.0, 0.0, 0.0),
         )
 
-    mesh = dxf.read_mesh(
-        path,
-        mirror_origin=(0.0, 0.0, 0.0),
-        mirror_normal=(1.0, 0.0, 0.0),
-        close_origin=(0.0, 0.0, 0.0),
-        close_normal=(0.0, 1.0, 0.0),
-        max_distance=2.0,
-    )
-
-    assert isinstance(mesh, Mesh3D)
-    assert len(mesh.vertices) == 4
-    assert mesh.faces == ((0, 1, 3), (0, 3, 2))
-    assert mesh.edges == ()
-    assert [point.tuple() for point in mesh.vertices] == [
-        (0.0, 1.0, 0.0),
-        (-2.0, 1.0, 0.0),
-        (0.0, 0.0, 0.0),
-        (-2.0, 0.0, 0.0),
-    ]
+    with pytest.raises(ReadError, match="DXF contained no supported mesh geometry"):
+        dxf.read_mesh(path)
 
 
-def test_dxf_read_mesh_lofts_section_wires_to_faces(tmp_path: Path) -> None:
+def test_dxf_read_mesh_no_longer_lofts_section_wires_to_faces(tmp_path: Path) -> None:
     from cady.files import dxf
 
     path = tmp_path / "section_mesh.dxf"
@@ -245,21 +228,23 @@ def test_dxf_read_mesh_lofts_section_wires_to_faces(tmp_path: Path) -> None:
         encoding="ascii",
     )
 
-    mesh = dxf.read_mesh(
-        path,
-        mirror_origin=(0.0, 0.0, 0.0),
-        mirror_normal=(1.0, 0.0, 0.0),
-    )
+    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
+        dxf.read_mesh(
+            path,
+            mirror_origin=(0.0, 0.0, 0.0),
+            mirror_normal=(1.0, 0.0, 0.0),
+        )
 
-    assert isinstance(mesh, Mesh3D)
-    assert len(mesh.vertices) == 16
-    assert len(mesh.faces) == 6
-    assert len(mesh.edges) == 16
-    assert mesh.faces
-    assert {point.x for point in mesh.vertices} == {0.0, -2.0}
+    with pytest.raises(ReadError, match="DXF contained no supported mesh geometry"):
+        dxf.read_mesh(path)
+
+    curves = dxf.read_curves(path)
+    assert len(curves) == 2
+    assert all(curve.layer == "SECTIONS" for curve in curves)
+    assert [curve.constant_x for curve in curves] == [True, True]
 
 
-def test_dxf_read_mesh_preserves_source_wires_as_display_edges(
+def test_dxf_curves_preserve_source_wires_separately_from_mesh(
     tmp_path: Path,
 ) -> None:
     from cady.files import dxf
@@ -285,21 +270,19 @@ def test_dxf_read_mesh_preserves_source_wires_as_display_edges(
         encoding="ascii",
     )
 
-    mesh = dxf.read_mesh(
-        path,
-        mirror_origin=(0.0, 0.0, 0.0),
-        mirror_normal=(0.0, 1.0, 0.0),
-    )
+    with pytest.raises(ReadError, match="DXF contained no supported mesh geometry"):
+        dxf.read_mesh(path)
 
-    face_x_values = {
-        mesh.vertices[index].x for face in mesh.faces for index in face
-    }
-    assert max(face_x_values) == 2.0
-    assert mesh.bounds()[1].x == 3.0
-    assert any(
-        mesh.vertices[a].x == 0.0 and mesh.vertices[b].x == 3.0
-        for a, b in mesh.edges
-    )
+    curves = dxf.read_curves(path)
+    assert [curve.layer for curve in curves] == ["SECTIONS", "SECTIONS", "GUIDES"]
+    assert [curve.source_index for curve in curves] == [0, 1, 2]
+    assert curves[2].constant_x is False
+    assert curves[2].constant_y is True
+    assert curves[2].constant_z is True
+
+    wireframe = dxf.read_wireframe(path)
+    assert len(wireframe.vertices) == 10
+    assert len(wireframe.edges) == 7
 
 
 def _section_polyline_dxf(*, x: float) -> list[str]:

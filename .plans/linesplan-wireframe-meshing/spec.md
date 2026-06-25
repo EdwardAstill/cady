@@ -1,7 +1,7 @@
 # Linesplan Wireframe Meshing Spec
 
 **Date:** 2026-06-25
-**Status:** planned, not implemented
+**Status:** first native implementation complete
 
 ## Problem
 
@@ -100,3 +100,11 @@ scene = Scene().add(mesh, name="surface").add(wireframe, name="source_wires")
 - `examples/linesplan/mesh-boundary.py` is replaced or rewritten so its name and
   data flow match the new API.
 
+## Implementation Notes
+
+- The first native mesher is a conservative sampled section loft over classified
+  `SECTIONS`.
+- `BUTTOCKS`, `WATERLINES`, and `Knuckle` curves are classified and reported in
+  compatibility diagnostics, but are not yet enforced as Gordon-style surface
+  constraints.
+- No new runtime dependency was added.

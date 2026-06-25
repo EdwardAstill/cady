@@ -165,7 +165,7 @@ def _mesh_from_line_geometry(
     wireframe = _merge_wireframes(wireframes)
     if mirror_origin is not None and mirror_normal is not None:
         wireframe = wireframe.mirror(mirror_origin, mirror_normal)
-    mesh = wireframe.close_to_plane(
+    mesh = Mesh3D(wireframe.vertices, (), wireframe.edges).close_to_plane(
         close_origin,
         close_normal,
         tolerance=tolerance,

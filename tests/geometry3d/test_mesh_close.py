@@ -391,6 +391,87 @@ def test_close_planar_snap_rejects_negative() -> None:
         mesh.close_planar((0, 0, 1), (0, 0, 1), tolerance=1e-3, snap_tolerance=-1.0)
 
 
+# ── close_to_plane ────────────────────────────────────────────────────────
+
+
+def test_close_to_plane_creates_wall_faces_from_display_edges() -> None:
+    mesh = Mesh3D(
+        (
+            Vec3(0.0, 1.0, 0.0),
+            Vec3(1.0, 1.0, 0.0),
+            Vec3(1.0, 2.0, 0.0),
+            Vec3(0.0, 2.0, 0.0),
+        ),
+        (),
+        ((0, 1), (1, 2), (2, 3), (3, 0)),
+    )
+
+    result = mesh.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=3.0)
+
+    assert isinstance(result, Mesh3D)
+    assert len(result.vertices) == 8
+    assert len(result.faces) == 8
+    assert result.edges == mesh.edges
+
+
+def test_close_to_plane_prunes_dangling_display_edges() -> None:
+    mesh = Mesh3D(
+        (
+            Vec3(0.0, 1.0, 0.0),
+            Vec3(1.0, 1.0, 0.0),
+            Vec3(1.0, 2.0, 0.0),
+            Vec3(0.0, 2.0, 0.0),
+            Vec3(2.0, 2.0, 0.0),
+            Vec3(3.0, 2.0, 0.0),
+        ),
+        (),
+        ((0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)),
+    )
+
+    result = mesh.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=3.0)
+
+    assert len(result.vertices) == 8
+    assert len(result.faces) == 8
+    assert result.edges == ((0, 1), (1, 2), (2, 3), (3, 0))
+
+
+def test_close_to_plane_uses_boundary_edges_when_no_display_edges() -> None:
+    mesh = _cube_minus_top()
+
+    result = mesh.close_to_plane(
+        plane_origin=(0.0, 0.0, 0.0),
+        plane_normal=(0.0, 0.0, 1.0),
+        tolerance=1e-6,
+        max_distance=1.5,
+    )
+
+    assert len(result.faces) == len(mesh.faces) + 8
+
+
+def test_close_to_plane_rejects_negative_params() -> None:
+    mesh = Mesh3D(
+        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0)),
+        (),
+        ((0, 1),),
+    )
+
+    with pytest.raises(ValueError, match="tolerance must be positive"):
+        mesh.close_to_plane((0, 0, 0), (0, 0, 1), tolerance=0, max_distance=1.0)
+    with pytest.raises(ValueError, match="max_distance must be positive"):
+        mesh.close_to_plane((0, 0, 0), (0, 0, 1), tolerance=1e-3, max_distance=0.0)
+
+
+def test_close_to_plane_without_closed_edges_raises() -> None:
+    mesh = Mesh3D(
+        (Vec3(0.0, 10.0, 0.0), Vec3(1.0, 10.0, 0.0)),
+        (),
+        ((0, 1),),
+    )
+
+    with pytest.raises(GeometryError, match="no edges found"):
+        mesh.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=1.0)
+
+
 def _array_boundary_counts(mesh: ArrayMesh3) -> Counter[tuple[int, int]]:
     counts: Counter[tuple[int, int]] = Counter()
     for face in mesh.faces:

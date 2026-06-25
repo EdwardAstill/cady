@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from cady import Drawing2D, Line2D, box
+from cady.errors import ReadError
 from cady.files import dxf, step, stl
 from cady.geometry3d import Mesh3D
 from cady.vec import Vec3
@@ -60,7 +63,7 @@ def test_dxf_read_mesh(tmp_path: Path) -> None:
     assert len(mesh.faces) == 1
 
 
-def test_dxf_read_polyline_wires(tmp_path: Path) -> None:
+def test_dxf_read_polyline_curves_and_legacy_wireframes(tmp_path: Path) -> None:
     path = tmp_path / "wire.dxf"
     path.write_text(
         "\n".join(
@@ -105,6 +108,21 @@ def test_dxf_read_polyline_wires(tmp_path: Path) -> None:
 
     result = dxf.read(path)
 
+    assert len(result.curves) == 1
+    curve = result.curves[0]
+    assert isinstance(curve, dxf.DxfWireCurve)
+    assert [point.tuple() for point in curve.vertices] == [
+        (0.0, 0.0, 1.0),
+        (2.0, 0.0, 3.0),
+    ]
+    assert curve.edges == ((0, 1),)
+    assert curve.layer == "WATERLINES"
+    assert curve.entity_type == "POLYLINE"
+    assert curve.source_index == 0
+    assert curve.constant_y is True
+    assert curve.constant_x is False
+    assert curve.constant_z is False
+
     assert len(result.wireframes) == 1
     assert [point.tuple() for point in result.wireframes[0].vertices] == [
         (0.0, 0.0, 1.0),
@@ -112,6 +130,59 @@ def test_dxf_read_polyline_wires(tmp_path: Path) -> None:
     ]
     assert result.wireframes[0].edges == ((0, 1),)
     assert not hasattr(result, "wires")
+
+    assert dxf.read_curves(path) == result.curves
+
+
+def test_dxf_read_mesh_rejects_legacy_line_mesh_kwargs(tmp_path: Path) -> None:
+    path = tmp_path / "wire.dxf"
+    path.write_text(
+        "\n".join(
+            [
+                "0",
+                "SECTION",
+                "2",
+                "ENTITIES",
+                "0",
+                "POLYLINE",
+                "8",
+                "WATERLINES",
+                "66",
+                "1",
+                "0",
+                "VERTEX",
+                "10",
+                "0",
+                "20",
+                "0",
+                "30",
+                "1",
+                "0",
+                "VERTEX",
+                "10",
+                "2",
+                "20",
+                "0",
+                "30",
+                "3",
+                "0",
+                "SEQEND",
+                "0",
+                "ENDSEC",
+                "0",
+                "EOF",
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
+
+    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
+        dxf.read_mesh(
+            path,
+            mirror_origin=(0.0, 0.0, 0.0),
+            mirror_normal=(1.0, 0.0, 0.0),
+        )
 
 
 def test_stl_write_mesh(tmp_path: Path) -> None:

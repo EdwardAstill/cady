@@ -1,9 +1,11 @@
 # Linesplan Wireframe Meshing Tasks
 
 **Date:** 2026-06-25
-**Status:** planned, not implemented
+**Status:** first native implementation complete
 
 ## Task 1: Freeze The Current Failure As A Regression
+
+**Status:** complete
 
 Add a test around `examples/inputs/linesplan_9m.dxf` proving that the old hidden
 mesh path returns display edges that are not face edges.
@@ -21,6 +23,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/geometry3d tests/files
 
 ## Task 2: Split DXF Parsing From Linesplan Meshing
 
+**Status:** complete
+
 Deprecate or remove line-geometry meshing from `dxf.read_mesh(...)`.
 
 Expected behaviour:
@@ -37,6 +41,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/files tests/geometry3d/test_mesh.py
 ```
 
 ## Task 3: Preserve Source Curve Metadata
+
+**Status:** complete
 
 Introduce a structured source-curve representation for imported DXF polylines.
 
@@ -57,6 +63,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/files
 
 ## Task 4: Add Linesplan Curve Classification
 
+**Status:** complete
+
 Build `classify_linesplan_curves(...)` to classify sections, buttocks,
 waterlines, knuckles, boundaries, and rejected curves.
 
@@ -76,6 +84,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/geometry3d/test_linesplan_network.py
 
 ## Task 5: Build Curve-Network Compatibility
 
+**Status:** complete
+
 Compute intersections between profile and guide curves within tolerance, sort
 curves in each parameter direction, and report missing/ambiguous intersections.
 
@@ -92,6 +102,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/geometry3d/test_linesplan_network.py
 ```
 
 ## Task 6: Implement Native Sampled Gordon-Style Meshing
+
+**Status:** complete for first native section-loft backend
 
 Implement the first native backend:
 
@@ -112,6 +124,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/geometry3d/test_linesplan_meshing.py
 
 ## Task 7: Add Optional Backend Spike
 
+**Status:** deferred; no dependency added
+
 Create a non-default experiment for `occ_gordon` or `geomdl`.
 
 Rules:
@@ -128,6 +142,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/geometry3d/test_linesplan_meshing.py
 ```
 
 ## Task 8: Rewrite The Linesplan Example
+
+**Status:** complete
 
 Replace the current `mesh-boundary.py` data flow with explicit stages:
 
@@ -151,6 +167,8 @@ PYTHONPATH=src .venv/bin/pytest -q tests/examples/test_visualise_3d.py
 
 ## Task 9: Run Gates
 
+**Status:** pending final full-suite gates
+
 After implementation:
 
 ```bash
@@ -160,4 +178,3 @@ PYTHONPATH=src .venv/bin/pytest -q
 git diff --check
 git status --short
 ```
-

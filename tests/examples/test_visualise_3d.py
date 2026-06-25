@@ -151,7 +151,7 @@ def test_linesplan_wireframe_script_prints_wireframe_summary(
     assert "VisPy viewer skipped." in completed.stdout
 
 
-def test_linesplan_mesh_boundary_script_preserves_dxf_wire_extents(
+def test_linesplan_mesh_boundary_script_uses_wireframe_to_mesh(
     import_env: dict[str, str],
 ) -> None:
     completed = subprocess.run(
@@ -170,8 +170,11 @@ def test_linesplan_mesh_boundary_script_preserves_dxf_wire_extents(
 
     assert completed.returncode == 0, completed.stdout
     assert "cady mesh boundary demo" in completed.stdout
-    assert "mesh: 15630 vertices, 21284 edges, 11520 faces" in completed.stdout
-    assert "to (181739, 7.276e-12, 9000)" in completed.stdout
+    assert "source wireframe: 9715 vertices, 9610 edges" in completed.stdout
+    assert (
+        "mesh: 5915 vertices, 11674 edges, 11520 faces, "
+        "bounds=(0, -19300, 0)"
+    ) in completed.stdout
     assert "boundary loops: 1 (308 edges)" in completed.stdout
     assert "VisPy viewer skipped." in completed.stdout
 

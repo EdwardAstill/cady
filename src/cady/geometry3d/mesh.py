@@ -166,6 +166,71 @@ class Mesh3D:
         )
         return Mesh3D.from_array(capped)
 
+    def close_to_plane(
+        self,
+        plane_origin: object,
+        plane_normal: object,
+        *,
+        tolerance: float = 1e-3,
+        max_distance: float,
+    ) -> Mesh3D:
+        """Project near-plane mesh edges to a plane and create wall faces.
+
+        Uses explicit display edges when present, otherwise uses mesh boundary
+        edges. Dangling degree-1 edge branches are pruned before wall faces are
+        generated.
+        """
+        from cady.errors import GeometryError
+        from cady.ops.mesh_cut import unit3, vector3
+
+        _validate_tolerance(tolerance)
+        if max_distance <= 0.0:
+            raise ValueError("max_distance must be positive")
+
+        origin_np = vector3(plane_origin, name="plane_origin")
+        normal_np = unit3(plane_normal, name="plane_normal")
+        source_edges = self.edges if self.edges else _boundary_edges_from_faces(self.faces)
+        live_edges = _prune_dangling_edges(source_edges)
+
+        near_edges: list[tuple[int, int, float, float]] = []
+        for a, b in live_edges:
+            va = np.array(self.vertices[a].tuple(), dtype=np.float64)
+            vb = np.array(self.vertices[b].tuple(), dtype=np.float64)
+            dist_a = float(np.dot(va - origin_np, normal_np))
+            dist_b = float(np.dot(vb - origin_np, normal_np))
+            if abs(dist_a) <= max_distance and abs(dist_b) <= max_distance:
+                near_edges.append((a, b, dist_a, dist_b))
+
+        if not near_edges:
+            raise GeometryError("no edges found within max_distance of the plane")
+
+        projected_index: dict[int, int] = {}
+        all_vertices = list(self.vertices)
+
+        for a, b, dist_a, dist_b in near_edges:
+            if a not in projected_index:
+                projected = _project_to_plane(self.vertices[a], dist_a, normal_np)
+                projected_index[a] = len(all_vertices)
+                all_vertices.append(projected)
+            if b not in projected_index:
+                projected = _project_to_plane(self.vertices[b], dist_b, normal_np)
+                projected_index[b] = len(all_vertices)
+                all_vertices.append(projected)
+
+        wall_faces: list[FaceIndex] = []
+        for a, b, _, _ in near_edges:
+            pa = projected_index[a]
+            pb = projected_index[b]
+            wall_faces.append((a, b, pb))
+            wall_faces.append((a, pb, pa))
+
+        display_edges = live_edges if self.edges else ()
+        return _compact_mesh(
+            tuple(all_vertices),
+            self.faces + tuple(wall_faces),
+            display_edges,
+        )
+
     def close_boundary(
         self,
         *,
@@ -255,6 +320,70 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
 
 def _reverse_face_winding(faces: tuple[FaceIndex, ...]) -> tuple[FaceIndex, ...]:
     return tuple((a, c, b) for a, b, c in faces)
+
+
+def _boundary_edges_from_faces(faces: tuple[FaceIndex, ...]) -> tuple[EdgeIndex, ...]:
+    counts: dict[EdgeIndex, int] = {}
+    for a, b, c in faces:
+        for start, end in ((a, b), (b, c), (c, a)):
+            edge = (min(start, end), max(start, end))
+            counts[edge] = counts.get(edge, 0) + 1
+    return tuple(edge for edge, count in counts.items() if count == 1)
+
+
+def _prune_dangling_edges(edges: tuple[EdgeIndex, ...]) -> tuple[EdgeIndex, ...]:
+    live_edges = list(edges)
+    live_vertices = {index for edge in live_edges for index in edge}
+
+    while live_edges:
+        degrees = {index: 0 for index in live_vertices}
+        for a, b in live_edges:
+            degrees[a] = degrees.get(a, 0) + 1
+            degrees[b] = degrees.get(b, 0) + 1
+
+        dangling = {index for index, degree in degrees.items() if degree == 1}
+        if not dangling:
+            break
+
+        live_vertices.difference_update(dangling)
+        live_edges = [
+            (a, b)
+            for a, b in live_edges
+            if a in live_vertices and b in live_vertices
+        ]
+
+    return tuple(live_edges)
+
+
+def _project_to_plane(
+    vertex: Vec3,
+    distance: float,
+    normal: np.ndarray,
+) -> Vec3:
+    x, y, z = vertex.tuple()
+    return Vec3(
+        x - distance * float(normal[0]),
+        y - distance * float(normal[1]),
+        z - distance * float(normal[2]),
+    )
+
+
+def _compact_mesh(
+    vertices: tuple[Vec3, ...],
+    faces: tuple[FaceIndex, ...],
+    edges: tuple[EdgeIndex, ...],
+) -> Mesh3D:
+    used_vertices = {index for face in faces for index in face}
+    used_vertices.update(index for edge in edges for index in edge)
+    if not used_vertices:
+        return Mesh3D((), (), ())
+
+    ordered_vertices = tuple(sorted(used_vertices))
+    remap = {old: new for new, old in enumerate(ordered_vertices)}
+    compact_vertices = tuple(vertices[index] for index in ordered_vertices)
+    compact_faces = tuple((remap[a], remap[b], remap[c]) for a, b, c in faces)
+    compact_edges = tuple((remap[a], remap[b]) for a, b in edges)
+    return Mesh3D(compact_vertices, compact_faces, compact_edges)
 
 
 def _validate_tolerance(tolerance: float) -> None:

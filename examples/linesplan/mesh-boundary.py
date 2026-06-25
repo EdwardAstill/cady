@@ -8,9 +8,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, Wireframe3D
 from cady.files import dxf
 from cady.numeric import ArrayPolyline3
 
@@ -61,15 +62,18 @@ def main() -> None:
         action="store_true",
         help="Print summaries without opening a VisPy window.",
     )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=1e-3,
+        help="Geometry tolerance used when converting the wireframe to a mesh.",
+    )
     args = parser.parse_args()
 
     mirror_origin = _point3(args.mirror_origin)
     mirror_normal = _point3(args.mirror_normal)
-    mesh = dxf.read_mesh(
-        args.input,
-        mirror_origin=mirror_origin,
-        mirror_normal=mirror_normal,
-    )
+    wireframe = dxf.read_wireframe(args.input).mirror(mirror_origin, mirror_normal)
+    mesh = wireframe.to_mesh(tolerance=args.tolerance)
     boundary_loops = mesh.boundary_loops
     boundaries = _meshes_from_boundary_loops(boundary_loops)
 
@@ -77,6 +81,7 @@ def main() -> None:
     print(f"input: {args.input}")
     print(f"mirror origin: {_format_point(mirror_origin)}")
     print(f"mirror normal: {_format_point(mirror_normal)}")
+    print_wireframe_summary("source wireframe", wireframe)
     print_mesh_summary("mesh", mesh)
     print(
         "  boundary loops: "
@@ -115,6 +120,15 @@ def print_mesh_summary(label: str, mesh: Mesh3D) -> None:
     print(
         f"{label}: {len(mesh.vertices)} vertices, {len(mesh.edges)} edges, "
         f"{len(mesh.faces)} faces, "
+        f"bounds={_format_point(_point_tuple(lower))} "
+        f"to {_format_point(_point_tuple(upper))}"
+    )
+
+
+def print_wireframe_summary(label: str, wireframe: Wireframe3D) -> None:
+    lower, upper = wireframe.bounds()
+    print(
+        f"{label}: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "
         f"bounds={_format_point(_point_tuple(lower))} "
         f"to {_format_point(_point_tuple(upper))}"
     )
@@ -161,15 +175,17 @@ def _bounds_centre(lower: Point3, upper: Point3) -> Point3:
     )
 
 
-def _point3(value: object) -> Point3:
+def _point3(value: Sequence[float]) -> Point3:
+    if len(value) != 3:
+        raise ValueError("point values must contain exactly three coordinates")
     x, y, z = value
     return (float(x), float(y), float(z))
 
 
-def _point_tuple(value: object) -> Point3:
-    point = value.tuple() if hasattr(value, "tuple") else value
-    x, y, z = point
-    return (float(x), float(y), float(z))
+def _point_tuple(value: Vec3 | Point3) -> Point3:
+    if isinstance(value, Vec3):
+        return value.tuple()
+    return value
 
 
 def _format_point(point: Point3) -> str:

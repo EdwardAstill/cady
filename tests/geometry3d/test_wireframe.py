@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady import GeometryError, Mesh3D, Wireframe3D
+from cady import GeometryError, Wireframe3D
 from cady.numeric.mesh3d import ArrayMesh3
 from cady.numeric.transform import Transform3
 from cady.vec import Vec3
@@ -91,83 +91,161 @@ def test_wireframe_to_array() -> None:
     assert arr.faces.shape == (0, 3)
 
 
-# -- close_planar ----------------------------------------------------------
+def test_wireframe_to_mesh_splits_crossings_and_uses_triangles_as_faces() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(2, 2, 0),
+            Vec3(0, 2, 0),
+            Vec3(2, 0, 0),
+        ),
+        ((0, 1), (1, 2), (2, 3), (3, 0)),
+    )
+
+    mesh = wf.to_mesh(tolerance=1e-6)
+
+    assert len(mesh.vertices) == 5
+    assert len(mesh.faces) == 2
+    assert all(len(face) == 3 for face in mesh.faces)
+    assert mesh.edges == ((0, 3), (0, 4), (1, 2), (1, 4), (2, 4), (3, 4))
 
 
-def test_wireframe_close_planar_square() -> None:
+def test_wireframe_to_mesh_lofts_open_section_curves() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(0, 1, 1),
+            Vec3(0, 2, 2),
+            Vec3(0, 3, 3),
+            Vec3(2, 0, 0),
+            Vec3(2, 1, 1),
+            Vec3(2, 2, 2),
+            Vec3(2, 3, 3),
+        ),
+        ((0, 1), (1, 2), (2, 3), (4, 5), (5, 6), (6, 7)),
+    )
+
+    mesh = wf.to_mesh(tolerance=1e-6)
+
+    assert len(mesh.vertices) == 8
+    assert len(mesh.faces) == 6
+    assert len(mesh.edges) == 13
+    assert all(len(face) == 3 for face in mesh.faces)
+
+
+def test_wireframe_remove_dangling_edges_prunes_branches_and_compacts() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(10, 0, 0),
+            Vec3(10, 1, 0),
+            Vec3(0, 0, 0),
+            Vec3(1, 0, 0),
+            Vec3(1, 1, 0),
+            Vec3(0, 1, 0),
+            Vec3(2, 1, 0),
+            Vec3(3, 1, 0),
+            Vec3(99, 99, 99),
+        ),
+        ((2, 3), (3, 4), (4, 5), (5, 2), (4, 6), (6, 7), (0, 1)),
+    )
+
+    pruned = wf.remove_dangling_edges()
+
+    assert pruned.vertices == wf.vertices[2:6]
+    assert pruned.edges == ((0, 1), (1, 2), (2, 3), (3, 0))
+    assert wf.edges == ((2, 3), (3, 4), (4, 5), (5, 2), (4, 6), (6, 7), (0, 1))
+
+
+def test_wireframe_remove_dangling_edges_returns_empty_for_open_chain() -> None:
+    wf = Wireframe3D(
+        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(2, 0, 0)),
+        ((0, 1), (1, 2)),
+    )
+
+    assert wf.remove_dangling_edges() == Wireframe3D((), ())
+
+
+def test_wireframe_split_crossing_edges_adds_shared_crossing_vertex() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(2, 2, 0),
+            Vec3(0, 2, 0),
+            Vec3(2, 0, 0),
+        ),
+        ((0, 1), (2, 3)),
+    )
+
+    split = wf.split_crossing_edges(tolerance=1e-6)
+
+    assert split.vertices[:4] == wf.vertices
+    assert split.vertices[4].tuple() == pytest.approx((1.0, 1.0, 0.0))
+    assert split.edges == ((0, 4), (4, 1), (2, 4), (4, 3))
+
+
+def test_wireframe_split_crossing_edges_splits_t_junction() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(2, 0, 0),
+            Vec3(1, 0, 0),
+            Vec3(1, 1, 0),
+        ),
+        ((0, 1), (2, 3)),
+    )
+
+    split = wf.split_crossing_edges(tolerance=1e-6)
+
+    assert split.vertices == wf.vertices
+    assert split.edges == ((0, 2), (2, 1), (2, 3))
+
+
+def test_wireframe_split_crossing_edges_ignores_skew_edges() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(2, 0, 0),
+            Vec3(1, -1, 1),
+            Vec3(1, 1, 1),
+        ),
+        ((0, 1), (2, 3)),
+    )
+
+    assert wf.split_crossing_edges(tolerance=1e-6) == wf
+
+
+def test_wireframe_split_crossing_edges_splits_collinear_overlap_endpoints() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(3, 0, 0),
+            Vec3(1, 0, 0),
+            Vec3(2, 0, 0),
+        ),
+        ((0, 1), (2, 3)),
+    )
+
+    split = wf.split_crossing_edges(tolerance=1e-6)
+
+    assert split.vertices == wf.vertices
+    assert split.edges == ((0, 2), (2, 3), (3, 1), (2, 3))
+
+
+def test_wireframe_does_not_expose_mesh_closing_methods() -> None:
+    assert not hasattr(Wireframe3D, "close_planar")
+    assert not hasattr(Wireframe3D, "close_to_plane")
+
+
+# -- triangulate_loops -----------------------------------------------------
+
+
+def test_wireframe_triangulate_returns_loop_triangulation() -> None:
     wf = Wireframe3D(
         (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
-    mesh = wf.close_planar((0, 0, 0), (0, 0, 1), tolerance=1e-3)
-    assert len(mesh.faces) == 2  # two triangles
-    assert len(mesh.vertices) == 4
-    assert mesh.edges == wf.edges  # original edges preserved
 
-
-def test_wireframe_close_planar_no_edges_on_plane() -> None:
-    wf = Wireframe3D(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0)),
-        ((0, 1),),
-    )
-    with pytest.raises(GeometryError, match="no edges lie"):
-        wf.close_planar((0, 0, 5), (0, 0, 1), tolerance=1e-3)
-
-
-def test_wireframe_close_planar_partial() -> None:
-    # Square on z=0 plus some off-plane edges
-    wf = Wireframe3D(
-        (
-            Vec3(0, 0, 0),  # 0
-            Vec3(1, 0, 0),  # 1
-            Vec3(1, 1, 0),  # 2
-            Vec3(0, 1, 0),  # 3
-            Vec3(0, 0, 5),  # 4 - off plane
-            Vec3(0, 1, 5),  # 5 - off plane
-        ),
-        ((0, 1), (1, 2), (2, 3), (3, 0), (4, 5)),
-    )
-    mesh = wf.close_planar((0, 0, 0), (0, 0, 1), tolerance=1e-3)
-    # Only the on-plane square gets capped
-    assert len(mesh.faces) == 2
-    assert len(mesh.vertices) == 6
-
-
-def test_wireframe_close_planar_multiple_loops() -> None:
-    # Two separate squares on the same plane
-    wf = Wireframe3D(
-        (
-            Vec3(0, 0, 0),
-            Vec3(0.5, 0, 0),
-            Vec3(0.5, 0.5, 0),
-            Vec3(0, 0.5, 0),
-            Vec3(2, 0, 0),
-            Vec3(3, 0, 0),
-            Vec3(3, 1, 0),
-            Vec3(2, 1, 0),
-        ),
-        ((0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4)),
-    )
-    mesh = wf.close_planar((0, 0, 0), (0, 0, 1), tolerance=1e-3)
-    assert len(mesh.faces) == 4  # 2 per loop
-
-
-def test_close_planar_rejects_open_chain() -> None:
-    """An open edge chain on the plane must not be capped as a closed loop."""
-    wf = Wireframe3D(
-        (
-            Vec3(0, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(2, 0, 0),
-            Vec3(3, 0, 0),
-        ),
-        ((0, 1), (1, 2), (2, 3)),
-    )
-    with pytest.raises(GeometryError, match="no closed planar edge loops"):
-        wf.close_planar((0, 0, 0), (0, 0, 1), tolerance=1e-3)
-
-
-# -- triangulate_loops -----------------------------------------------------
+    assert wf.triangulate(tolerance=1e-3) == wf.triangulate_loops(tolerance=1e-3)
 
 
 def test_wireframe_triangulate_loops_square() -> None:
@@ -178,6 +256,26 @@ def test_wireframe_triangulate_loops_square() -> None:
     mesh = wf.triangulate_loops(tolerance=1e-3)
     assert len(mesh.faces) == 2
     assert len(mesh.vertices) == 4
+
+
+def test_wireframe_triangulate_loops_prunes_dangling_branches() -> None:
+    wf = Wireframe3D(
+        (
+            Vec3(0, 0, 0),
+            Vec3(1, 0, 0),
+            Vec3(1, 1, 0),
+            Vec3(0, 1, 0),
+            Vec3(2, 1, 0),
+            Vec3(3, 1, 0),
+        ),
+        ((0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)),
+    )
+
+    mesh = wf.triangulate_loops(tolerance=1e-3)
+
+    assert len(mesh.faces) == 2
+    assert len(mesh.vertices) == 4
+    assert mesh.edges == ((0, 1), (0, 2), (0, 3), (1, 2), (2, 3))
 
 
 def test_wireframe_triangulate_loops_no_cycles() -> None:
@@ -245,80 +343,3 @@ def test_triangulate_loops_two_connected_squares() -> None:
     )
     mesh = wf.triangulate_loops(tolerance=1e-3)
     assert len(mesh.faces) == 4  # 2 triangles per square
-
-
-# -- close_to_plane --------------------------------------------------------
-
-
-def test_close_to_plane_creates_wall_faces() -> None:
-    """A square 1 unit above the plane produces 8 wall triangles (4 quads)."""
-    wf = Wireframe3D(
-        (Vec3(0, 1, 0), Vec3(1, 1, 0), Vec3(1, 2, 0), Vec3(0, 2, 0)),
-        ((0, 1), (1, 2), (2, 3), (3, 0)),
-    )
-    mesh = wf.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=3.0)
-    assert isinstance(mesh, Mesh3D)
-    # 4 original + 4 projected = 8 vertices
-    assert len(mesh.vertices) == 8
-    # 4 edges × 2 triangles = 8 wall faces
-    assert len(mesh.faces) == 8
-    # Original edges preserved
-    assert mesh.edges == wf.edges
-
-
-def test_close_to_plane_dedup_shared_vertices() -> None:
-    """Two edges sharing a vertex share one projected vertex."""
-    wf = Wireframe3D(
-        (Vec3(0, 1, 0), Vec3(1, 1, 0), Vec3(2, 1, 0)),
-        ((0, 1), (1, 2)),
-    )
-    mesh = wf.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=2.0)
-    # 3 original + 3 projected (vertex 1 shared) = 6
-    assert len(mesh.vertices) == 6
-    # 2 edges × 2 triangles = 4 wall faces
-    assert len(mesh.faces) == 4
-
-
-def test_close_to_plane_skips_far_edges() -> None:
-    """Edges beyond max_distance are ignored."""
-    wf = Wireframe3D(
-        (
-            Vec3(0, 1, 0),  # near
-            Vec3(1, 1, 0),  # near
-            Vec3(0, 10, 0),  # far
-            Vec3(1, 10, 0),  # far
-        ),
-        ((0, 1), (2, 3)),
-    )
-    mesh = wf.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=2.0)
-    # Only the near edge (0,1) gets wall faces
-    # 4 original + 2 projected = 6 vertices
-    assert len(mesh.vertices) == 6
-    assert len(mesh.faces) == 2
-
-
-def test_close_to_plane_rejects_negative_params() -> None:
-    wf = Wireframe3D(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0)),
-        ((0, 1),),
-    )
-    with pytest.raises(ValueError, match="tolerance must be positive"):
-        wf.close_to_plane((0, 0, 0), (0, 0, 1), tolerance=0, max_distance=1.0)
-    with pytest.raises(ValueError, match="max_distance must be positive"):
-        wf.close_to_plane((0, 0, 0), (0, 0, 1), tolerance=1e-3, max_distance=0.0)
-
-
-def test_close_to_plane_empty_noop() -> None:
-    wf = Wireframe3D((), ())
-    with pytest.raises(GeometryError, match="no edges found"):
-        wf.close_to_plane((0, 0, 0), (0, 0, 1), tolerance=1e-3, max_distance=1.0)
-
-
-def test_close_to_plane_all_far_raises() -> None:
-    """When all edges are beyond max_distance, GeometryError is raised."""
-    wf = Wireframe3D(
-        (Vec3(0, 10, 0), Vec3(1, 10, 0)),
-        ((0, 1),),
-    )
-    with pytest.raises(GeometryError, match="no edges found"):
-        wf.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=1.0)

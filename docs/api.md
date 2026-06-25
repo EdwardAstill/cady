@@ -25,6 +25,7 @@
 | `Face3D` | Profile placed in a 3D frame. |
 | `Body3D` | Editable solid with feature history. |
 | `Mesh3D` | Evaluated triangle mesh. |
+| `Wireframe3D` | Edge-only wireframe (vertices + edges). |
 
 ### Product
 
@@ -62,6 +63,7 @@
 | `SceneObject` | Target reference with pose and visibility. |
 | `Camera` | Perspective or orthographic camera. |
 | `AmbientLight` | Ambient light. |
+| `Light` | Protocol base for light sources. |
 | `DirectionalLight` | Directional light. |
 | `PointLight` | Point light. |
 | `DisplayStyle` | Color, alpha, and edge visibility. |
@@ -110,7 +112,9 @@ from cady.files import dxf, stl, step
 |----------|---------|--------|
 | `dxf.read(path)` | file path | Returns `DxfImportResult`. |
 | `dxf.read_drawing(path)` | file path | Returns `Drawing2D`. |
-| `dxf.read_mesh(path)` | file path | Returns `Mesh3D`. |
+| `dxf.read_curves(path)` | file path | Returns imported 3D polyline curves with DXF metadata. |
+| `dxf.read_mesh(path)` | file path | Returns `Mesh3D` from actual DXF mesh entities such as `3DFACE`. |
+| `dxf.read_wireframe(path)` | file path | Returns `Wireframe3D` merged from imported 3D polyline wires. |
 | `dxf.write(drawing, path, *, tolerance)` | `Drawing2D` | Writes DXF R2018. |
 | `dxf.render(drawing, *, tolerance)` | `Drawing2D` | Returns DXF string. |
 | `stl.write(target, path, *, ascii, tolerance)` | `Mesh3D\|Body3D\|Part\|Assembly\|Document` | Writes binary or ASCII STL. |
