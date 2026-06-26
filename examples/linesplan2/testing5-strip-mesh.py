@@ -20,7 +20,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, sqrt
 
-from wireframe import WIREFRAME_OBJECT
+from wireframe import LINESPLAN, RADIUS, WIREFRAME_OBJECTS
 
 from cady import (
     Camera,
@@ -72,7 +72,7 @@ NODE_MESH_STYLE = DisplayStyle(
 )
 CAMERA = Camera.orthographic(
     position=(9.0, -12.0, 7.0),
-    target=(WIREFRAME_OBJECT.radius / 2.0, 0.0, -WIREFRAME_OBJECT.radius / 2.0),
+    target=(RADIUS / 2.0, 0.0, -RADIUS / 2.0),
     scale=12.0,
 )
 LIGHT = DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.1)
@@ -119,11 +119,11 @@ class StripMeshData:
 
 
 def main() -> None:
-    linesplan = WIREFRAME_OBJECT.linesplan
+    linesplan = LINESPLAN
     y_values = slice_y_values(min_y=MIN_SLICE_Y, max_y=MAX_SLICE_Y, slices=SLICES)
 
-    wireframe = WIREFRAME_OBJECT.wireframe
-    planes = slice_planes(radius=WIREFRAME_OBJECT.radius, y_values=y_values)
+    wireframes = WIREFRAME_OBJECTS
+    planes = slice_planes(radius=RADIUS, y_values=y_values)
     strip_mesh = build_distance_refined_strip_mesh(
         linesplan,
         y_values=y_values,
@@ -131,10 +131,10 @@ def main() -> None:
         refinement_rows=REFINEMENT_ROWS,
     )
 
-    print_scene_summary(linesplan, wireframe, planes, strip_mesh)
+    print_scene_summary(linesplan, wireframes, planes, strip_mesh)
 
     view_scene(
-        build_scene(wireframe, planes, strip_mesh.mesh),
+        build_scene(wireframes, planes, strip_mesh.mesh),
         title="Quarter sphere strip mesh",
     )
 
@@ -763,15 +763,17 @@ def add_display_segment(
 
 
 def build_scene(
-    wireframe: Wireframe3D,
+    wireframes: Iterable[Wireframe3D],
     planes: Iterable[tuple[float, Mesh3D]],
     nodes: Mesh3D | Iterable[Iterable[Vec3]] | PointCloud3D | None = None,
 ) -> Scene:
-    scene = Scene(name="quarter_sphere_strip_mesh").add(
-        wireframe,
-        name="quarter_sphere_wireframe",
-        style=WIRE_STYLE,
-    )
+    scene = Scene(name="quarter_sphere_strip_mesh")
+    for index, wireframe in enumerate(wireframes, start=1):
+        scene = scene.add(
+            wireframe,
+            name=f"quarter_sphere_wireframe_{index}",
+            style=WIRE_STYLE,
+        )
 
     scene = add_planes_to_scene(scene, planes)
     scene = add_nodes_to_scene(scene, nodes)
@@ -990,7 +992,7 @@ def require_positive_tolerance(tolerance: float) -> None:
 
 def print_scene_summary(
     linesplan: Iterable[Polyline3D],
-    wireframe: Wireframe3D,
+    wireframes: Iterable[Wireframe3D],
     planes: Iterable[tuple[float, Mesh3D]],
     strip_mesh: StripMeshData,
 ) -> None:
@@ -1000,7 +1002,7 @@ def print_scene_summary(
         end = format_point(polyline.vertices[-1])
         print(f"polyline_{index}: {len(polyline.vertices)} vertices, A={start}, B={end}")
 
-    print_wireframe_summary(wireframe)
+    print_wireframe_summary(wireframes)
     print(f"slice planes: {', '.join(f'y={y:g}' for y, _plane in planes)}")
     print(
         "base node array: "
@@ -1024,12 +1026,14 @@ def print_scene_summary(
         print(f"distance refinement: max segment length {MAX_SEGMENT_LENGTH:g}")
 
 
-def print_wireframe_summary(wireframe: Wireframe3D) -> None:
-    lower, upper = wireframe.bounds()
-    print(
-        f"wireframe: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "
-        f"bounds={format_point(lower)} to {format_point(upper)}"
-    )
+def print_wireframe_summary(wireframes: Iterable[Wireframe3D]) -> None:
+    for index, wireframe in enumerate(wireframes, start=1):
+        lower, upper = wireframe.bounds()
+        print(
+            f"wireframe_{index}: {len(wireframe.vertices)} vertices, "
+            f"{len(wireframe.edges)} edges, "
+            f"bounds={format_point(lower)} to {format_point(upper)}"
+        )
 
 
 def format_point(point: PointLike3) -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady import GeometryError, Wireframe3D
+from cady import ClosedPolyline3D, GeometryError, Polyline3D, Wireframe3D
 from cady.operations.transforms import Transform3
 from cady.vec import Vec3
 
@@ -38,6 +38,45 @@ def test_wireframe_empty() -> None:
 def test_wireframe_empty_rejects_edges_without_vertices() -> None:
     with pytest.raises(ValueError, match="empty"):
         Wireframe3D((), ((0, 1),))
+
+
+def test_wireframe_from_polylines_dedupes_shared_vertices_and_edges() -> None:
+    wf = Wireframe3D.from_polylines(
+        (
+            Polyline3D(((0, 0, 0), (1, 0, 0), (1, 1, 0))),
+            Polyline3D(((1, 1, 0), (1, 0, 0), (0, 0, 0))),
+            Polyline3D(((1, 1, 0), (0, 1, 0))),
+        )
+    )
+
+    assert wf.vertices == (
+        Vec3(0, 0, 0),
+        Vec3(1, 0, 0),
+        Vec3(1, 1, 0),
+        Vec3(0, 1, 0),
+    )
+    assert wf.edges == ((0, 1), (1, 2), (2, 3))
+
+
+def test_wireframe_from_polylines_closes_closed_polylines() -> None:
+    wf = Wireframe3D.from_polylines(
+        (
+            ClosedPolyline3D(
+                (
+                    (0, 0, 0),
+                    (1, 0, 0),
+                    (0, 1, 0),
+                )
+            ),
+        )
+    )
+
+    assert wf.vertices == (
+        Vec3(0, 0, 0),
+        Vec3(1, 0, 0),
+        Vec3(0, 1, 0),
+    )
+    assert wf.edges == ((0, 1), (1, 2), (2, 0))
 
 
 # -- Transforms ------------------------------------------------------------

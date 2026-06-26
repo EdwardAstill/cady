@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import dist
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ from cady.operations.transforms import Transform3
 from cady.vec import Vec3, promote3
 
 if TYPE_CHECKING:
+    from cady.geometry.polyline3d import ClosedPolyline3D, Polyline3D
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -35,6 +37,31 @@ class Wireframe3D:
                 raise ValueError("empty wireframes cannot contain edges")
         object.__setattr__(self, "vertices", vertices)
         object.__setattr__(self, "edges", edges)
+
+    @classmethod
+    def from_polylines(
+        cls,
+        polylines: Iterable[Polyline3D | ClosedPolyline3D],
+    ) -> Wireframe3D:
+        """Build a wireframe from open or closed 3D polylines."""
+        vertices: list[Vec3] = []
+        vertex_indices: dict[tuple[float, float, float], int] = {}
+        edges: list[EdgeIndex] = []
+        edge_keys: set[EdgeIndex] = set()
+
+        for polyline in polylines:
+            previous_index: int | None = None
+            for point in polyline.points():
+                current_index = _find_or_add_exact_vertex(
+                    vertices,
+                    vertex_indices,
+                    point,
+                )
+                if previous_index is not None:
+                    _append_unique_edge(edges, edge_keys, previous_index, current_index)
+                previous_index = current_index
+
+        return cls(tuple(vertices), tuple(edges))
 
     def transformed(self, transform: Transform3) -> Wireframe3D:
         array = transform.apply_points([vertex.tuple() for vertex in self.vertices])
@@ -190,6 +217,39 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
     if len(value) != 2:
         raise ValueError("wireframe edges must have exactly two indices")
     return (int(value[0]), int(value[1]))
+
+
+def _find_or_add_exact_vertex(
+    vertices: list[Vec3],
+    vertex_indices: dict[tuple[float, float, float], int],
+    point: Vec3 | tuple[float, float, float],
+) -> int:
+    vertex = promote3(point)
+    key = vertex.tuple()
+    existing_index = vertex_indices.get(key)
+    if existing_index is not None:
+        return existing_index
+
+    new_index = len(vertices)
+    vertex_indices[key] = new_index
+    vertices.append(vertex)
+    return new_index
+
+
+def _append_unique_edge(
+    edges: list[EdgeIndex],
+    edge_keys: set[EdgeIndex],
+    start: int,
+    end: int,
+) -> None:
+    if start == end:
+        return
+
+    key = (start, end) if start < end else (end, start)
+    if key in edge_keys:
+        return
+    edge_keys.add(key)
+    edges.append((start, end))
 
 
 @dataclass(frozen=True, slots=True)
