@@ -7,9 +7,8 @@ import numpy as np
 import pytest
 
 from cady import GeometryError
-from cady.geometry3d import Mesh3D
-from cady.numeric.mesh3d import ArrayMesh3
-from cady.ops import close_planar_cap
+from cady.geometry import Mesh3D
+from cady.operations import close_planar_cap
 from cady.vec import Vec3
 
 
@@ -278,19 +277,18 @@ def test_close_holes_accepts_max_hole_edges() -> None:
 
 def test_ops_close_planar_cap_on_cut_mesh() -> None:
     """Cut a cube in half without capping, then cap the open boundary."""
-    from cady.ops import cut_mesh_by_plane
+    from cady.operations import cut_mesh_by_plane
 
-    cube = ArrayMesh3(
-        np.array(
-            [[float(v.x), float(v.y), float(v.z)] for v in _cube_vertices()],
-            dtype=np.float64,
-        ),
-        np.array(_cube_faces(), dtype=np.int64),
+    cube_vertices = np.array(
+        [[float(v.x), float(v.y), float(v.z)] for v in _cube_vertices()],
+        dtype=np.float64,
     )
+    cube_faces = np.array(_cube_faces(), dtype=np.int64)
 
     # Cut without cap
     cut = cut_mesh_by_plane(
-        cube,
+        cube_vertices,
+        cube_faces,
         plane_origin=(0.0, 0.0, 0.5),
         plane_normal=(0.0, 0.0, 1.0),
         keep="negative",
@@ -304,11 +302,14 @@ def test_ops_close_planar_cap_on_cut_mesh() -> None:
 
     # Cap it
     capped = close_planar_cap(
-        cut, plane_origin=(0.0, 0.0, 0.5), plane_normal=(0.0, 0.0, 1.0), tolerance=1e-9
+        *cut,
+        plane_origin=(0.0, 0.0, 0.5),
+        plane_normal=(0.0, 0.0, 1.0),
+        tolerance=1e-9,
     )
 
     # Should now be watertight
-    assert len(capped.faces) > len(cut.faces)
+    assert len(capped[1]) > len(cut[1])
     assert set(_array_boundary_counts(capped).values()) == {2}
 
 
@@ -472,9 +473,11 @@ def test_close_to_plane_without_closed_edges_raises() -> None:
         mesh.close_to_plane((0, 0, 0), (0, 1, 0), tolerance=1e-3, max_distance=1.0)
 
 
-def _array_boundary_counts(mesh: ArrayMesh3) -> Counter[tuple[int, int]]:
+def _array_boundary_counts(
+    mesh: tuple[np.ndarray, np.ndarray, np.ndarray],
+) -> Counter[tuple[int, int]]:
     counts: Counter[tuple[int, int]] = Counter()
-    for face in mesh.faces:
+    for face in mesh[1]:
         indices = [int(face[0]), int(face[1]), int(face[2])]
         for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
             counts[(min(start, end), max(start, end))] += 1

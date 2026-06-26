@@ -56,8 +56,8 @@ stl.write(part, "plate.stl", tolerance=1e-3)
 stl.write(assembly, "assembly-ascii.stl", ascii=True, tolerance=1e-3)
 ```
 
-Supported targets include `Mesh3D`, `ArrayMesh3`, `Body3D`, `Part`,
-`Assembly`, and `Document` values containing meshable parts or assemblies.
+Supported targets include `Mesh3D`, `Body3D`, `Part`, `Assembly`, and
+`Document` values containing meshable parts or assemblies.
 
 STL has no curves, layers, units, materials, or product structure. cady writes
 triangles only.

@@ -10,8 +10,8 @@ surface data from STEP files.
    `Circle2D`, `Profile2D`, `Body3D`). Convert with `.to_array(tolerance=1e-3)`
    or `.to_mesh(tolerance=1e-3)` only at calculation boundaries.
 2. **Domain is import-light.** Authoring packages (`geometry2d`, `geometry3d`,
-   `drawing`, `product`, `view`) must not import `numpy`, `matplotlib`, `pyvista`,
-   `vispy`, or `cady.visualisation` at module scope. Validate with
+   `drawing`, `product`) must not import `numpy`, `matplotlib`, `pyvista`,
+   `vispy`, or viewer backend modules at module scope. Validate with
    `tests/conventions/test_import_boundaries.py` and
    `tests/conventions/test_stdlib_only.py`.
 3. **Immutable domain objects.** All shapes, vectors, and metadata are frozen
@@ -20,7 +20,7 @@ surface data from STEP files.
    function accepts `tolerance` as a keyword argument. No hidden defaults.
 5. **No external deps at runtime.** Runtime imports are limited to `cady`,
    `numpy`, and `steputils`. `matplotlib`, `vispy`, and `pyvista` are optional
-   extras gated behind `[all]` (visualisation). Enforced by
+   extras gated behind `[view]` and `[all]`. Enforced by
    `tests/conventions/test_stdlib_only.py`.
 6. **Layers are named, not numbered.** Drawings assign entities to named layers
    with color and linetype. DXF writers map these to DXF layer tables.
@@ -32,12 +32,11 @@ cady.geometry2d   2D curves, closed curves, profiles, and factories
 cady.geometry3d   bodies, faces, frames, meshes, wireframes, features, and primitives
 cady.drawing      drawing documents, layers, text, hatches, blocks, dimensions
 cady.product      parts, assemblies, materials, and assembly flattening
-cady.view         backend-independent scenes, cameras, lights, display styles
+cady.view         scenes, cameras, lights, display styles, optional viewers
 cady.document     optional top-level registry
 cady.numeric      NumPy-backed evaluated arrays and transforms
 cady.ops          object-agnostic geometry algorithms
 cady.files        DXF, STL, and STEP facades
-cady.visualisation optional scene adapter helpers (vispy backend)
 cady.errors       shared exception hierarchy
 cady.vec          Vec2, Vec3 immutable vector types
 ```
@@ -50,8 +49,8 @@ cady.vec          Vec2, Vec3 immutable vector types
 | `geometry2d`, `geometry3d`, `drawing`, `product`, `view` must not import `cady.domain` | `test_import_boundaries.py::test_new_value_packages_do_not_import_legacy_domain` |
 | `cady.numeric` must not import `cady.domain` or any authoring package | `test_import_boundaries.py::test_numeric_does_not_import_domain_or_authoring_packages` |
 | `cady.ops` must not import `cady.domain` or any authoring package | `test_import_boundaries.py::test_ops_do_not_import_domain_or_authoring_packages` |
-| `cady.files` must not import `numpy` or `cady.visualisation` at module scope | `test_import_boundaries.py::test_files_do_not_import_visualisation_or_numpy_at_module_scope` |
-| Runtime imports limited to `cady`, `numpy`, `steputils` (+ `matplotlib`/`vispy` in `visualisation` only) | `test_stdlib_only.py` |
+| `cady.files` must not import `numpy` or viewer backend modules at module scope | `test_import_boundaries.py::test_files_do_not_import_viewer_or_numpy_at_module_scope` |
+| Runtime imports limited to `cady`, `numpy`, `steputils` | `test_stdlib_only.py` |
 | Old names (`DxfDrawing`, `Model`, `Prism`, `Extrusion`, `Revolution`, `Sphere`, `Rectangle`, `Shape2D`, `Shape3D`, `StlMesh`, `SceneError`) must not be exported | `test_public_api_removed.py` |
 
 The intended conversion boundary:
@@ -94,6 +93,8 @@ domain object  →  dxf/stl/step.write(...)     →  files
 | `src/cady/view/light.py` | `Light` protocol, `AmbientLight`, `DirectionalLight`, `PointLight` |
 | `src/cady/view/style.py` | `DisplayStyle` |
 | `src/cady/view/open_view.py` | `SceneObject` — target reference with pose and visibility |
+| `src/cady/view/mesh_buffers.py` | Mesh-to-GPU-buffer conversion |
+| `src/cady/view/vispy_viewer.py` | Vispy-based 3D viewer (`view_scene`, `view_target`, `view_mesh`, `view_meshes`, `view_lines`, `prepare_scene`) |
 | `src/cady/document.py` | `Document` — optional registry of named drawings, parts, assemblies, scenes |
 | `src/cady/numeric/mesh3d.py` | `ArrayMesh3`, `ArrayPolyline3` |
 | `src/cady/numeric/paths2d.py` | `ArrayPolyline2`, `ArrayPolygon2` |
@@ -117,8 +118,6 @@ domain object  →  dxf/stl/step.write(...)     →  files
 | `src/cady/files/step/faces.py` | STEP face parser |
 | `src/cady/files/step/members.py` | `extract_members_from_faces` — structural member extraction |
 | `src/cady/files/step/ids.py` | `IdAllocator` — STEP entity ID management |
-| `src/cady/visualisation/mesh_buffers.py` | Mesh-to-GPU-buffer conversion |
-| `src/cady/visualisation/vispy_viewer.py` | Vispy-based 3D viewer (`view_scene`, `view_target`, `view_mesh`, `view_meshes`, `view_lines`, `prepare_scene`) |
 
 ## Module boundaries when editing
 
@@ -170,14 +169,13 @@ domain object  →  dxf/stl/step.write(...)     →  files
 - `tests/geometry3d/` — body, face, frame, mesh, wireframe tests
 - `tests/drawing/` — Drawing2D, dimensions, layers
 - `tests/product/` — Part, Assembly, flattening
-- `tests/view/` — Camera, lights, Scene, object view methods
+- `tests/view/` — Camera, lights, Scene, object view methods, viewer smoke tests
 - `tests/document/` — Document registry
 - `tests/numeric/` — numeric types, validation, mesh operations, transforms
 - `tests/files/` — DXF/STL/STEP I/O tests
 - `tests/examples/` — end-to-end example script regression tests
 - `tests/conventions/` — import boundary, stdlib-only, and removed-API enforcement tests
 - `tests/errors/` — error class behavior tests
-- `tests/visualisation/` — vispy viewer smoke tests
 
 ### Key conventions
 
@@ -216,11 +214,12 @@ Design documents live in `.plans/`:
 
 - `.plans/linesplan-wireframe-meshing/` — linesplan wireframe mesh generation from 2D station/waterline/buttock curves
 
-## Visualisation (optional)
+## Viewing (optional)
 
-Install: `[project.optional-dependencies] all` brings in matplotlib, vispy, and pyvista.
+Install: `[project.optional-dependencies] view` brings in pyqt6 and vispy.
+`[project.optional-dependencies] all` includes plotting and view extras.
 
-Key functions in `cady.visualisation`:
+Key functions in `cady.view`:
 
 - `view_target(target, *, tolerance, backend)` — view a `Body3D`, `Part`, `Assembly`, `Mesh3D`, `Wireframe3D`, or `Drawing2D`
 - `view_scene(scene, *, backend)` — view a `Scene` with its cameras, lights, and display styles
@@ -230,4 +229,5 @@ Key functions in `cady.visualisation`:
 - `prepare_scene(scene)` — prepare a `Scene` for rendering, returns `PreparedScene`
 - `scene_from_target(target, *, name)` — create a `Scene` from any viewable target
 
-These live in `cady.visualisation` and are never imported by core modules.
+The viewer helpers live in `cady.view`; backend GUI packages are imported only
+when a viewer function is launched.

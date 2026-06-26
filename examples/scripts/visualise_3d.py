@@ -19,7 +19,7 @@ from example_geometry import (
 )
 
 from cady import Assembly, Body3D, Part, box, sphere
-from cady.visualisation import view_scene
+from cady.view import view_scene
 
 
 def build_plate() -> Part:

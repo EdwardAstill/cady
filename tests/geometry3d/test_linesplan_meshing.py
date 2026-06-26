@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from cady.geometry3d import Mesh3D
-from cady.ops.linesplan import LinesplanCurve, classify_linesplan_curves, mesh_linesplan_network
+from cady.geometry import Mesh3D
+from cady.operations.linesplan import (
+    LinesplanCurve,
+    classify_linesplan_curves,
+    mesh_linesplan_network,
+)
 
 
 def test_mesh_linesplan_network_builds_section_loft_without_source_overlay_edges() -> None:

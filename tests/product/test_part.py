@@ -2,31 +2,29 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 
-import numpy as np
 import pytest
 
-from cady.numeric.mesh3d import ArrayMesh3
+from cady.geometry import Mesh3D
 from cady.product import Material, Part, ProductError
+from cady.vec import Vec3
 
 
-def _triangle(offset: float = 0.0) -> ArrayMesh3:
-    return ArrayMesh3(
-        np.array(
-            [
-                [offset, 0.0, 0.0],
-                [offset + 1.0, 0.0, 0.0],
-                [offset, 1.0, 0.0],
-            ]
+def _triangle(offset: float = 0.0) -> Mesh3D:
+    return Mesh3D(
+        (
+            Vec3(offset, 0.0, 0.0),
+            Vec3(offset + 1.0, 0.0, 0.0),
+            Vec3(offset, 1.0, 0.0),
         ),
-        np.array([[0, 1, 2]]),
+        ((0, 1, 2),),
     )
 
 
 class MeshableBody:
-    def __init__(self, mesh: ArrayMesh3) -> None:
+    def __init__(self, mesh: Mesh3D) -> None:
         self.mesh = mesh
 
-    def to_mesh(self, *, tolerance: float) -> ArrayMesh3:
+    def to_mesh(self, *, tolerance: float) -> Mesh3D:
         assert tolerance == 1e-3
         return self.mesh
 
@@ -49,8 +47,8 @@ def test_part_with_body_returns_new_part_and_merges_meshes() -> None:
     assert original.bodies == ()
 
     mesh = updated.to_mesh(tolerance=1e-3)
-    assert mesh.vertices.shape == (6, 3)
-    assert mesh.faces.tolist() == [[0, 1, 2], [3, 4, 5]]
+    assert len(mesh.vertices) == 6
+    assert mesh.faces == ((0, 1, 2), (3, 4, 5))
 
 
 def test_part_rejects_non_meshable_bodies() -> None:
@@ -58,8 +56,8 @@ def test_part_rejects_non_meshable_bodies() -> None:
         Part("bad").with_body(object())
 
 
-def test_empty_part_meshes_to_empty_array_mesh() -> None:
+def test_empty_part_meshes_to_empty_mesh() -> None:
     mesh = Part("empty").to_mesh(tolerance=1e-3)
 
-    assert mesh.vertices.shape == (0, 3)
-    assert mesh.faces.shape == (0, 3)
+    assert mesh.vertices == ()
+    assert mesh.faces == ()

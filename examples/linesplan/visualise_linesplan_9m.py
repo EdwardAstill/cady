@@ -10,9 +10,9 @@ from pathlib import Path
 
 from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3D
 from cady.files import dxf
-from cady.numeric import Transform3
+from cady.operations import Transform3
 from cady.view import Camera as CameraType
-from cady.visualisation import view_scene
+from cady.view import view_scene
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"

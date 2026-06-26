@@ -5,7 +5,7 @@ import pytest
 from cady import Drawing2D, Line2D, box
 from cady.errors import ReadError
 from cady.files import dxf, step, stl
-from cady.geometry3d import Mesh3D
+from cady.geometry import Mesh3D
 from cady.vec import Vec3
 
 

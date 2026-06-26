@@ -6,19 +6,17 @@ import numpy as np
 import pytest
 
 from cady.errors import ReadError
-from cady.geometry3d import Mesh3D
-from cady.numeric.mesh3d import ArrayMesh3
-from cady.numeric.transform import Transform3
+from cady.geometry import Mesh3D
+from cady.operations.transforms import Transform3
 from cady.vec import Vec3
 
 
-def test_mesh_from_array_triangles_bounds_and_transform() -> None:
-    array = ArrayMesh3(
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-        [[0, 1, 2]],
+def test_mesh_triangles_bounds_and_transform() -> None:
+    mesh = Mesh3D(
+        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0)),
+        ((0, 1, 2),),
     )
 
-    mesh = Mesh3D.from_array(array)
     assert mesh.triangles == ((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0)),)
     assert mesh.bounds() == (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 0.0))
 
@@ -62,10 +60,10 @@ def test_mesh_to_array_and_merged_offsets_faces() -> None:
     )
 
     merged = Mesh3D.merged((first, second))
-    array = merged.to_array(tolerance=1e-3)
+    vertices, faces, _edges = merged.to_array(tolerance=1e-3)
 
-    assert array.vertices.shape == (6, 3)
-    np.testing.assert_array_equal(array.faces, [[0, 1, 2], [3, 4, 5]])
+    assert vertices.shape == (6, 3)
+    np.testing.assert_array_equal(faces, [[0, 1, 2], [3, 4, 5]])
 
 
 def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
@@ -75,13 +73,11 @@ def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
         ((0, 1),),
     )
 
-    array = mesh.to_array(tolerance=1e-3)
-    from_array = Mesh3D.from_array(array)
+    _vertices, _faces, edges = mesh.to_array(tolerance=1e-3)
     moved = mesh.transformed(Transform3.translation(0.0, 0.0, 2.0))
     merged = Mesh3D.merged((mesh, moved))
 
-    np.testing.assert_array_equal(array.edges, [[0, 1]])
-    assert from_array.edges == ((0, 1),)
+    np.testing.assert_array_equal(edges, [[0, 1]])
     assert moved.edges == ((0, 1),)
     assert merged.edges == ((0, 1), (2, 3))
 
@@ -351,7 +347,7 @@ def test_mesh_rejects_out_of_range_edges() -> None:
 
 
 def test_mesh_to_wireframe() -> None:
-    from cady.geometry3d import Wireframe3D
+    from cady.geometry import Wireframe3D
 
     mesh = Mesh3D(
         (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)),
@@ -367,7 +363,7 @@ def test_mesh_to_wireframe() -> None:
 
 
 def test_mesh_to_wireframe_empty_faces() -> None:
-    from cady.geometry3d import Wireframe3D
+    from cady.geometry import Wireframe3D
 
     mesh = Mesh3D((Vec3(0, 0, 0), Vec3(1, 0, 0)), ())
     wf = mesh.to_wireframe()

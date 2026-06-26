@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from cady.geometry3d import Face3D
-from cady.numeric.paths2d import ArrayPolygon2
+from cady.geometry import Face3D
+from cady.operations.arrays2d import ArrayPolygon2
 from cady.vec import Vec3
 
 

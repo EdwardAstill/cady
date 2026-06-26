@@ -6,17 +6,18 @@ from math import pi
 import numpy as np
 import pytest
 
-from cady.geometry2d import (
+from cady.geometry import (
     Arc2D,
     Circle2D,
     ClosedPolyline2D,
     Ellipse2D,
     Line2D,
+    Mesh2D,
     Polyline2D,
     Spline2D,
-    Vec2,
 )
-from cady.numeric import ArrayPolygon2, ArrayPolyline2
+from cady.operations import ArrayPolygon2, ArrayPolyline2
+from cady.vec import Vec2
 
 
 def test_line2d_is_frozen_and_evaluates_to_polyline() -> None:
@@ -72,6 +73,27 @@ def test_polyline2d_and_closed_polyline2d_array_types() -> None:
     assert isinstance(closed_array, ArrayPolygon2)
     np.testing.assert_allclose(open_array.vertices, [[0, 0], [1, 0], [1, 1]])
     np.testing.assert_allclose(closed_array.outer, [[0, 0], [1, 0], [1, 1]])
+
+
+def test_closed_polyline2d_to_mesh_triangulates_boundary() -> None:
+    polyline = ClosedPolyline2D(((0, 0), (1, 0), (1, 1), (0, 1), (0, 0)))
+
+    mesh = polyline.to_mesh(tolerance=0.01)
+
+    assert isinstance(mesh, Mesh2D)
+    assert mesh.vertices == (Vec2(0, 0), Vec2(1, 0), Vec2(1, 1), Vec2(0, 1))
+    assert len(mesh.faces) == 2
+    assert mesh.edges == ((0, 1), (1, 2), (2, 3), (3, 0))
+    assert not hasattr(Polyline2D(((0, 0), (1, 0))), "to_mesh")
+
+
+def test_closed_polyline2d_to_mesh_handles_concave_boundary() -> None:
+    polyline = ClosedPolyline2D(((0, 0), (2, 0), (2, 1), (1, 0.5), (0, 1)))
+
+    mesh = polyline.to_mesh(tolerance=0.01)
+
+    assert isinstance(mesh, Mesh2D)
+    assert len(mesh.faces) == 3
 
 
 def test_circle2d_and_ellipse2d_are_closed_polygon_arrays() -> None:

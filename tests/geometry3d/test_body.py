@@ -3,9 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cady.geometry3d import Body3D, Frame3D, box, cylinder, sphere
-from cady.numeric.paths2d import ArrayPolygon2
-from cady.numeric.transform import Transform3
+from cady.geometry import Body3D, Frame3D
+from cady.operations import box, cylinder, sphere
+from cady.operations.arrays2d import ArrayPolygon2
+from cady.operations.transforms import Transform3
 from cady.vec import Vec3
 
 
@@ -25,7 +26,7 @@ class RectangleProfile:
         )
 
 
-def test_box_factory_meshes_to_expected_bounds_and_faces() -> None:
+def test_box_constructor_meshes_to_expected_bounds_and_faces() -> None:
     mesh = box(2.0, 3.0, 4.0).to_mesh(tolerance=1e-3)
 
     assert mesh.bounds() == (Vec3(0.0, 0.0, 0.0), Vec3(2.0, 3.0, 4.0))
@@ -92,7 +93,7 @@ def test_profile_extrusion_requires_profile_like_object() -> None:
 
 
 def test_mesh_to_array_from_body() -> None:
-    array = box(1.0, 1.0, 1.0).to_mesh(tolerance=1e-3).to_array(tolerance=1e-3)
+    vertices, faces, _edges = box(1.0, 1.0, 1.0).to_mesh(tolerance=1e-3).to_array(tolerance=1e-3)
 
-    assert array.vertices.shape == (8, 3)
-    np.testing.assert_array_equal(array.faces.shape, (12, 3))
+    assert vertices.shape == (8, 3)
+    np.testing.assert_array_equal(faces.shape, (12, 3))

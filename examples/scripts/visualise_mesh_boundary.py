@@ -11,7 +11,7 @@ import argparse
 from math import cos, sin
 
 from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, Wireframe3D
-from cady.numeric import ArrayPolyline3
+from cady.operations import ArrayPolyline3
 
 MESH_STYLE = DisplayStyle(color=(0.46, 0.52, 0.50), opacity=0.9)
 BOUNDARY_STYLES = (
@@ -49,7 +49,7 @@ def main() -> None:
         print("VisPy viewer skipped.")
         return
 
-    from cady.visualisation import view_scene
+    from cady.view import view_scene
 
     view_scene(
         build_scene(mesh, boundaries),

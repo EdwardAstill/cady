@@ -3,15 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cady.geometry2d import (
+from cady.geometry import (
     Circle2D,
     ClosedPolyline2D,
     Profile2D,
-    Vec2,
-    profile_circle,
-    profile_rectangle,
 )
-from cady.numeric import ArrayPolygon2
+from cady.operations import ArrayPolygon2, profile_circle, profile_rectangle
+from cady.vec import Vec2
 
 
 def test_profile_rectangle_returns_polygon_with_expected_bounds() -> None:
@@ -47,7 +45,7 @@ def test_profile2d_carries_holes_into_polygon_array() -> None:
     np.testing.assert_allclose(array.holes[0], [[1, 1], [2, 1], [2, 2], [1, 2]])
 
 
-def test_profile_factories_reject_invalid_dimensions() -> None:
+def test_profile_constructors_reject_invalid_dimensions() -> None:
     with pytest.raises(ValueError, match="width must be positive"):
         profile_rectangle(0, 1)
     with pytest.raises(ValueError, match="height must be positive"):

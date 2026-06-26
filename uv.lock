@@ -34,7 +34,7 @@ all = [
 plotting = [
     { name = "matplotlib" },
 ]
-visualisation = [
+view = [
     { name = "pyqt6" },
     { name = "vispy" },
 ]
@@ -48,14 +48,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cady", extras = ["plotting", "visualisation"], marker = "extra == 'all'" },
+    { name = "cady", extras = ["plotting", "view"], marker = "extra == 'all'" },
     { name = "matplotlib", marker = "extra == 'plotting'", specifier = ">=3.10" },
     { name = "numpy", specifier = ">=2.4.6" },
-    { name = "pyqt6", marker = "extra == 'visualisation'", specifier = ">=6.11.0" },
+    { name = "pyqt6", marker = "extra == 'view'", specifier = ">=6.11.0" },
     { name = "steputils", specifier = ">=0.1" },
-    { name = "vispy", marker = "extra == 'visualisation'", specifier = ">=0.14" },
+    { name = "vispy", marker = "extra == 'view'", specifier = ">=0.14" },
 ]
-provides-extras = ["plotting", "visualisation", "all"]
+provides-extras = ["plotting", "view", "all"]
 
 [package.metadata.requires-dev]
 dev = [

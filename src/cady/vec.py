@@ -2,15 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import isfinite, sqrt
+from math import sqrt
 from typing import Self, cast
 
-
-def _finite(value: float, name: str) -> float:
-    value = float(value)
-    if not isfinite(value):
-        raise ValueError(f"{name} must be finite")
-    return value
+from cady.utils import finite
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,8 +14,8 @@ class Vec2:
     y: float
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "x", _finite(self.x, "x"))
-        object.__setattr__(self, "y", _finite(self.y, "y"))
+        object.__setattr__(self, "x", finite(self.x, "x"))
+        object.__setattr__(self, "y", finite(self.y, "y"))
 
     @classmethod
     def from_xy(cls, value: Vec2 | tuple[float, float]) -> Self:
@@ -81,9 +76,9 @@ class Vec3:
     z: float
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "x", _finite(self.x, "x"))
-        object.__setattr__(self, "y", _finite(self.y, "y"))
-        object.__setattr__(self, "z", _finite(self.z, "z"))
+        object.__setattr__(self, "x", finite(self.x, "x"))
+        object.__setattr__(self, "y", finite(self.y, "y"))
+        object.__setattr__(self, "z", finite(self.z, "z"))
 
     @classmethod
     def from_xyz(cls, value: Vec3 | tuple[float, float, float]) -> Self:

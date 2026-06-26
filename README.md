@@ -9,8 +9,9 @@ Start with [docs/index.md](docs/index.md) for the full documentation.
 ## What cady provides
 
 - immutable 2D geometry values such as `Line2D`, `Circle2D`, `Polyline2D`,
-  `ClosedPolyline2D`, `Spline2D`, `Ellipse2D`, and `Profile2D`;
-- meshable 3D geometry through `Body3D`, `Face3D`, `Frame3D`, and `Mesh3D`;
+  `ClosedPolyline2D`, `Spline2D`, `Ellipse2D`, `Profile2D`, and `Mesh2D`;
+- meshable 3D geometry through `Body3D`, `Face3D`, `Frame3D`, `Mesh3D`, and
+  closed 3D polylines;
 - product structure with `Part`, `Assembly`, placed part instances, materials,
   and metadata;
 - 2D drafting documents with layers, text, hatches, blocks, inserts, and
@@ -130,7 +131,7 @@ Current file support is deliberately small:
 - DXF reads basic 2D drawing entities, `3DFACE` triangles/quads, and 3D
   polyline wires. ACIS-backed solids are reported as skipped records.
 - STL writes binary or ASCII triangle meshes from `Mesh3D`, `Body3D`, `Part`,
-  `Assembly`, `ArrayMesh3`, or meshable `Document` contents.
+  `Assembly`, or meshable `Document` contents.
 - STEP write currently emits mesh vertices and triangular face loops from
   meshable targets. STEP read remains analysis-oriented and extracts elementary
   faces and simple extruded members.
@@ -150,16 +151,15 @@ Most scripts write to `examples/gallery` and accept `--out <dir>`.
 ## Package layout
 
 ```text
-cady.geometry2d   2D curves, closed curves, profiles, and factories
-cady.geometry3d   bodies, faces, frames, meshes, features, and primitives
+cady.geometry   2D curves, closed curves, profiles, and meshes
+cady.geometry   bodies, faces, frames, meshes, features, and primitives
 cady.drawing      drawing documents, layers, text, hatches, blocks, dimensions
 cady.product      parts, assemblies, materials, and assembly flattening
-cady.view         backend-independent scenes, cameras, lights, display styles
+cady.view         scenes, cameras, lights, display styles, and optional viewers
 cady.document     optional top-level registry
-cady.numeric      NumPy-backed evaluated arrays and transforms
-cady.ops          object-agnostic geometry algorithms
+cady.operations      NumPy-backed evaluated arrays and transforms
+cady.operations          object-agnostic geometry algorithms
 cady.files        DXF, STL, and STEP facades
-cady.visualisation optional scene adapter helpers
 cady.errors       shared exception hierarchy
 ```
 

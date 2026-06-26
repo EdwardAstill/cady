@@ -14,12 +14,12 @@ dependencies = ["numpy>=2.4.6", "steputils>=0.1"]
 plotting = [
     "matplotlib>=3.10",
 ]
-visualisation = [
+view = [
     "pyqt6>=6.11.0",
     "vispy>=0.14",
 ]
 all = [
-    "cady[plotting,visualisation]",
+    "cady[plotting,view]",
 ]
 
 [tool.hatch.build.targets.wheel]

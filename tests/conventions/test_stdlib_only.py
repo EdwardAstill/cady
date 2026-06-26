@@ -9,7 +9,6 @@ SRC = ROOT / "src" / "cady"
 RUNTIME_ALLOWED = {"cady", "numpy", "steputils"}
 OPTIONAL_BY_PACKAGE = {
     "plotting": {"matplotlib", "mpl_toolkits"},
-    "visualisation": {"matplotlib", "mpl_toolkits", "vispy"},
 }
 STDLIB = set(sys.stdlib_module_names)
 

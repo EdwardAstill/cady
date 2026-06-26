@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import numpy as np
-
-from cady.numeric.mesh3d import ArrayMesh3
+from cady.geometry import Mesh3D
 from cady.product import Assembly, Part, flatten_assembly
+from cady.vec import Vec3
 
 
 def test_flatten_assembly_function_delegates_to_assembly_flatten() -> None:
-    mesh = ArrayMesh3(np.array([[0.0, 0.0, 0.0]]), np.empty((0, 3), dtype=np.int64))
+    mesh = Mesh3D((Vec3(0.0, 0.0, 0.0),), ())
     part = Part("plate").with_body(mesh)
     assembly = Assembly("assy").add(part, name="plate_a")
 

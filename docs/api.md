@@ -14,6 +14,7 @@
 | `Ellipse2D` | Ellipse. |
 | `ClosedPolyline2D` | Closed polyline loop. |
 | `Profile2D` | Filled region (outer boundary + holes). |
+| `Mesh2D` | 2D triangle mesh. |
 | `Curve2D` | Protocol for open curves. |
 | `ClosedCurve2D` | Protocol for closed boundaries. |
 
@@ -24,6 +25,8 @@
 | `Frame3D` | Coordinate frame in 3D space. |
 | `Face3D` | Profile placed in a 3D frame. |
 | `Body3D` | Editable solid with feature history. |
+| `Polyline3D` | Open 3D polyline. |
+| `ClosedPolyline3D` | Closed planar 3D polyline loop. |
 | `Mesh3D` | Evaluated triangle mesh. |
 | `Wireframe3D` | Edge-only wireframe (vertices + edges). |
 

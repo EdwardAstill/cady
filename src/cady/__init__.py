@@ -23,35 +23,38 @@ from cady.errors import (
     ViewError,
     WriteError,
 )
-from cady.geometry2d import (
+from cady.geometry import (
     Arc2D,
+    Body3D,
     Circle2D,
     ClosedCurve2D,
     ClosedPolyline2D,
+    ClosedPolyline3D,
     Curve2D,
     Ellipse2D,
+    Face3D,
+    Frame3D,
     Line2D,
+    Mesh2D,
+    Mesh3D,
     Polyline2D,
+    Polyline3D,
     Profile2D,
     Spline2D,
+    Wireframe3D,
+)
+from cady.operations import Pose3 as Pose3D
+from cady.operations import (
     arc2d,
+    box,
     circle2d,
+    cylinder,
     line2d,
     polyline2d,
     profile_circle,
     profile_rectangle,
-)
-from cady.geometry3d import (
-    Body3D,
-    Face3D,
-    Frame3D,
-    Mesh3D,
-    Wireframe3D,
-    box,
-    cylinder,
     sphere,
 )
-from cady.numeric import Pose3 as Pose3D
 from cady.product import Assembly, AssemblyInstance, Material, Part, PartInstance
 from cady.vec import Vec2, Vec3
 from cady.view import (
@@ -79,6 +82,7 @@ __all__ = [
     "Circle2D",
     "ClosedCurve2D",
     "ClosedPolyline2D",
+    "ClosedPolyline3D",
     "Curve2D",
     "DiameterDimension2D",
     "DimStyle",
@@ -100,9 +104,11 @@ __all__ = [
     "LinearDimension2D",
     "Material",
     "Mesh3D",
+    "Mesh2D",
     "Part",
     "PartInstance",
     "PointLight",
+    "Polyline3D",
     "Polyline2D",
     "Pose3D",
     "ProductError",

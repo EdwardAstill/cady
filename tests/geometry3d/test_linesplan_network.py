@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cady.geometry3d import Wireframe3D
-from cady.ops.linesplan import classify_linesplan_curves
+from cady.geometry import Wireframe3D
+from cady.operations.linesplan import classify_linesplan_curves
 from cady.vec import Vec3
 
 

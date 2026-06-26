@@ -8,7 +8,7 @@ from cady import Assembly, Body3D, DisplayStyle, Mesh3D, Part, Vec3, box
 def test_mesh_view_builds_centred_wire_scene_and_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    visualisation = pytest.importorskip("cady.visualisation")
+    view = pytest.importorskip("cady.view")
     opened: list[tuple[object, float, str | None]] = []
     mesh = Mesh3D(
         (Vec3(10.0, 0.0, 0.0), Vec3(12.0, 0.0, 0.0)),
@@ -24,7 +24,7 @@ def test_mesh_view_builds_centred_wire_scene_and_returns_none(
     ) -> None:
         opened.append((scene, tolerance, title))
 
-    monkeypatch.setattr(visualisation, "view_scene", fake_view_scene)
+    monkeypatch.setattr(view, "view_scene", fake_view_scene)
 
     result = mesh.view(title="wire", tolerance=0.25)
 
@@ -41,7 +41,7 @@ def test_mesh_view_builds_centred_wire_scene_and_returns_none(
 
 
 def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
-    visualisation = pytest.importorskip("cady.visualisation")
+    view = pytest.importorskip("cady.view")
     opened: list[object] = []
     body = Body3D.box(width=1.0, depth=0.5, height=0.25)
     style = DisplayStyle(color=(0.2, 0.4, 0.8), render_mode="shaded")
@@ -54,7 +54,7 @@ def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> N
     ) -> None:
         opened.append(scene)
 
-    monkeypatch.setattr(visualisation, "view_scene", fake_view_scene)
+    monkeypatch.setattr(view, "view_scene", fake_view_scene)
 
     body.view(name="body", style=style, projection="perspective", center=False)
 
@@ -66,7 +66,7 @@ def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_part_and_assembly_have_view_methods(monkeypatch: pytest.MonkeyPatch) -> None:
-    visualisation = pytest.importorskip("cady.visualisation")
+    view = pytest.importorskip("cady.view")
     opened: list[object] = []
     part = Part("box").with_body(box(1.0, 1.0, 1.0))
     assembly = Assembly("assy").add(part)
@@ -79,7 +79,7 @@ def test_part_and_assembly_have_view_methods(monkeypatch: pytest.MonkeyPatch) ->
     ) -> None:
         opened.append(scene)
 
-    monkeypatch.setattr(visualisation, "view_scene", fake_view_scene)
+    monkeypatch.setattr(view, "view_scene", fake_view_scene)
 
     part.view(title="part")
     assembly.view(title="assembly")

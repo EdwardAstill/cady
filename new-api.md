@@ -217,5 +217,5 @@ Removed compatibility names include `Model`, `Shape2D`, `Shape3D`,
 3. Expand DXF output only after adding focused tests for each entity type.
 4. Treat true STEP B-rep/product-structure export as a separate feature from
    the current mesh writer.
-5. Keep visualisation as leaf code over `cady.view`, authoring objects, and
-   numeric meshes.
+5. Keep optional viewer code as leaf code over `cady.view`, authoring objects,
+   and numeric meshes.

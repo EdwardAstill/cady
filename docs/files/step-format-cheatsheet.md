@@ -48,7 +48,6 @@ The facade first resolves a mesh:
 
 ```text
 Mesh3D                -> Mesh3D
-ArrayMesh3            -> Mesh3D.from_array(...)
 Body3D                -> Body3D.to_mesh(tolerance=...)
 Part                  -> Part.to_mesh(tolerance=...)
 Assembly              -> Assembly.to_mesh(tolerance=...)

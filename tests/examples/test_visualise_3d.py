@@ -9,7 +9,7 @@ from types import ModuleType
 import pytest
 
 from cady import Vec3, Wireframe3D
-from cady.visualisation import prepare_scene
+from cady.view import prepare_scene
 
 
 def test_visualise_3d_prints_scene_summary_without_opening_viewer(
@@ -97,7 +97,7 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
 ) -> None:
     opened_scenes: list[tuple[object, str | None]] = []
     module = _load_linesplan_script("visualise_linesplan_9m")
-    visualisation = pytest.importorskip("cady.visualisation")
+    view = pytest.importorskip("cady.view")
 
     def fake_view_scene(
         scene: object,
@@ -108,7 +108,7 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
         opened_scenes.append((scene, title))
 
     monkeypatch.setattr(module, "view_scene", fake_view_scene)
-    monkeypatch.setattr(visualisation, "view_scene", fake_view_scene)
+    monkeypatch.setattr(view, "view_scene", fake_view_scene)
     module.main()
 
     stdout = capsys.readouterr().out

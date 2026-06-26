@@ -28,10 +28,13 @@ def _python_files(package: str) -> list[Path]:
 def test_legacy_domain_and_build_packages_are_removed() -> None:
     assert not (SRC / "domain").exists()
     assert not (SRC / "build").exists()
+    assert not (SRC / "factories").exists()
+    assert not (SRC / "numeric").exists()
+    assert not (SRC / "visualisation").exists()
 
 
 def test_new_value_packages_do_not_import_legacy_domain() -> None:
-    packages = ("geometry2d", "geometry3d", "drawing", "product", "view")
+    packages = ("geometry", "drawing", "product", "view")
     offenders = [
         f"{path.relative_to(ROOT)} imports {name}"
         for package in packages
@@ -42,48 +45,31 @@ def test_new_value_packages_do_not_import_legacy_domain() -> None:
     assert offenders == []
 
 
-def test_numeric_does_not_import_domain_or_authoring_packages() -> None:
+def test_operations_do_not_import_domain_or_application_packages() -> None:
     forbidden = (
         "cady.domain",
-        "cady.geometry2d",
-        "cady.geometry3d",
         "cady.drawing",
         "cady.product",
         "cady.view",
+        "cady.files",
     )
     offenders = [
         f"{path.relative_to(ROOT)} imports {name}"
-        for path in _python_files("numeric")
+        for path in _python_files("operations")
         for name in _imports(path)
         if name.startswith(forbidden)
     ]
     assert offenders == []
 
 
-def test_ops_do_not_import_domain_or_authoring_packages() -> None:
-    forbidden = (
-        "cady.domain",
-        "cady.geometry2d",
-        "cady.geometry3d",
-        "cady.drawing",
-        "cady.product",
-        "cady.view",
-    )
-    offenders = [
-        f"{path.relative_to(ROOT)} imports {name}"
-        for path in _python_files("ops")
-        for name in _imports(path)
-        if name.startswith(forbidden)
-    ]
-    assert offenders == []
-
-
-def test_files_do_not_import_visualisation_or_numpy_at_module_scope() -> None:
+def test_files_do_not_import_viewer_or_numpy_at_module_scope() -> None:
     offenders = [
         f"{path.relative_to(ROOT)} imports {name}"
         for path in _python_files("files")
         for name in _imports(path)
-        if name == "numpy" or name.startswith("cady.visualisation")
+        if name == "numpy"
+        or name.startswith("cady.view.mesh_buffers")
+        or name.startswith("cady.view.vispy_viewer")
     ]
     assert offenders == []
 

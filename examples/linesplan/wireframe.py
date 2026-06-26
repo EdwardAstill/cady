@@ -50,7 +50,7 @@ def main() -> None:
         print("VisPy viewer skipped.")
         return
 
-    from cady.visualisation import view_scene
+    from cady.view import view_scene
 
     view_scene(build_scene(wireframe), title="linesplan 9m - wireframe")
 

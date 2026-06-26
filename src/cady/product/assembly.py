@@ -9,15 +9,15 @@ from cady.product.material import Metadata, metadata_items
 from cady.product.part import Part
 
 if TYPE_CHECKING:
-    from cady.numeric.mesh3d import ArrayMesh3
-    from cady.numeric.transform import Transform3
+    from cady.geometry import Mesh3D
+    from cady.operations.transforms import Transform3
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
 
 
 def _transform_from_pose(pose: object | None) -> Transform3:
-    from cady.numeric.transform import Transform3
+    from cady.operations.transforms import Transform3
 
     if pose is None:
         return Transform3.identity()
@@ -162,16 +162,16 @@ class Assembly:
     def flatten(self) -> tuple[FlattenedPart, ...]:
         return _flatten_assembly(self, _transform_from_pose(None), (), set())
 
-    def to_mesh(self, *, tolerance: float) -> ArrayMesh3:
-        from cady.numeric.mesh3d import ArrayMesh3
+    def to_mesh(self, *, tolerance: float) -> Mesh3D:
+        from cady.geometry import Mesh3D
 
         if tolerance <= 0.0:
             raise ProductError("tolerance must be positive")
-        meshes: list[ArrayMesh3] = []
+        meshes: list[Mesh3D] = []
         for item in self.flatten():
             mesh = item.part.to_mesh(tolerance=tolerance)
             meshes.append(mesh.transformed(item.transform))
-        return ArrayMesh3.merged(meshes)
+        return Mesh3D.merged(meshes)
 
     def view(
         self,

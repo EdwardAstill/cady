@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cady.geometry3d import Frame3D
-from cady.numeric.transform import Transform3
+from cady.geometry import Frame3D
+from cady.operations.transforms import Transform3
 from cady.vec import Vec3
 
 

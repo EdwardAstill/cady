@@ -43,7 +43,7 @@ l = line2d((0.0, 0.0), (1.0, 0.5))  # tuples work everywhere
 from cady import Line2D, line2d
 
 l = Line2D(Vec2(0.0, 0.0), Vec2(1.0, 0.0))
-l = line2d((0.0, 0.0), (1.0, 0.0))  # factory
+l = line2d((0.0, 0.0), (1.0, 0.0))  # constructor helper
 l.bounds()      # (Vec2(0.0, 0.0), Vec2(1.0, 0.0))
 l.points()      # (Vec2(0.0, 0.0), Vec2(1.0, 0.0))
 l.to_array(tolerance=1e-3)  # ArrayPolyline2
@@ -124,6 +124,20 @@ p = polyline2d(((0.0, 0.0), (1.0, 0.0), (1.0, 0.6), (0.0, 0.6)), closed=True)
 # returns ClosedPolyline2D
 p.vertices     # tuple of 4 Vec2 (deduplicated)
 p.to_array(tolerance=1e-3)  # ArrayPolygon2
+p.to_mesh(tolerance=1e-3)   # Mesh2D
+```
+
+### Mesh2D
+
+`Mesh2D(vertices, faces, edges=())` is a 2D triangle mesh. It is useful when a
+closed 2D boundary needs explicit triangle faces instead of an `ArrayPolygon2`.
+
+```python
+from cady import ClosedPolyline2D, Mesh2D
+
+outline = ClosedPolyline2D(((0, 0), (1, 0), (1, 1), (0, 1)))
+mesh = outline.to_mesh(tolerance=1e-3)  # Mesh2D
+vertices, faces, edges = mesh.to_array(tolerance=1e-3)
 ```
 
 ### Profiles
@@ -229,7 +243,7 @@ body = Body3D.box(width=1.0, depth=0.6, height=0.04)
 body = Body3D.cylinder(radius=0.5, height=2.0)
 body = Body3D.sphere(radius=0.5, centre=(0.0, 0.0, 0.5))
 
-# Or use top-level factory functions
+# Or use top-level constructor helpers
 from cady import box, cylinder, sphere
 body = box(width=1.0, depth=0.6, height=0.04)
 ```
@@ -289,8 +303,7 @@ mesh.transformed(Transform3.translation(1, 0, 0))
 mesh.mirror(plane_origin, plane_normal)
 
 # Conversion
-mesh.to_array(tolerance=1e-3)   # ArrayMesh3
-Mesh3D.from_array(array_mesh)    # Mesh3D
+vertices, faces, edges = mesh.to_array(tolerance=1e-3)
 
 # Merge multiple meshes (with index offsets)
 merged = Mesh3D.merged([mesh1, mesh2])
@@ -303,6 +316,18 @@ closed = mesh.close_boundary(tolerance=1e-3)
 
 # Convert to wireframe
 wf = mesh.to_wireframe()  # Wireframe3D (edges only, no faces)
+```
+
+### 3D polylines
+
+`Polyline3D(vertices)` is open wire data. `ClosedPolyline3D(vertices)` is a
+planar closed boundary loop that can be triangulated to `Mesh3D`.
+
+```python
+from cady import ClosedPolyline3D
+
+loop = ClosedPolyline3D(((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)))
+mesh = loop.to_mesh(tolerance=1e-3)  # Mesh3D
 ```
 
 ### Wireframe3D
@@ -323,7 +348,7 @@ wf.edges       # tuple[tuple[int, int], ...]
 wf.bounds()    # (Vec3 min, Vec3 max)
 wf.transformed(Transform3.translation(0, 0, 1))
 wf.mirror(plane_origin, plane_normal)
-wf.to_array(tolerance=1e-3)  # ArrayMesh3 (empty faces, populated edges)
+wf.to_array(tolerance=1e-3)  # (vertices, empty faces, edges)
 wf.to_mesh(tolerance=1e-3)   # Mesh3D
 
 # Split crossings, remove dangling edges, and triangulate to triangle wires
@@ -489,7 +514,7 @@ part = (
 )
 
 # Multiple bodies are merged on mesh evaluation
-mesh = part.to_mesh(tolerance=1e-3)  # ArrayMesh3
+mesh = part.to_mesh(tolerance=1e-3)  # Mesh3D
 ```
 
 ### Material
@@ -531,7 +556,7 @@ for item in flattened:
     print(item.part.name, item.name, item.transform, item.path)
 
 # Evaluate to merged mesh
-mesh = assembly.to_mesh(tolerance=1e-3)  # ArrayMesh3
+mesh = assembly.to_mesh(tolerance=1e-3)  # Mesh3D
 ```
 
 Pose accepts: `None` (identity), a 3-tuple `(x, y, z)` translation, a
@@ -542,8 +567,8 @@ Pose accepts: `None` (identity), a 3-tuple `(x, y, z)` translation, a
 ### Scene
 
 `Scene` holds cameras, lights, display styles, and references to viewable
-objects. It is backend-independent; the visualisation module translates it for
-display.
+objects. It is backend-independent; `cady.view` also exposes lazy viewer helpers
+that translate scenes for display when called.
 
 ```python
 from cady import Scene, Camera, DirectionalLight, AmbientLight, DisplayStyle
@@ -690,19 +715,19 @@ Items auto-name from their `.name` attribute when not given explicitly.
 
 ```text
 domain objects  →  .to_array(tolerance=...)  →  numeric arrays
-                →  .to_mesh(tolerance=...)   →  Mesh3D / ArrayMesh3
+                →  .to_mesh(tolerance=...)   →  Mesh2D / Mesh3D / arrays
                 →  dxf/stl/step.write(...)   →  files
 ```
 
 Every conversion that samples curves or meshes takes an explicit `tolerance`
 keyword. There are no hidden defaults.
 
-## Visualisation
+## Viewing Helpers
 
-The visualisation module provides direct viewing functions:
+The view package provides direct viewing functions:
 
 ```python
-from cady.visualisation import view_target, view_scene, view_mesh, view_lines
+from cady.view import view_target, view_scene, view_mesh, view_lines
 
 # View any meshable or viewable target
 view_target(body, tolerance=1e-3)
@@ -719,11 +744,11 @@ view_mesh(array_mesh3)
 view_lines(vertices_array, edges_array)
 
 # Prepare a scene for rendering
-from cady.visualisation import prepare_scene
+from cady.view import prepare_scene
 prepared = prepare_scene(scene)  # PreparedScene
 
 # Create a Scene from any target
-from cady.visualisation import scene_from_target
+from cady.view import scene_from_target
 scene = scene_from_target(assembly, name="my_scene")
 ```
 

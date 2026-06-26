@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sized
+from collections.abc import Callable, Iterable, Sized
 from math import sqrt
 from typing import Any, Literal, cast
 
@@ -54,8 +54,9 @@ def open_target_view(
         .with_light(light or DEFAULT_VIEW_LIGHT)
     )
 
-    from cady.visualisation import view_scene
+    from cady import view as view_module
 
+    view_scene = cast(Callable[..., None], view_module.view_scene)
     view_scene(scene, tolerance=tolerance, title=title)
     return None
 
@@ -160,7 +161,7 @@ def _target_name(target: object) -> str:
 def _origin_pose(
     bounds: tuple[tuple[float, float, float], tuple[float, float, float]],
 ) -> object:
-    from cady.numeric import Transform3
+    from cady.operations import Transform3
 
     lower, upper = bounds
     centre = _centre(lower, upper)

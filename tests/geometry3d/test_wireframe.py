@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cady import GeometryError, Wireframe3D
-from cady.numeric.mesh3d import ArrayMesh3
-from cady.numeric.transform import Transform3
+from cady.operations.transforms import Transform3
 from cady.vec import Vec3
 
 # -- Construction ----------------------------------------------------------
@@ -85,10 +84,10 @@ def test_wireframe_to_array() -> None:
         ((0, 1),),
     )
     arr = wf.to_array(tolerance=1e-3)
-    assert isinstance(arr, ArrayMesh3)
-    assert arr.vertices.shape == (2, 3)
-    assert arr.edges.shape == (1, 2)
-    assert arr.faces.shape == (0, 3)
+    vertices, faces, edges = arr
+    assert vertices.shape == (2, 3)
+    assert edges.shape == (1, 2)
+    assert faces.shape == (0, 3)
 
 
 def test_wireframe_to_mesh_splits_crossings_and_uses_triangles_as_faces() -> None:

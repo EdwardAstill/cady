@@ -13,7 +13,7 @@ from pathlib import Path
 
 from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, Wireframe3D
 from cady.files import dxf
-from cady.numeric import ArrayPolyline3
+from cady.operations import ArrayPolyline3
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -92,7 +92,7 @@ def main() -> None:
         print("VisPy viewer skipped.")
         return
 
-    from cady.visualisation import view_scene
+    from cady.view import view_scene
 
     view_scene(build_scene(mesh, boundaries), title="linesplan 9m - mesh boundary")
 
