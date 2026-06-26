@@ -15,7 +15,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from cady.geometry import Mesh3D, Wireframe3D
+from cady.geometry import Mesh3D, PointCloud3D, Wireframe3D
 from cady.operations.transforms import Transform3
 from cady.product import Assembly, Part
 from cady.view import AmbientLight, Camera, DirectionalLight, Scene
@@ -27,6 +27,7 @@ _VERT_SHADER = """
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform float u_point_size;
 attribute vec3 a_position;
 attribute vec3 a_normal;
 attribute vec3 a_color;
@@ -36,7 +37,7 @@ void main() {
     v_color = a_color;
     v_normal = normalize((u_model * vec4(a_normal, 0.0)).xyz);
     gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
-    gl_PointSize = 5.0;
+    gl_PointSize = u_point_size;
 }
 """
 
@@ -95,6 +96,7 @@ class SceneMesh:
     edges: np.ndarray
     color: tuple[float, float, float]
     render_mode: str
+    point_size: float = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,7 +349,7 @@ def _make_canvas(
 
             self._face_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
             self._edge_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
-            self._point_data: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+            self._point_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]] = []
             geometry_vertices: list[np.ndarray] = []
 
             for line in prepared.lines:
@@ -419,7 +421,9 @@ def _make_canvas(
                         np.array((0.0, 0.0, 1.0), dtype=np.float32),
                         (len(mesh.vertices), 1),
                     )
-                    self._point_data.append(_vertex_attributes(mesh.vertices, normals, colors))
+                    self._point_data.append(
+                        (*_vertex_attributes(mesh.vertices, normals, colors), mesh.point_size)
+                    )
 
             if not geometry_vertices:
                 raise ValueError("viewer requires at least one vertex")
@@ -457,6 +461,7 @@ def _make_canvas(
             self._program["u_light_direction"] = prepared.light_direction
             self._program["u_ambient_light"] = prepared.ambient_light
             self._program["u_diffuse_light"] = prepared.diffuse_light
+            self._program["u_point_size"] = 4.0
 
             gloo.set_state(
                 clear_color="white",
@@ -550,7 +555,8 @@ def _make_canvas(
                     depth_mask=False,
                     polygon_offset_fill=False,
                 )
-                for positions, normals, colors in self._point_data:
+                for positions, normals, colors, point_size in self._point_data:
+                    self._program["u_point_size"] = point_size
                     self._program["a_position"] = positions
                     self._program["a_normal"] = normals
                     self._program["a_color"] = colors
@@ -643,6 +649,27 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
         transform = (
             _transform_from_pose(scene_object.pose) if scene_object.pose is not None else None
         )
+        point_cloud = _point_cloud_from_target(target)
+        if point_cloud is not None:
+            if transform is not None:
+                point_cloud = point_cloud.transformed(transform)
+            if len(point_cloud.vertices) > 0:
+                meshes.append(
+                    SceneMesh(
+                        scene_object.object_name,
+                        np.asarray(
+                            [vertex.tuple() for vertex in point_cloud.vertices],
+                            dtype=np.float32,
+                        ),
+                        np.empty((0, 3), dtype=np.uint32),
+                        np.empty((0, 2), dtype=np.uint32),
+                        _style_color(target, style),
+                        "points",
+                        style.point_size,
+                    )
+                )
+            continue
+
         line = _line_from_target(target, transform=transform)
         if line is not None:
             vertices, indices = line
@@ -675,6 +702,7 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
                     edges,
                     _style_color(target, style),
                     style.render_mode,
+                    style.point_size,
                 )
             )
 
@@ -785,6 +813,12 @@ def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3D:
         mesh = to_mesh(tolerance=tolerance)
         return _mesh_from_target(mesh, tolerance=tolerance)
     raise TypeError("scene target must be Mesh3D or expose to_mesh(tolerance=...)")
+
+
+def _point_cloud_from_target(target: object) -> PointCloud3D | None:
+    if isinstance(target, PointCloud3D):
+        return target
+    return None
 
 
 def _line_from_target(

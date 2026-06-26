@@ -1,4 +1,4 @@
-"""Build a quarter-sphere wireframe from four polylines.
+"""Build a quarter-sphere wireframe from three polylines.
 
 Usage from the repository root:
     PYTHONPATH=src .venv/bin/python examples/testing/testing.py
@@ -14,6 +14,7 @@ from cady import (
     DirectionalLight,
     DisplayStyle,
     Mesh3D,
+    PointCloud3D,
     Polyline3D,
     Scene,
     Vec3,
@@ -22,19 +23,30 @@ from cady import (
 from cady.view import view_scene
 
 Point3 = tuple[float, float, float]
+EdgeIndex = tuple[int, int]
+FaceIndex = tuple[int, int, int]
+NodeRows = list[list[Vec3]]
 
 RADIUS = 5.0
 SAMPLES = 33
-SLICE_Y_VALUES = (-5, -2.5, 0.0, 2.5, 5)
+MIN_SLICE_Y = -5.0
+MAX_SLICE_Y = 5.0
+SLICES = 8
 PLANE_GRID_STEPS = 4
-ARC_ANGLES = {
-    "under": pi / 2.0,
-    "around": 0.0,
-    "between": pi / 4.0,
-}
+INTERSECTION_TOLERANCE = 1e-9
+ARC_ANGLES = [pi / 2.0, pi / 4.0, 0.0]
 WIRE_STYLE = DisplayStyle(color=(0.08, 0.28, 0.60), render_mode="wireframe")
 PLANE_STYLES = (
     DisplayStyle(color=(0.78, 0.16, 0.12), render_mode="wireframe"),
+)
+NODE_STYLE = DisplayStyle(
+    color=(0.96, 0.68, 0.08),
+    point_size=9.0,
+    render_mode="points",
+)
+NODE_MESH_STYLE = DisplayStyle(
+    color=(0.12, 0.56, 0.32),
+    render_mode="shaded",
 )
 CAMERA = Camera.orthographic(
     position=(9.0, -12.0, 7.0),
@@ -47,7 +59,10 @@ LIGHT = DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.1)
 def main() -> None:
     polylines = quarter_sphere_polylines(radius=RADIUS, samples=SAMPLES)
     wireframe = wireframe_from_polylines(polylines.values())
-    planes = slice_planes(radius=RADIUS, y_values=SLICE_Y_VALUES)
+    y_values = slice_y_values(min_y=MIN_SLICE_Y, max_y=MAX_SLICE_Y, slices=SLICES)
+    planes = slice_planes(radius=RADIUS, y_values=y_values)
+    nodes = intersection_nodes(wireframe, y_values=y_values)
+    node_cloud = intersection_nodes_to_point_cloud(nodes)
 
     print("quarter sphere wireframe")
     for name, polyline in polylines.items():
@@ -56,8 +71,24 @@ def main() -> None:
         print(f"{name}: {len(polyline.vertices)} vertices, A={start}, B={end}")
     print_wireframe_summary(wireframe)
     print(f"slice planes: {', '.join(f'y={y:g}' for y, _plane in planes)}")
+    print(f"intersection nodes: {len(node_cloud.vertices)}")
 
-    view_scene(build_scene(wireframe, planes), title="Quarter sphere slice planes")
+    view_scene(build_scene(wireframe, planes, nodes), title="Quarter sphere slice planes")
+
+
+def slice_y_values(
+    *,
+    min_y: float,
+    max_y: float,
+    slices: int,
+) -> tuple[float, ...]:
+    if slices <= 2:
+        raise ValueError("slices must be greater than 2")
+    if min_y >= max_y:
+        raise ValueError("min_y must be less than max_y")
+
+    step = (max_y - min_y) / (slices - 1)
+    return tuple(min_y + step * index for index in range(slices))
 
 
 def quarter_sphere_polylines(
@@ -70,17 +101,12 @@ def quarter_sphere_polylines(
     if samples < 3:
         raise ValueError("samples must be at least 3")
 
-    a: Point3 = (0.0, -radius, 0.0)
-    b: Point3 = (0.0, radius, 0.0)
-    polylines: dict[str, Polyline3D] = {
-        "diameter": Polyline3D((a, (0.0, 0.0, 0.0), b)),
-    }
-
-    for name, angle in ARC_ANGLES.items():
-        polylines[name] = Polyline3D(
+    return {
+        f"arc_{index}": Polyline3D(
             sphere_arc(radius=radius, section_angle=angle, samples=samples)
         )
-    return polylines
+        for index, angle in enumerate(ARC_ANGLES, start=1)
+    }
 
 
 def sphere_arc(
@@ -184,9 +210,224 @@ def _add_segment(
     return (start_index, start_index + 1)
 
 
+def intersection_nodes(
+    wireframe: Wireframe3D,
+    *,
+    y_values: Iterable[float],
+    tolerance: float = INTERSECTION_TOLERANCE,
+) -> list[list[Vec3]]:
+    """Return intersection nodes grouped by wireframe edge."""
+    _validate_tolerance(tolerance)
+
+    y_planes = tuple(y_values)
+    node_rows: list[list[Vec3]] = []
+    for start_index, end_index in wireframe.edges:
+        edge_nodes: list[Vec3] = []
+        for y in y_planes:
+            point = _edge_y_intersection(
+                wireframe.vertices[start_index],
+                wireframe.vertices[end_index],
+                y,
+                tolerance=tolerance,
+            )
+            if point is not None:
+                _append_unique_point(edge_nodes, point, tolerance=tolerance)
+        node_rows.append(edge_nodes)
+
+    return node_rows
+
+
+def intersection_nodes_to_point_cloud(
+    node_groups: Iterable[Iterable[Vec3]],
+    *,
+    tolerance: float = INTERSECTION_TOLERANCE,
+) -> PointCloud3D:
+    """Flatten grouped intersection nodes into a point cloud for display."""
+    _validate_tolerance(tolerance)
+
+    return PointCloud3D(_unique_nodes(node_groups, tolerance=tolerance))
+
+
+def intersection_nodes_to_edge_mesh(
+    node_groups: Iterable[Iterable[Vec3]],
+    *,
+    tolerance: float = INTERSECTION_TOLERANCE,
+) -> Mesh3D:
+    """Return a mesh connecting grouped nodes as a row-major grid."""
+    _validate_tolerance(tolerance)
+
+    node_rows = _grid_node_rows(node_groups, tolerance=tolerance)
+    vertices, row_indices = _index_node_rows(node_rows)
+    edges = _grid_edges(row_indices)
+    faces = _grid_faces(row_indices)
+
+    return Mesh3D(tuple(vertices), tuple(faces), tuple(edges))
+
+
+def _validate_tolerance(tolerance: float) -> None:
+    if tolerance <= 0.0:
+        raise ValueError("tolerance must be positive")
+
+
+def _unique_nodes(
+    node_groups: Iterable[Iterable[Vec3]],
+    *,
+    tolerance: float,
+) -> tuple[Vec3, ...]:
+    nodes: list[Vec3] = []
+    for group in node_groups:
+        for node in group:
+            _append_unique_point(nodes, node, tolerance=tolerance)
+    return tuple(nodes)
+
+
+def _grid_node_rows(
+    node_groups: Iterable[Iterable[Vec3]],
+    *,
+    tolerance: float,
+) -> NodeRows:
+    rows = [list(group) for group in node_groups]
+    if _is_sparse_edge_intersection_output(rows):
+        return _compact_sparse_edge_rows(rows, tolerance=tolerance)
+    return rows
+
+
+def _is_sparse_edge_intersection_output(rows: NodeRows) -> bool:
+    return any(not row for row in rows) and all(len(row) <= 1 for row in rows)
+
+
+def _compact_sparse_edge_rows(
+    rows: NodeRows,
+    *,
+    tolerance: float,
+) -> NodeRows:
+    grid_rows: NodeRows = []
+    current: list[Vec3] = []
+    previous: Vec3 | None = None
+
+    for row in rows:
+        if not row:
+            continue
+        node = row[0]
+        if previous is not None and _points_close(previous, node, tolerance=tolerance):
+            continue
+        if previous is not None and node.y < previous.y - tolerance:
+            grid_rows.append(current)
+            current = []
+        current.append(node)
+        previous = node
+
+    if current:
+        grid_rows.append(current)
+    return grid_rows
+
+
+def _index_node_rows(rows: NodeRows) -> tuple[tuple[Vec3, ...], list[list[int]]]:
+    vertices: list[Vec3] = []
+    row_indices: list[list[int]] = []
+    for row in rows:
+        indices: list[int] = []
+        for node in row:
+            indices.append(len(vertices))
+            vertices.append(node)
+        row_indices.append(indices)
+    return tuple(vertices), row_indices
+
+
+def _grid_edges(row_indices: list[list[int]]) -> tuple[EdgeIndex, ...]:
+    edges: list[EdgeIndex] = []
+    for row_index, row in enumerate(row_indices):
+        next_row = _next_row(row_indices, row_index)
+        for column_index, vertex_index in enumerate(row):
+            if column_index + 1 < len(row):
+                edges.append((vertex_index, row[column_index + 1]))
+            if column_index < len(next_row):
+                edges.append((vertex_index, next_row[column_index]))
+    return tuple(edges)
+
+
+def _grid_faces(row_indices: list[list[int]]) -> tuple[FaceIndex, ...]:
+    faces: list[FaceIndex] = []
+    for row_index, row in enumerate(row_indices):
+        next_row = _next_row(row_indices, row_index)
+        for column_index, top_left in enumerate(row):
+            if column_index + 1 >= len(row) or column_index + 1 >= len(next_row):
+                continue
+            top_right = row[column_index + 1]
+            bottom_left = next_row[column_index]
+            bottom_right = next_row[column_index + 1]
+            faces.append((top_left, bottom_left, top_right))
+            faces.append((top_right, bottom_left, bottom_right))
+    return tuple(faces)
+
+
+def _next_row(row_indices: list[list[int]], row_index: int) -> list[int]:
+    if row_index + 1 >= len(row_indices):
+        return []
+    return row_indices[row_index + 1]
+
+
+def _edge_y_intersection(
+    start: Vec3,
+    end: Vec3,
+    y: float,
+    *,
+    tolerance: float,
+) -> Vec3 | None:
+    start_delta = start.y - y
+    end_delta = end.y - y
+    start_on_plane = abs(start_delta) <= tolerance
+    end_on_plane = abs(end_delta) <= tolerance
+
+    if start_on_plane:
+        return start
+    if end_on_plane:
+        return end
+    if start_delta * end_delta > 0.0:
+        return None
+
+    span = end.y - start.y
+    if abs(span) <= tolerance:
+        return None
+
+    t = (y - start.y) / span
+    if t < -tolerance or t > 1.0 + tolerance:
+        return None
+    return Vec3(
+        start.x + (end.x - start.x) * t,
+        y,
+        start.z + (end.z - start.z) * t,
+    )
+
+
+def _append_unique_point(
+    points: list[Vec3],
+    point: Vec3,
+    *,
+    tolerance: float,
+) -> None:
+    if any(_points_close(existing, point, tolerance=tolerance) for existing in points):
+        return
+    points.append(point)
+
+
+def _points_close(
+    left: Vec3,
+    right: Vec3,
+    *,
+    tolerance: float,
+) -> bool:
+    return (
+        abs(left.x - right.x) <= tolerance
+        and abs(left.y - right.y) <= tolerance
+        and abs(left.z - right.z) <= tolerance
+    )
+
+
 def build_scene(
     wireframe: Wireframe3D,
     planes: Iterable[tuple[float, Mesh3D]],
+    nodes: Iterable[Iterable[Vec3]] | PointCloud3D | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_slice_planes").add(
         wireframe,
@@ -198,6 +439,22 @@ def build_scene(
             plane,
             name=f"slice_plane_y_{y:g}",
             style=PLANE_STYLES[index % len(PLANE_STYLES)],
+        )
+    if nodes is not None and not isinstance(nodes, PointCloud3D):
+        node_groups = tuple(tuple(group) for group in nodes)
+        node_mesh = intersection_nodes_to_edge_mesh(node_groups)
+        if node_mesh.vertices and node_mesh.edges:
+            scene = scene.add(
+                node_mesh,
+                name="plane_intersection_mesh",
+                style=NODE_MESH_STYLE,
+            )
+        nodes = intersection_nodes_to_point_cloud(node_groups)
+    if isinstance(nodes, PointCloud3D) and nodes.vertices:
+        scene = scene.add(
+            nodes,
+            name="plane_intersection_nodes",
+            style=NODE_STYLE,
         )
     return scene.with_camera(CAMERA, name="isometric").with_light(LIGHT)
 

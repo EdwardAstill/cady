@@ -25,6 +25,7 @@ from cady.geometry.features import (
 from cady.geometry.frame3d import Frame3D
 from cady.geometry.mesh2d import Mesh2D
 from cady.geometry.mesh3d import Mesh3D
+from cady.geometry.pointcloud3d import PointCloud3D
 from cady.geometry.polyline3d import ClosedPolyline3D, Polyline3D
 from cady.geometry.profile2d import Profile2D
 from cady.geometry.wireframe3d import Wireframe3D
@@ -49,6 +50,7 @@ __all__ = [
     "Mesh2D",
     "Mesh3D",
     "Point2Like",
+    "PointCloud3D",
     "Polyline2D",
     "Polyline3D",
     "PrimitiveFeature",

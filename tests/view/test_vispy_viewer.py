@@ -5,7 +5,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, box
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, PointCloud3D, Scene, Vec3, box
 from cady.view.vispy_viewer import (
     _camera_orientation,
     _mesh_edge_color,
@@ -93,6 +93,36 @@ def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
     assert len(prepared.meshes) == 1
     np.testing.assert_array_equal(prepared.meshes[0].faces, np.empty((0, 3), dtype=np.uint32))
     np.testing.assert_array_equal(prepared.meshes[0].edges, [[0, 1], [1, 2]])
+
+
+def test_prepare_scene_accepts_point_cloud_targets() -> None:
+    cloud = PointCloud3D((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 2.0, 3.0)))
+    scene = Scene("points").add(
+        cloud,
+        name="samples",
+        style=DisplayStyle(color=(0.9, 0.6, 0.1), point_size=8.0),
+    )
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert prepared.lines == ()
+    assert len(prepared.meshes) == 1
+    assert prepared.meshes[0].name == "samples"
+    assert prepared.meshes[0].render_mode == "points"
+    assert prepared.meshes[0].point_size == 8.0
+    assert prepared.meshes[0].color == (0.9, 0.6, 0.1)
+    np.testing.assert_allclose(
+        prepared.meshes[0].vertices,
+        [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]],
+    )
+    np.testing.assert_array_equal(
+        prepared.meshes[0].faces,
+        np.empty((0, 3), dtype=np.uint32),
+    )
+    np.testing.assert_array_equal(
+        prepared.meshes[0].edges,
+        np.empty((0, 2), dtype=np.uint32),
+    )
 
 
 def test_wireframe_mesh_edges_use_style_color() -> None:

@@ -29,6 +29,7 @@ def test_smoke_import() -> None:
         "Mesh2D",
         "Part",
         "PointLight",
+        "PointCloud3D",
         "Polyline3D",
         "Pose3D",
         "Profile2D",
