@@ -1,10 +1,12 @@
+"""Boundary-loop triangulation helpers for planar mesh caps."""
+
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
 
 from cady.operations._mesh_arrays import coerce_mesh, return_mesh
-from cady.operations.arrays3d import ArrayMesh3
+from cady.operations.arrays3 import ArrayMesh3
 from cady.operations.mesh_boundaries import Segment, boundary_edges, stitch_segments
 from cady.operations.planes import (
     Point3Array,
@@ -19,6 +21,7 @@ Face = tuple[int, int, int]
 
 
 def triangulate_loop(points: list[tuple[float, float]], tolerance: float) -> list[Face]:
+    """Triangulate a simple 2D loop with an ear-clipping pass."""
     if len(points) < 3:
         return []
 
@@ -46,6 +49,7 @@ def triangulate_loop(points: list[tuple[float, float]], tolerance: float) -> lis
                 for candidate in indices
             ):
                 continue
+            # Emit the ear in local loop index space and remove its tip.
             triangles.append((previous, current, following))
             del indices[position]
             clipped_ear = True

@@ -1,4 +1,4 @@
-"""Read a DXF as a Wireframe3D and visualise it.
+"""Read a DXF as a Wireframe3 and visualise it.
 
 Usage:
     PYTHONPATH=src .venv/bin/python examples/linesplan/wireframe.py --no-view
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3D
+from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3
 from cady.files import dxf
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +25,7 @@ Point3 = tuple[float, float, float]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Read a DXF as a Wireframe3D and visualise it.",
+        description="Read a DXF as a Wireframe3 and visualise it.",
     )
     parser.add_argument(
         "--input",
@@ -55,7 +55,7 @@ def main() -> None:
     view_scene(build_scene(wireframe), title="linesplan 9m - wireframe")
 
 
-def build_scene(wireframe: Wireframe3D) -> Scene:
+def build_scene(wireframe: Wireframe3) -> Scene:
     lower, upper = wireframe.bounds()
     lower = _point_tuple(lower)
     upper = _point_tuple(upper)
@@ -70,7 +70,7 @@ def build_scene(wireframe: Wireframe3D) -> Scene:
     )
 
 
-def print_wireframe_summary(label: str, wireframe: Wireframe3D) -> None:
+def print_wireframe_summary(label: str, wireframe: Wireframe3) -> None:
     lower, upper = wireframe.bounds()
     print(
         f"{label}: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "

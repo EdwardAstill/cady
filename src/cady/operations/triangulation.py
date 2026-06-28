@@ -1,3 +1,5 @@
+"""Small fallback triangulation helpers for flat vertex buffers."""
+
 from __future__ import annotations
 
 

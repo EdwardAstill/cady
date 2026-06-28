@@ -5,11 +5,11 @@ from pathlib import Path
 
 from example_geometry import GALLERY_DIR, production_drawing
 
-from cady import Drawing2D
+from cady import Drawing2
 from cady.files import dxf
 
 
-def build_drawing() -> Drawing2D:
+def build_drawing() -> Drawing2:
     return production_drawing()
 
 

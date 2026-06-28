@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from math import cos, pi, sqrt
 
-from cady import Polyline3D, Wireframe3D, arc3d
+from cady import Polyline3, Wireframe3, arc3
 
 RADIUS = 5.0
 SAMPLES = 33
 DIAGONAL_SCALE = 1.0 / sqrt(2.0)
 ARC_SAMPLE_TOLERANCE = 1.01 * RADIUS * (1.0 - cos(pi / (2.0 * (SAMPLES - 1))))
 
-STATION_ARC = arc3d(
+STATION_ARC = arc3(
     (0.0, 0.0, 0.0),
     RADIUS,
     -pi / 2.0,
@@ -23,7 +23,7 @@ STATION_ARC = arc3d(
     x_axis=(1.0, 0.0, 0.0),
     y_axis=(0.0, 1.0, 0.0),
 )
-DIAGONAL_ARC = arc3d(
+DIAGONAL_ARC = arc3(
     (0.0, 0.0, 0.0),
     RADIUS,
     -pi / 2.0,
@@ -31,7 +31,7 @@ DIAGONAL_ARC = arc3d(
     x_axis=(DIAGONAL_SCALE, 0.0, -DIAGONAL_SCALE),
     y_axis=(0.0, 1.0, 0.0),
 )
-BUTTOCK_ARC = arc3d(
+BUTTOCK_ARC = arc3(
     (0.0, 0.0, 0.0),
     RADIUS,
     -pi / 2.0,
@@ -40,9 +40,9 @@ BUTTOCK_ARC = arc3d(
     y_axis=(0.0, 1.0, 0.0),
 )
 
-STATION_POLYLINE = Polyline3D((STATION_ARC,))
-DIAGONAL_POLYLINE = Polyline3D((DIAGONAL_ARC,))
-BUTTOCK_POLYLINE = Polyline3D((BUTTOCK_ARC,))
+STATION_POLYLINE = Polyline3((STATION_ARC,))
+DIAGONAL_POLYLINE = Polyline3((DIAGONAL_ARC,))
+BUTTOCK_POLYLINE = Polyline3((BUTTOCK_ARC,))
 
 SOURCE_LINESPLAN = (
     STATION_POLYLINE,
@@ -66,9 +66,9 @@ LINESPLAN = (
     BUTTOCK_DISCRETISED_POLYLINE,
 )
 
-STATION_WIREFRAME = Wireframe3D.from_polylines((STATION_DISCRETISED_POLYLINE,))
-DIAGONAL_WIREFRAME = Wireframe3D.from_polylines((DIAGONAL_DISCRETISED_POLYLINE,))
-BUTTOCK_WIREFRAME = Wireframe3D.from_polylines((BUTTOCK_DISCRETISED_POLYLINE,))
+STATION_WIREFRAME = Wireframe3.from_polylines((STATION_DISCRETISED_POLYLINE,))
+DIAGONAL_WIREFRAME = Wireframe3.from_polylines((DIAGONAL_DISCRETISED_POLYLINE,))
+BUTTOCK_WIREFRAME = Wireframe3.from_polylines((BUTTOCK_DISCRETISED_POLYLINE,))
 
 WIREFRAME_OBJECTS = (
     STATION_WIREFRAME,

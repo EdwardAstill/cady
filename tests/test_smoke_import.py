@@ -7,47 +7,47 @@ def test_smoke_import() -> None:
     import cady
 
     expected = (
-        "Arc2D",
-        "Arc3D",
+        "Arc2",
+        "Arc3",
         "Assembly",
-        "Body3D",
+        "Body3",
         "Camera",
-        "Circle2D",
-        "ClosedPolyline2D",
-        "ClosedPolyline3D",
-        "Curve2D",
-        "Curve3D",
+        "Circle2",
+        "ClosedPolyline2",
+        "ClosedPolyline3",
+        "Curve2",
+        "Curve3",
         "DirectionalLight",
         "DisplayStyle",
         "Document",
-        "Drawing2D",
-        "Ellipse2D",
-        "Face3D",
-        "Frame3D",
+        "Drawing2",
+        "Ellipse2",
+        "Face3",
+        "Frame3",
         "Layer",
         "Light",
-        "Line2D",
-        "Line3D",
-        "Mesh3D",
-        "Mesh2D",
+        "Line2",
+        "Line3",
+        "Mesh3",
+        "Mesh2",
         "Part",
         "PointLight",
-        "PointCloud3D",
-        "Polyline3D",
-        "Pose3D",
-        "Profile2D",
+        "PointCloud3",
+        "Polyline3",
+        "Pose3",
+        "Profile2",
         "Scene",
-        "Spline2D",
-        "Spline3D",
+        "Spline2",
+        "Spline3",
         "Vec2",
         "Vec3",
-        "Wireframe3D",
-        "arc3d",
-        "line3d",
-        "line2d",
-        "polyline3d",
+        "Wireframe3",
+        "arc3",
+        "line3",
+        "line2",
+        "polyline3",
         "profile_rectangle",
-        "spline3d",
+        "spline3",
         "box",
         "sphere",
     )
@@ -59,14 +59,14 @@ def test_smoke_import() -> None:
 
 def test_preferred_package_imports() -> None:
     from cady import files
-    from cady.drawing import Drawing2D
+    from cady.drawing import Drawing2
     from cady.files import dxf, step, stl
-    from cady.geometry import Body3D, Line2D, Mesh3D, Profile2D
+    from cady.geometry import Body3, Line2, Mesh3, Profile2
     from cady.operations import box, cut_mesh_by_plane, profile_rectangle
     from cady.product import Assembly, Part
     from cady.view import Camera, Scene
 
-    assert all((Drawing2D, Line2D, Profile2D, Body3D, Mesh3D, Part, Assembly))
+    assert all((Drawing2, Line2, Profile2, Body3, Mesh3, Part, Assembly))
     assert all((Camera, Scene, profile_rectangle, box, files))
     assert cut_mesh_by_plane
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
@@ -74,15 +74,15 @@ def test_preferred_package_imports() -> None:
 
 
 def test_removed_compatibility_package_replacements() -> None:
-    from cady.geometry import Body3D, Line2D, Mesh3D, Profile2D
-    from cady.geometry import Body3D as NewBody3D
-    from cady.geometry import Line2D as NewLine2D
+    from cady.geometry import Body3, Line2, Mesh3, Profile2
+    from cady.geometry import Body3 as NewBody3
+    from cady.geometry import Line2 as NewLine2
     from cady.operations import box, cut_mesh_by_plane, profile_rectangle
     from cady.operations import cut_mesh_by_plane as new_cut_mesh_by_plane
 
-    assert Line2D is NewLine2D
-    assert Body3D is NewBody3D
-    assert all((Profile2D, Mesh3D, profile_rectangle, box))
+    assert Line2 is NewLine2
+    assert Body3 is NewBody3
+    assert all((Profile2, Mesh3, profile_rectangle, box))
     assert cut_mesh_by_plane is new_cut_mesh_by_plane
 
 
@@ -91,8 +91,8 @@ def test_removed_compatibility_package_replacements() -> None:
     [
         "build",
         "domain",
-        "geometry2d",
-        "geometry3d",
+        "geometry2",
+        "geometry3",
         "factories",
         "geom",
         "model",

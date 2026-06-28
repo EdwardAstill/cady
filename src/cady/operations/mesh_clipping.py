@@ -1,3 +1,5 @@
+"""Plane clipping for triangle meshes with optional planar caps."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -6,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.operations._mesh_arrays import coerce_mesh, return_mesh
-from cady.operations.arrays3d import ArrayMesh3
+from cady.operations.arrays3 import ArrayMesh3
 from cady.operations.mesh_boundaries import Segment
 from cady.operations.mesh_caps import cap_loops_to_faces
 from cady.operations.planes import Point3Array, unit3, vector3
@@ -73,6 +75,7 @@ def cut_mesh_by_plane(
                     )
 
         if cap and any(distance < -tolerance for distance in distances):
+            # Collect the cut segment for this source triangle; later passes stitch loops.
             cut_points = _plane_points(clipped_polygon, origin, normal, tolerance)
             if len(cut_points) == 2:
                 start = _add_vertex(cut_points[0], output_vertices, index_by_key, tolerance)
@@ -147,6 +150,7 @@ def _clip_triangle(
     distances: list[float],
     tolerance: float,
 ) -> list[Point3Array]:
+    """Clip one triangle against the kept half-space of a plane."""
     clipped: list[Point3Array] = []
     for index, start in enumerate(points):
         end_index = (index + 1) % len(points)

@@ -1,11 +1,13 @@
+"""STL writers for semantic meshes and mesh-coercible CAD targets."""
+
 from __future__ import annotations
 
 import struct
 from pathlib import Path
 
-from cady.document import Document
 from cady.errors import WriteError
-from cady.geometry import Mesh3D
+from cady.files.utils import mesh_from_target
+from cady.geometry import Mesh3
 from cady.vec import Vec3
 
 Triangle3 = tuple[Vec3, Vec3, Vec3]
@@ -16,6 +18,7 @@ def _f(value: float) -> str:
 
 
 def write_ascii_stl(triangles: list[Triangle3], path: Path) -> None:
+    """Write triangles to an ASCII STL file."""
     if not triangles:
         raise WriteError("cannot write empty STL mesh")
     lines = ["solid cady"]
@@ -32,13 +35,16 @@ def write_ascii_stl(triangles: list[Triangle3], path: Path) -> None:
 
 
 def normal_for_triangle(tri: Triangle3) -> Vec3:
+    """Return a unit triangle normal, or the zero vector for degenerate faces."""
     normal = (tri[1] - tri[0]).cross(tri[2] - tri[0])
     try:
         return normal.normalised()
     except ValueError:
         return Vec3(0.0, 0.0, 0.0)
 
+
 def write_binary_stl(triangles: list[Triangle3], path: Path) -> None:
+    """Write triangles to a binary STL file."""
     if not triangles:
         raise WriteError("cannot write empty STL mesh")
     with path.open("wb") as handle:
@@ -62,6 +68,7 @@ def write_binary_stl(triangles: list[Triangle3], path: Path) -> None:
             ]
             handle.write(struct.pack("<12fH", *values, 0))
 
+
 def write(
     target: object,
     path: str | Path,
@@ -69,6 +76,7 @@ def write(
     ascii: bool = False,
     tolerance: float = 1e-3,
 ) -> object:
+    """Coerce ``target`` to a mesh and write it as ASCII or binary STL."""
     mesh = _mesh_from_target(target, tolerance=tolerance)
     triangles = list(_triangles(mesh))
     output = Path(path)
@@ -79,27 +87,11 @@ def write(
     return target
 
 
-def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3D:
-    if tolerance <= 0:
-        raise WriteError("tolerance must be positive")
-    if isinstance(target, Mesh3D):
-        return target
-    if isinstance(target, Document):
-        meshes: list[Mesh3D] = []
-        for item in (*target.parts, *target.assemblies):
-            meshes.append(_mesh_from_target(item.value, tolerance=tolerance))
-        if not meshes:
-            raise WriteError("document contains no meshable parts or assemblies")
-        return Mesh3D.merged(meshes)
-    to_mesh = getattr(target, "to_mesh", None)
-    if callable(to_mesh):
-        mesh = to_mesh(tolerance=tolerance)
-        if isinstance(mesh, Mesh3D):
-            return mesh
-    raise WriteError(f"{type(target).__name__} is not meshable")
+def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
+    return mesh_from_target(target, tolerance=tolerance)
 
 
-def _triangles(mesh: Mesh3D) -> tuple[Triangle3, ...]:
+def _triangles(mesh: Mesh3) -> tuple[Triangle3, ...]:
     return tuple(
         (
             Vec3.from_xyz(mesh.vertices[a].tuple()),

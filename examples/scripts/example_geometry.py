@@ -5,17 +5,17 @@ from pathlib import Path
 
 from cady import (
     Assembly,
-    Body3D,
+    Body3,
     Camera,
     DirectionalLight,
     DisplayStyle,
     Document,
-    Drawing2D,
+    Drawing2,
     Part,
-    Profile2D,
+    Profile2,
     Scene,
-    circle2d,
-    line2d,
+    circle2,
+    line2,
     profile_rectangle,
 )
 from cady.view import SceneObject
@@ -31,49 +31,49 @@ HOLE_RADIUS = 0.12
 
 @dataclass(frozen=True, slots=True)
 class PlateExample:
-    drawing: Drawing2D
+    drawing: Drawing2
     part: Part
-    profile: Profile2D
+    profile: Profile2
 
 
-def plate_profile() -> Profile2D:
+def plate_profile() -> Profile2:
     outline = profile_rectangle(PLATE_WIDTH, PLATE_HEIGHT)
-    hole = circle2d(HOLE_CENTRE, HOLE_RADIUS)
-    return Profile2D(outline.outer, holes=(hole,))
+    hole = circle2(HOLE_CENTRE, HOLE_RADIUS)
+    return Profile2(outline.outer, holes=(hole,))
 
 
-def plate_body() -> Body3D:
-    return Body3D.from_profile(plate_profile()).extrude(PLATE_THICKNESS)
+def plate_body() -> Body3:
+    return Body3.from_profile(plate_profile()).extrude(PLATE_THICKNESS)
 
 
 def plate_part(*, name: str = "plate") -> Part:
     return Part(name).with_body(plate_body())
 
 
-def plate_drawing(*, name: str = "front", title: str = "PLATE") -> Drawing2D:
+def plate_drawing(*, name: str = "front", title: str = "PLATE") -> Drawing2:
     profile = plate_profile()
     hole = profile.holes[0]
     return (
-        Drawing2D(name)
+        Drawing2(name)
         .add_layer("PLATE", color=7)
         .add_layer("CENTER", color=3, linetype="CENTER")
         .add_layer("TEXT", color=2)
         .add(profile.outer, layer="PLATE")
         .add(hole, layer="PLATE")
-        .add(line2d((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
-        .add(line2d((0.38, 0.3), (0.62, 0.3)), layer="CENTER")
+        .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
+        .add(line2((0.38, 0.3), (0.62, 0.3)), layer="CENTER")
         .add_text(title, at=(0.02, 0.02), height=0.03, layer="TEXT")
     )
 
 
-def production_drawing() -> Drawing2D:
+def production_drawing() -> Drawing2:
     return (
         plate_drawing(name="production_plate", title="PRODUCTION PLATE")
         .add_layer("SYMBOL", color=2)
-        .add(circle2d((0.5, 0.3), 0.025), layer="SYMBOL")
-        .add(circle2d((0.82, 0.3), 0.025), layer="SYMBOL")
-        .add(line2d((0.0, -0.08), (1.0, -0.08)), layer="PLATE")
-        .add(line2d((1.08, 0.0), (1.08, 0.6)), layer="PLATE")
+        .add(circle2((0.5, 0.3), 0.025), layer="SYMBOL")
+        .add(circle2((0.82, 0.3), 0.025), layer="SYMBOL")
+        .add(line2((0.0, -0.08), (1.0, -0.08)), layer="PLATE")
+        .add(line2((1.08, 0.0), (1.08, 0.6)), layer="PLATE")
     )
 
 
@@ -95,7 +95,7 @@ def plate_document(*, name: str = "model_plate") -> Document:
 
 
 def production_assembly() -> Assembly:
-    pin = Part("pin").with_body(Body3D.box(width=0.1, depth=0.1, height=0.08))
+    pin = Part("pin").with_body(Body3.box(width=0.1, depth=0.1, height=0.08))
     return (
         Assembly("production_plate")
         .add(plate_part(), name="plate")

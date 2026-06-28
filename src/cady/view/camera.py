@@ -1,3 +1,5 @@
+"""Camera definitions and validation for backend-independent scenes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ Vec3Like = tuple[float, float, float]
 
 
 def vec3(value: object, *, name: str) -> Vec3Like:
+    """Coerce a value to a finite 3D vector."""
     try:
         raw = tuple(float(component) for component in value)  # type: ignore[reportUnknownVariableType]
     except TypeError as exc:
@@ -47,6 +50,8 @@ def _reject_degenerate_basis(position: Vec3Like, target: Vec3Like, up: Vec3Like)
 
 @dataclass(frozen=True, slots=True)
 class Camera:
+    """Immutable camera description used by scene viewers."""
+
     position: Vec3Like
     target: Vec3Like
     up: Vec3Like = (0.0, 0.0, 1.0)
@@ -83,6 +88,7 @@ class Camera:
         target: object,
         up: object = (0.0, 0.0, 1.0),
     ) -> Camera:
+        """Create a camera from explicit position, target, and up vectors."""
         return cls(
             vec3(position, name="position"),
             vec3(target, name="target"),
@@ -98,6 +104,7 @@ class Camera:
         up: object = (0.0, 0.0, 1.0),
         fov_degrees: float = 45.0,
     ) -> Camera:
+        """Create a perspective camera."""
         return cls(
             vec3(position, name="position"),
             vec3(target, name="target"),
@@ -115,6 +122,7 @@ class Camera:
         up: object = (0.0, 0.0, 1.0),
         scale: float = 1.0,
     ) -> Camera:
+        """Create an orthographic camera."""
         return cls(
             vec3(position, name="position"),
             vec3(target, name="target"),

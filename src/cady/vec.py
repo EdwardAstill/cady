@@ -1,3 +1,5 @@
+"""Small immutable 2D and 3D vector value types."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -10,6 +12,8 @@ from cady.utils import finite
 
 @dataclass(frozen=True, slots=True)
 class Vec2:
+    """Immutable 2D vector with basic arithmetic helpers."""
+
     x: float
     y: float
 
@@ -19,6 +23,7 @@ class Vec2:
 
     @classmethod
     def from_xy(cls, value: Vec2 | tuple[float, float]) -> Self:
+        """Coerce an existing vector or 2-tuple into ``Vec2``."""
         if isinstance(value, Vec2):
             return cls(value.x, value.y)
         if len(value) != 2:
@@ -54,12 +59,15 @@ class Vec2:
     __rmul__ = __mul__
 
     def dot(self, other: Vec2) -> float:
+        """Return the scalar dot product."""
         return self.x * other.x + self.y * other.y
 
     def length(self) -> float:
+        """Return the Euclidean vector length."""
         return sqrt(self.dot(self))
 
     def normalised(self) -> Vec2:
+        """Return the unit-length version of this vector."""
         length = self.length()
         if length == 0:
             raise ValueError("cannot normalise zero Vec2")
@@ -71,6 +79,8 @@ class Vec2:
 
 @dataclass(frozen=True, slots=True)
 class Vec3:
+    """Immutable 3D vector with common geometric helpers."""
+
     x: float
     y: float
     z: float
@@ -82,6 +92,7 @@ class Vec3:
 
     @classmethod
     def from_xyz(cls, value: Vec3 | tuple[float, float, float]) -> Self:
+        """Coerce an existing vector or 3-tuple into ``Vec3``."""
         if isinstance(value, Vec3):
             return cls(value.x, value.y, value.z)
         if len(value) != 3:
@@ -122,9 +133,11 @@ class Vec3:
     __rmul__ = __mul__
 
     def dot(self, other: Vec3) -> float:
+        """Return the scalar dot product."""
         return self.x * other.x + self.y * other.y + self.z * other.z
 
     def cross(self, other: Vec3) -> Vec3:
+        """Return the vector cross product."""
         return Vec3(
             self.y * other.z - self.z * other.y,
             self.z * other.x - self.x * other.z,
@@ -132,9 +145,11 @@ class Vec3:
         )
 
     def length(self) -> float:
+        """Return the Euclidean vector length."""
         return sqrt(self.dot(self))
 
     def normalised(self) -> Vec3:
+        """Return the unit-length version of this vector."""
         length = self.length()
         if length == 0:
             raise ValueError("cannot normalise zero Vec3")
@@ -144,24 +159,29 @@ class Vec3:
         return (self.x, self.y, self.z)
 
     def is_parallel(self, other: Vec3, *, tol: float = 1e-6) -> bool:
+        """Return whether two vectors are parallel within a squared tolerance."""
         c = self.cross(other)
         return c.dot(c) < tol * tol
 
     def distance_to_line(self, line_point: Vec3, line_dir: Vec3) -> float:
+        """Return perpendicular distance from this point to an infinite line."""
         d = self - line_point
         c = d.cross(line_dir)
         return c.length() / line_dir.length()
 
     def project_onto_line(self, line_point: Vec3, line_dir: Vec3) -> float:
+        """Return the scalar projection parameter along an infinite line."""
         d = self - line_point
         return d.dot(line_dir) / line_dir.dot(line_dir)
 
 
 def promote2(value: Vec2 | tuple[float, float]) -> Vec2:
+    """Coerce a 2D tuple-like value to ``Vec2``."""
     return Vec2.from_xy(value)
 
 
 def promote3(value: Vec3 | tuple[float, float, float]) -> Vec3:
+    """Coerce a 3D tuple-like value to ``Vec3``."""
     return Vec3.from_xyz(value)
 
 

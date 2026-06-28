@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from collections import Counter
+from math import isclose
 from pathlib import Path
 from types import ModuleType
 
@@ -11,11 +12,17 @@ from cady.view import prepare_scene
 def test_slice_y_values_are_generated_from_min_max_and_count() -> None:
     module = _load_testing_example()
 
-    assert module.slice_y_values(
+    y_values = module.slice_y_values(
         min_y=module.MIN_SLICE_Y,
         max_y=module.MAX_SLICE_Y,
         slices=module.SLICES,
-    ) == (-5.0, -2.5, 0.0, 2.5, 5.0)
+    )
+    steps = [right - left for left, right in zip(y_values[:-1], y_values[1:], strict=True)]
+
+    assert len(y_values) == module.SLICES
+    assert y_values[0] == module.MIN_SLICE_Y
+    assert y_values[-1] == module.MAX_SLICE_Y
+    assert all(isclose(step, steps[0]) for step in steps)
 
 
 def test_slice_y_values_require_more_than_two_slices() -> None:
@@ -53,16 +60,11 @@ def test_quarter_sphere_slice_planes_add_intersection_nodes() -> None:
 
     assert len(nodes) == len(wireframe.edges)
     assert all(isinstance(edge_nodes, list) for edge_nodes in nodes)
-    assert len(node_cloud.vertices) == 11
-    assert Counter(round(vertex.y, 6) for vertex in node_cloud.vertices) == Counter(
-        {
-            -5.0: 1,
-            -2.5: 3,
-            0.0: 3,
-            2.5: 3,
-            5.0: 1,
-        }
-    )
+    assert len(node_cloud.vertices) == 2 + len(module.ARC_ANGLES) * (module.SLICES - 2)
+    assert Counter(round(vertex.y, 6) for vertex in node_cloud.vertices) == Counter({
+        round(y, 6): 1 if index in (0, len(y_values) - 1) else len(module.ARC_ANGLES)
+        for index, y in enumerate(y_values)
+    })
 
 
 def test_quarter_sphere_scene_displays_intersection_mesh_and_nodes() -> None:
@@ -83,25 +85,32 @@ def test_quarter_sphere_scene_displays_intersection_mesh_and_nodes() -> None:
     scene = module.build_scene(wireframe, planes, nodes)
     prepared = prepare_scene(scene, tolerance=1e-3)
     node_mesh = module.intersection_nodes_to_edge_mesh(nodes)
+    expected_mesh_vertices = len(module.ARC_ANGLES) * module.SLICES
+    expected_mesh_faces = (len(module.ARC_ANGLES) - 1) * (module.SLICES - 1) * 2
+    expected_mesh_edges = (
+        len(module.ARC_ANGLES) * (module.SLICES - 1)
+        + (len(module.ARC_ANGLES) - 1) * module.SLICES
+    )
+    expected_node_vertices = 2 + len(module.ARC_ANGLES) * (module.SLICES - 2)
 
     assert scene.objects[-2].object_name == "plane_intersection_mesh"
     assert scene.objects[-2].style == module.NODE_MESH_STYLE
     assert scene.objects[-2].target == node_mesh
-    assert len(node_mesh.vertices) == 15
-    assert len(node_mesh.faces) == 16
-    assert len(node_mesh.edges) == 22
+    assert len(node_mesh.vertices) == expected_mesh_vertices
+    assert len(node_mesh.faces) == expected_mesh_faces
+    assert len(node_mesh.edges) == expected_mesh_edges
     assert scene.objects[-1].object_name == "plane_intersection_nodes"
     assert scene.objects[-1].style == module.NODE_STYLE
     assert scene.objects[-1].target == module.intersection_nodes_to_point_cloud(nodes)
     assert prepared.meshes[-2].name == "plane_intersection_mesh"
     assert prepared.meshes[-2].render_mode == "shaded"
-    assert len(prepared.meshes[-2].vertices) == 15
-    assert len(prepared.meshes[-2].faces) == 16
-    assert len(prepared.meshes[-2].edges) == 22
+    assert len(prepared.meshes[-2].vertices) == expected_mesh_vertices
+    assert len(prepared.meshes[-2].faces) == expected_mesh_faces
+    assert len(prepared.meshes[-2].edges) == expected_mesh_edges
     assert prepared.meshes[-1].name == "plane_intersection_nodes"
     assert prepared.meshes[-1].render_mode == "points"
     assert prepared.meshes[-1].point_size == module.NODE_STYLE.point_size
-    assert len(prepared.meshes[-1].vertices) == 11
+    assert len(prepared.meshes[-1].vertices) == expected_node_vertices
 
 
 def test_intersection_nodes_to_edge_mesh_connects_matrix_neighbours() -> None:

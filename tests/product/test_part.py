@@ -4,13 +4,13 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from cady.geometry import Mesh3D
+from cady.geometry import Mesh3
 from cady.product import Material, Part, ProductError
 from cady.vec import Vec3
 
 
-def _triangle(offset: float = 0.0) -> Mesh3D:
-    return Mesh3D(
+def _triangle(offset: float = 0.0) -> Mesh3:
+    return Mesh3(
         (
             Vec3(offset, 0.0, 0.0),
             Vec3(offset + 1.0, 0.0, 0.0),
@@ -21,12 +21,18 @@ def _triangle(offset: float = 0.0) -> Mesh3D:
 
 
 class MeshableBody:
-    def __init__(self, mesh: Mesh3D) -> None:
+    def __init__(self, mesh: Mesh3) -> None:
         self.mesh = mesh
 
-    def to_mesh(self, *, tolerance: float) -> Mesh3D:
+    def to_mesh(self, *, tolerance: float) -> Mesh3:
         assert tolerance == 1e-3
         return self.mesh
+
+
+class BadMeshableBody:
+    def to_mesh(self, *, tolerance: float) -> object:
+        assert tolerance == 1e-3
+        return object()
 
 
 def test_material_and_part_are_immutable_values() -> None:
@@ -61,3 +67,8 @@ def test_empty_part_meshes_to_empty_mesh() -> None:
 
     assert mesh.vertices == ()
     assert mesh.faces == ()
+
+
+def test_part_rejects_non_mesh3_to_mesh_results() -> None:
+    with pytest.raises(ProductError, match="to_mesh\\(\\) must return Mesh3"):
+        Part("bad").with_body(BadMeshableBody()).to_mesh(tolerance=1e-3)

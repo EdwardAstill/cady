@@ -1,3 +1,5 @@
+"""Assembly containers, instances, and flattening helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -9,7 +11,7 @@ from cady.product.material import Metadata, metadata_items
 from cady.product.part import Part
 
 if TYPE_CHECKING:
-    from cady.geometry import Mesh3D
+    from cady.geometry import Mesh3
     from cady.operations.transforms import Transform3
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
@@ -17,24 +19,15 @@ if TYPE_CHECKING:
 
 
 def _transform_from_pose(pose: object | None) -> Transform3:
-    from cady.operations.transforms import Transform3
+    """Coerce an optional pose-like value to a concrete transform."""
+    from cady.operations.transforms import coerce_transform3
 
-    if pose is None:
-        return Transform3.identity()
-    if isinstance(pose, Transform3):
-        return pose
-    to_transform3 = getattr(pose, "to_transform3", None)
-    if callable(to_transform3):
-        transform = to_transform3()
-        if isinstance(transform, Transform3):
-            return transform
     try:
-        values = tuple(float(component) for component in pose)  # type: ignore[reportUnknownVariableType]
-    except TypeError:
-        values = ()
-    if len(values) == 3:
-        return Transform3.translation(values[0], values[1], values[2])
-    raise ProductError("pose must be None, Transform3, Pose3-like, or a 3D translation")
+        return coerce_transform3(pose, allow_none=True)
+    except TypeError as exc:
+        raise ProductError(
+            "pose must be None, Transform3, Pose3-like, or a 3D translation"
+        ) from exc
 
 
 def _compose(parent: Transform3, child: Transform3) -> Transform3:
@@ -43,6 +36,8 @@ def _compose(parent: Transform3, child: Transform3) -> Transform3:
 
 @dataclass(frozen=True, slots=True)
 class PartInstance:
+    """Placed instance of a part within an assembly."""
+
     part: Part
     name: str | None = None
     pose: object | None = None
@@ -56,11 +51,14 @@ class PartInstance:
 
     @property
     def instance_name(self) -> str:
+        """Return the explicit instance name or fall back to the part name."""
         return self.name or self.part.name
 
 
 @dataclass(frozen=True, slots=True)
 class AssemblyInstance:
+    """Placed instance of a child assembly within a parent assembly."""
+
     assembly: Assembly
     name: str | None = None
     pose: object | None = None
@@ -74,11 +72,14 @@ class AssemblyInstance:
 
     @property
     def instance_name(self) -> str:
+        """Return the explicit instance name or fall back to the assembly name."""
         return self.name or self.assembly.name
 
 
 @dataclass(frozen=True, slots=True)
 class FlattenedPart:
+    """Part instance resolved to world transform and traversal path."""
+
     part: Part
     name: str
     transform: Transform3
@@ -87,6 +88,8 @@ class FlattenedPart:
 
 @dataclass(frozen=True, slots=True)
 class Assembly:
+    """Hierarchical collection of part and assembly instances."""
+
     name: str
     part_instances: tuple[PartInstance, ...] = field(default_factory=tuple)
     assembly_instances: tuple[AssemblyInstance, ...] = field(default_factory=tuple)
@@ -108,6 +111,7 @@ class Assembly:
         name: str | None = None,
         pose: object | None = None,
     ) -> Assembly:
+        """Dispatch to ``add_part`` or ``add_assembly`` based on target type."""
         if isinstance(target, Part):
             return self.add_part(target, name=name, pose=pose)
         return self.add_assembly(target, name=name, pose=pose)
@@ -120,6 +124,7 @@ class Assembly:
         pose: object | None = None,
         metadata: Mapping[str, Any] | Metadata | None = None,
     ) -> Assembly:
+        """Return a new assembly with an added part instance."""
         instance = PartInstance(part, name=name, pose=pose, metadata=metadata_items(metadata))
         return Assembly(
             self.name,
@@ -136,6 +141,7 @@ class Assembly:
         pose: object | None = None,
         metadata: Mapping[str, Any] | Metadata | None = None,
     ) -> Assembly:
+        """Return a new assembly with an added child assembly instance."""
         if assembly is self or _contains_assembly(assembly, self):
             raise ProductError("assembly cycle detected")
         instance = AssemblyInstance(
@@ -152,6 +158,7 @@ class Assembly:
         )
 
     def with_metadata(self, **metadata: Any) -> Assembly:
+        """Return a new assembly with merged metadata values."""
         return Assembly(
             self.name,
             part_instances=self.part_instances,
@@ -160,18 +167,20 @@ class Assembly:
         )
 
     def flatten(self) -> tuple[FlattenedPart, ...]:
+        """Resolve the assembly tree into positioned part instances."""
         return _flatten_assembly(self, _transform_from_pose(None), (), set())
 
-    def to_mesh(self, *, tolerance: float) -> Mesh3D:
-        from cady.geometry import Mesh3D
+    def to_mesh(self, *, tolerance: float) -> Mesh3:
+        """Mesh every flattened part and merge the transformed results."""
+        from cady.geometry import Mesh3
 
         if tolerance <= 0.0:
             raise ProductError("tolerance must be positive")
-        meshes: list[Mesh3D] = []
+        meshes: list[Mesh3] = []
         for item in self.flatten():
             mesh = item.part.to_mesh(tolerance=tolerance)
             meshes.append(mesh.transformed(item.transform))
-        return Mesh3D.merged(meshes)
+        return Mesh3.merged(meshes)
 
     def view(
         self,
@@ -210,6 +219,7 @@ def _flatten_assembly(
     parent_path: tuple[str, ...],
     seen: set[int],
 ) -> tuple[FlattenedPart, ...]:
+    """Walk the assembly tree and accumulate transforms and path names."""
     identity = id(assembly)
     if identity in seen:
         raise ProductError("assembly cycle detected")
@@ -228,6 +238,7 @@ def _flatten_assembly(
         )
     for instance in assembly.assembly_instances:
         transform = _compose(parent_transform, _transform_from_pose(instance.pose))
+        # Carry the composed transform and full traversal path into child assemblies.
         flattened.extend(
             _flatten_assembly(
                 instance.assembly,
@@ -240,6 +251,7 @@ def _flatten_assembly(
 
 
 def _contains_assembly(root: Assembly, target: Assembly, seen: set[int] | None = None) -> bool:
+    """Return whether ``target`` already appears within ``root``."""
     seen = set() if seen is None else seen
     identity = id(root)
     if identity in seen:
@@ -254,6 +266,7 @@ def _contains_assembly(root: Assembly, target: Assembly, seen: set[int] | None =
 
 
 def _detect_cycles(assembly: Assembly, seen: set[int] | None = None) -> None:
+    """Raise if an assembly graph contains a recursive reference."""
     seen = set() if seen is None else seen
     identity = id(assembly)
     if identity in seen:
@@ -266,6 +279,7 @@ def _detect_cycles(assembly: Assembly, seen: set[int] | None = None) -> None:
 def _reject_duplicate_instance_names(
     instances: tuple[PartInstance | AssemblyInstance, ...],
 ) -> None:
+    """Reject sibling instances that would collide by visible name."""
     names = [instance.instance_name for instance in instances]
     if len(names) != len(set(names)):
         raise ProductError("duplicate instance names are not allowed in an assembly")

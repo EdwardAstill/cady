@@ -8,7 +8,7 @@ Instead:
     2. Refine each plane-to-plane section by arc length along its source line.
     3. Build each strip between neighbouring longitudinal lines from the two
        refined boundary chains.
-    4. Weld all strips into one Mesh3D so shared longitudinal rows are not seams.
+    4. Weld all strips into one Mesh3 so shared longitudinal rows are not seams.
 
 Usage from the repository root:
     PYTHONPATH=src .venv/bin/python examples/testing/testing5-strip-mesh.py
@@ -26,12 +26,12 @@ from cady import (
     Camera,
     DirectionalLight,
     DisplayStyle,
-    Mesh3D,
-    PointCloud3D,
-    Polyline3D,
+    Mesh3,
+    PointCloud3,
+    Polyline3,
     Scene,
     Vec3,
-    Wireframe3D,
+    Wireframe3,
 )
 from cady.view import view_scene
 
@@ -106,7 +106,7 @@ class StripMeshData:
 
     base_node_array: NodeArray
     refined_rows: list[RefinedPolylineRow]
-    mesh: Mesh3D
+    mesh: Mesh3
 
     @property
     def refined_node_count(self) -> int:
@@ -155,7 +155,7 @@ def slice_y_values(*, min_y: float, max_y: float, slices: int) -> tuple[float, .
 
 
 def slice_linesplan(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     *,
     y_values: Iterable[float],
     tolerance: float = INTERSECTION_TOLERANCE,
@@ -179,7 +179,7 @@ def slice_linesplan(
 
 
 def slice_polyline_at_y_values(
-    polyline: Polyline3D,
+    polyline: Polyline3,
     y_values: tuple[float, ...],
     *,
     polyline_index: int,
@@ -199,7 +199,7 @@ def slice_polyline_at_y_values(
 
 
 def polyline_y_intersection(
-    polyline: Polyline3D,
+    polyline: Polyline3,
     y: float,
     *,
     tolerance: float,
@@ -257,7 +257,7 @@ def segment_y_intersection(
 
 
 def build_distance_refined_strip_mesh(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     *,
     y_values: Iterable[float],
     max_segment_length: float | None,
@@ -307,7 +307,7 @@ def selected_refinement_rows(
 
 
 def refine_polyline_row(
-    polyline: Polyline3D,
+    polyline: Polyline3,
     base_row: Iterable[Vec3],
     *,
     max_segment_length: float | None,
@@ -437,7 +437,7 @@ def refined_rows_to_strip_mesh(
     refined_rows: Iterable[RefinedPolylineRow],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> Mesh3D:
+) -> Mesh3:
     """Triangulate each neighbouring-row strip and weld all strips together."""
     require_positive_tolerance(tolerance)
 
@@ -469,7 +469,7 @@ def refined_rows_to_strip_mesh(
             tolerance=tolerance,
         )
 
-    return Mesh3D(tuple(vertices), tuple(faces), tuple(edges))
+    return Mesh3(tuple(vertices), tuple(faces), tuple(edges))
 
 
 def add_strip_faces(
@@ -629,7 +629,7 @@ def is_degenerate_face(
 # -----------------------------------------------------------------------------
 
 
-def polyline_vertices(polyline: Polyline3D) -> tuple[Vec3, ...]:
+def polyline_vertices(polyline: Polyline3) -> tuple[Vec3, ...]:
     vertices = tuple(as_vec3(vertex) for vertex in polyline.vertices)
     if len(vertices) < 2:
         raise ValueError("source polyline must contain at least two vertices")
@@ -708,7 +708,7 @@ def slice_planes(
     *,
     radius: float,
     y_values: Iterable[float],
-) -> tuple[tuple[float, Mesh3D], ...]:
+) -> tuple[tuple[float, Mesh3], ...]:
     return tuple(
         (
             y,
@@ -733,7 +733,7 @@ def plane_grid(
     z_min: float,
     z_max: float,
     steps: int,
-) -> Mesh3D:
+) -> Mesh3:
     vertices = [
         Vec3(x_min, y, z_max),
         Vec3(x_max, y, z_max),
@@ -748,7 +748,7 @@ def plane_grid(
         edges.append(add_display_segment(vertices, (x, y, z_min), (x, y, z_max)))
         edges.append(add_display_segment(vertices, (x_min, y, z), (x_max, y, z)))
 
-    return Mesh3D(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
+    return Mesh3(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
 
 
 def add_display_segment(
@@ -763,9 +763,9 @@ def add_display_segment(
 
 
 def build_scene(
-    wireframe: Wireframe3D,
-    planes: Iterable[tuple[float, Mesh3D]],
-    nodes: Mesh3D | Iterable[Iterable[Vec3]] | PointCloud3D | None = None,
+    wireframe: Wireframe3,
+    planes: Iterable[tuple[float, Mesh3]],
+    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3 | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_strip_mesh").add(
         wireframe,
@@ -781,7 +781,7 @@ def build_scene(
 
 def add_planes_to_scene(
     scene: Scene,
-    planes: Iterable[tuple[float, Mesh3D]],
+    planes: Iterable[tuple[float, Mesh3]],
 ) -> Scene:
     for index, (y, plane) in enumerate(planes):
         scene = scene.add(
@@ -794,7 +794,7 @@ def add_planes_to_scene(
 
 def add_nodes_to_scene(
     scene: Scene,
-    nodes: Mesh3D | Iterable[Iterable[Vec3]] | PointCloud3D | None,
+    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3 | None,
 ) -> Scene:
     if nodes is None:
         return scene
@@ -819,16 +819,16 @@ def add_nodes_to_scene(
 
 
 def nodes_to_scene_geometry(
-    nodes: Mesh3D | Iterable[Iterable[Vec3]] | PointCloud3D,
-) -> tuple[Mesh3D | None, PointCloud3D]:
-    if isinstance(nodes, Mesh3D):
-        return nodes, PointCloud3D(nodes.vertices)
+    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3,
+) -> tuple[Mesh3 | None, PointCloud3]:
+    if isinstance(nodes, Mesh3):
+        return nodes, PointCloud3(nodes.vertices)
 
-    if isinstance(nodes, PointCloud3D):
+    if isinstance(nodes, PointCloud3):
         return None, nodes
 
     points = tuple(unique_points(nodes, tolerance=INTERSECTION_TOLERANCE))
-    return None, PointCloud3D(points)
+    return None, PointCloud3(points)
 
 
 # -----------------------------------------------------------------------------
@@ -989,9 +989,9 @@ def require_positive_tolerance(tolerance: float) -> None:
 
 
 def print_scene_summary(
-    linesplan: Iterable[Polyline3D],
-    wireframe: Wireframe3D,
-    planes: Iterable[tuple[float, Mesh3D]],
+    linesplan: Iterable[Polyline3],
+    wireframe: Wireframe3,
+    planes: Iterable[tuple[float, Mesh3]],
     strip_mesh: StripMeshData,
 ) -> None:
     print("quarter sphere wireframe")
@@ -1024,7 +1024,7 @@ def print_scene_summary(
         print(f"distance refinement: max segment length {MAX_SEGMENT_LENGTH:g}")
 
 
-def print_wireframe_summary(wireframe: Wireframe3D) -> None:
+def print_wireframe_summary(wireframe: Wireframe3) -> None:
     lower, upper = wireframe.bounds()
     print(
         f"wireframe: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "

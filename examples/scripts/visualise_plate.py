@@ -5,7 +5,7 @@ from pathlib import Path
 
 from example_geometry import GALLERY_DIR, plate_document, scene_for_target, scene_summary
 
-from cady import Drawing2D, Part
+from cady import Drawing2, Part
 from cady.files import dxf, stl
 
 
@@ -19,7 +19,7 @@ def main() -> None:
     document = plate_document()
     drawing = document.get("drawing", "front")
     part = document.get("part", "plate")
-    if not isinstance(drawing, Drawing2D) or not isinstance(part, Part):
+    if not isinstance(drawing, Drawing2) or not isinstance(part, Part):
         raise TypeError("plate document has unexpected contents")
 
     scene = scene_for_target(part, name="plate_scene")

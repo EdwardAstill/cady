@@ -1,3 +1,5 @@
+"""Scene graph values for backend-independent viewing."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -13,6 +15,8 @@ from cady.view.style import DisplayStyle
 
 @dataclass(frozen=True, slots=True)
 class SceneObject:
+    """Reference to a target object together with pose and style overrides."""
+
     target: object
     name: str | None = None
     pose: object | None = None
@@ -28,6 +32,7 @@ class SceneObject:
 
     @property
     def object_name(self) -> str:
+        """Return the explicit name, target name, or target type name."""
         if self.name is not None:
             return self.name
         target_name = getattr(self.target, "name", None)
@@ -38,6 +43,8 @@ class SceneObject:
 
 @dataclass(frozen=True, slots=True)
 class Scene:
+    """Immutable collection of objects, cameras, and lights."""
+
     name: str = "scene"
     objects: tuple[SceneObject, ...] = field(default_factory=tuple)
     cameras: tuple[tuple[str, Camera], ...] = field(default_factory=tuple)
@@ -61,14 +68,17 @@ class Scene:
 
     @classmethod
     def from_target(cls, target: object, *, name: str = "scene") -> Scene:
+        """Create a scene containing a single target."""
         return cls(name=name).add(target)
 
     @classmethod
     def from_part(cls, part: object, *, name: str = "scene") -> Scene:
+        """Create a single-part scene."""
         return cls.from_target(part, name=name)
 
     @classmethod
     def from_assembly(cls, assembly: object, *, name: str = "scene") -> Scene:
+        """Create a single-assembly scene."""
         return cls.from_target(assembly, name=name)
 
     def add(
@@ -80,6 +90,7 @@ class Scene:
         style: DisplayStyle | None = None,
         metadata: Mapping[str, Any] | Metadata | None = None,
     ) -> Scene:
+        """Return a copy with one more target wrapped as a scene object."""
         return self.add_object(
             SceneObject(
                 target,
@@ -91,6 +102,7 @@ class Scene:
         )
 
     def add_object(self, obj: object) -> Scene:
+        """Return a copy with an existing scene object appended."""
         if not isinstance(obj, SceneObject):
             raise ViewError("scene objects must be SceneObject values")
         return Scene(
@@ -104,6 +116,7 @@ class Scene:
         )
 
     def with_camera(self, camera: object, *, name: str = "camera", active: bool = True) -> Scene:
+        """Return a copy with an additional named camera."""
         if not isinstance(camera, Camera):
             raise ViewError("camera must be a Camera")
         if not name:
@@ -121,6 +134,7 @@ class Scene:
         )
 
     def with_light(self, light: object) -> Scene:
+        """Return a copy with an additional light."""
         if not isinstance(light, Light):
             raise ViewError("light must be a Light")
         return Scene(
@@ -134,6 +148,7 @@ class Scene:
         )
 
     def with_metadata(self, **metadata: Any) -> Scene:
+        """Return a copy with merged scene metadata."""
         return Scene(
             name=self.name,
             objects=self.objects,

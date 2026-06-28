@@ -1,3 +1,5 @@
+"""Light definitions for backend-independent scene descriptions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,6 +12,8 @@ from cady.view.errors import ViewError
 
 @dataclass(frozen=True, slots=True)
 class Light:
+    """Base light with validated intensity and RGB color."""
+
     intensity: float = 1.0
     color: Color = (1.0, 1.0, 1.0)
 
@@ -21,11 +25,15 @@ class Light:
 
 @dataclass(frozen=True, slots=True)
 class AmbientLight(Light):
+    """Uniform scene lighting with no direction."""
+
     pass
 
 
 @dataclass(frozen=True, slots=True)
 class DirectionalLight(Light):
+    """Light emitted from infinitely far away along a direction."""
+
     direction: Vec3Like = (0.0, 0.0, -1.0)
 
     def __post_init__(self) -> None:
@@ -38,6 +46,8 @@ class DirectionalLight(Light):
 
 @dataclass(frozen=True, slots=True)
 class PointLight(Light):
+    """Light emitted from a position, optionally with a finite range."""
+
     position: Vec3Like = (0.0, 0.0, 0.0)
     range: float | None = None
 

@@ -1,9 +1,11 @@
+"""Helpers for accepting mesh inputs as objects or raw arrays."""
+
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.operations.arrays3d import ArrayMesh3
+from cady.operations.arrays3 import ArrayMesh3
 
 
 def coerce_mesh(
@@ -11,6 +13,7 @@ def coerce_mesh(
     faces: object | None,
     edges: object | None = None,
 ) -> tuple[ArrayMesh3, bool]:
+    """Return an ``ArrayMesh3`` and whether the caller passed raw arrays."""
     if isinstance(mesh_or_vertices, ArrayMesh3):
         return mesh_or_vertices, False
     if faces is None:
@@ -33,6 +36,7 @@ def return_mesh(
     NDArray[np.int64],
     NDArray[np.int64],
 ]:
+    """Mirror the caller's preferred mesh representation."""
     if as_tuple:
         return mesh.vertices, mesh.faces, mesh.edges
     return mesh

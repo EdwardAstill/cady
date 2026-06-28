@@ -1,4 +1,4 @@
-"""Demo: close simple edge geometry to a plane using Mesh3D.close_to_plane.
+"""Demo: close simple edge geometry to a plane using Mesh3.close_to_plane.
 
 Builds a 3D square wireframe elevated above the XY plane, visualises it,
 then wraps the edges in an edge-only mesh, projects them to Z=0, and creates
@@ -10,14 +10,14 @@ Usage:
 
 from __future__ import annotations
 
-from cady import DisplayStyle, Mesh3D, Vec3, Wireframe3D
+from cady import DisplayStyle, Mesh3, Vec3, Wireframe3
 
 SQUARE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 CLOSED_STYLE = DisplayStyle(color=(0.72, 0.25, 0.12))
 HIGHLIGHT_STYLE = DisplayStyle(color=(0.12, 0.72, 0.25))
 
 
-def build_upright_square() -> Wireframe3D:
+def build_upright_square() -> Wireframe3:
     """Build a square standing on the XY plane, 2x2, offset 1 unit above Z=0."""
     vertices = (
         Vec3(0, 0, 1),
@@ -26,10 +26,10 @@ def build_upright_square() -> Wireframe3D:
         Vec3(0, 2, 1),
     )
     edges = ((0, 1), (1, 2), (2, 3), (3, 0))
-    return Wireframe3D(vertices, edges)
+    return Wireframe3(vertices, edges)
 
 
-def build_cube_wireframe() -> Wireframe3D:
+def build_cube_wireframe() -> Wireframe3:
     """Build a wireframe cube 2x2x2 with bottom at Z=0."""
     vertices = (
         Vec3(0, 0, 0),
@@ -55,10 +55,10 @@ def build_cube_wireframe() -> Wireframe3D:
         (2, 6),
         (3, 7),  # verticals
     )
-    return Wireframe3D(vertices, edges)
+    return Wireframe3(vertices, edges)
 
 
-def print_summary(label: str, wf: Wireframe3D, mesh: Mesh3D | None = None) -> None:
+def print_summary(label: str, wf: Wireframe3, mesh: Mesh3 | None = None) -> None:
     print(f"--- {label} ---")
     print(f"  wireframe: {len(wf.vertices)} vertices, {len(wf.edges)} edges")
     if mesh is not None:
@@ -72,7 +72,7 @@ def main() -> None:
     square.view(title="Wireframe square — before close_to_plane", style=SQUARE_STYLE)
 
     # Close to Z=0 plane
-    closed_square = Mesh3D(square.vertices, (), square.edges).close_to_plane(
+    closed_square = Mesh3(square.vertices, (), square.edges).close_to_plane(
         plane_origin=(0, 0, 0),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,
@@ -87,7 +87,7 @@ def main() -> None:
     cube.view(title="Wireframe cube — before close_to_plane", style=SQUARE_STYLE)
 
     # Close bottom to Z=0 (already there, should be no-op or minimal)
-    closed_cube = Mesh3D(cube.vertices, (), cube.edges).close_to_plane(
+    closed_cube = Mesh3(cube.vertices, (), cube.edges).close_to_plane(
         plane_origin=(0, 0, 0),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,
@@ -97,7 +97,7 @@ def main() -> None:
     closed_cube.view(title="Wireframe cube — bottom to Z=0", style=CLOSED_STYLE)
 
     # Close top to Z=2
-    closed_cube_top = Mesh3D(cube.vertices, (), cube.edges).close_to_plane(
+    closed_cube_top = Mesh3(cube.vertices, (), cube.edges).close_to_plane(
         plane_origin=(0, 0, 2),
         plane_normal=(0, 0, 1),
         tolerance=1e-3,

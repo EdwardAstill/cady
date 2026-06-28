@@ -1,3 +1,5 @@
+"""Material records and metadata helpers for product models."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -10,6 +12,7 @@ Color = tuple[float, float, float]
 
 
 def metadata_items(value: Mapping[str, Any] | Metadata | None) -> Metadata:
+    """Normalise metadata to a stable tuple-of-pairs representation."""
     if value is None:
         return ()
     if isinstance(value, tuple):
@@ -18,6 +21,7 @@ def metadata_items(value: Mapping[str, Any] | Metadata | None) -> Metadata:
 
 
 def rgb(value: object | None, *, name: str = "color") -> Color | None:
+    """Validate and coerce an RGB triple with components in ``[0, 1]``."""
     if value is None:
         return None
     try:
@@ -33,6 +37,8 @@ def rgb(value: object | None, *, name: str = "color") -> Color | None:
 
 @dataclass(frozen=True, slots=True)
 class Material:
+    """Named material with optional density, colour, and metadata."""
+
     name: str
     density: float | None = None
     color: Color | None = None
@@ -47,6 +53,7 @@ class Material:
         object.__setattr__(self, "metadata", metadata_items(self.metadata))
 
     def with_metadata(self, **metadata: Any) -> Material:
+        """Return a new material with merged metadata values."""
         return Material(
             self.name,
             density=self.density,

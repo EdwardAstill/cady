@@ -1,3 +1,5 @@
+"""Public product API."""
+
 from cady.product.assembly import Assembly, AssemblyInstance, FlattenedPart, PartInstance
 from cady.product.errors import ProductError
 from cady.product.flatten import flatten_assembly

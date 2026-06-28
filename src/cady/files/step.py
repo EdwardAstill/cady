@@ -1,26 +1,11 @@
-from __future__ import annotations
-
-import math
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
-from importlib import import_module
-from pathlib import Path
-from types import MappingProxyType
-from typing import Any, Protocol, cast
-
-from cady.document import Document
-from cady.errors import WriteError
-from cady.geometry import Mesh3D
-from cady.vec import Vec3
-
 """Read STEP AP203/AP214 files and extract elementary surface geometry.
 
-Pure Python — no OpenCASCADE, no conda, no compiled dependencies.
+Pure Python; no OpenCASCADE, no conda, no compiled dependencies.
 Uses ``steputils`` for ISO 10303-21 parsing, then walks the entity
 graph to resolve faces, surfaces, and geometry primitives.
 
 Target: Inventor extrusions of structural members.  Complex NURBS
-surfaces (B_SPLINE_SURFACE, etc.) are not supported — only elementary
+surfaces (B_SPLINE_SURFACE, etc.) are not supported; only elementary
 surfaces (PLANE, CYLINDRICAL_SURFACE, CONICAL_SURFACE).
 
 Usage::
@@ -31,7 +16,20 @@ Usage::
         print(f.surface_type, f.normal, f.centroid)
 """
 
+from __future__ import annotations
 
+import math
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from importlib import import_module
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Protocol, cast
+
+from cady.errors import WriteError
+from cady.files.utils import mesh_from_target
+from cady.geometry import Mesh3
+from cady.vec import Vec3
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +146,46 @@ def _direction(entity: Any) -> tuple[float, float, float]:
     return (float(coords[0]), float(coords[1]), float(coords[2]))
 
 
+def _as_step_ref(value: object) -> str | None:
+    """Return a STEP entity reference like ``#123`` if present."""
+    if isinstance(value, str) and value.startswith("#"):
+        return value
+    return None
+
+
+def _iter_step_refs(value: object) -> Iterable[str]:
+    """Yield STEP references from a scalar ref, tuple wrapper, or iterable."""
+    ref = _as_step_ref(value)
+    if ref is not None:
+        yield ref
+        return
+    if isinstance(value, tuple) and value:
+        ref = _as_step_ref(cast(tuple[object, ...], value)[0])
+        if ref is not None:
+            yield ref
+        return
+    if isinstance(value, str) or not isinstance(value, Iterable):
+        return
+    for item in cast(Iterable[object], value):
+        yield from _iter_step_refs(item)
+
+
+def _resolve_ref_entity(resolver: _EntityResolver, value: object) -> Any | None:
+    """Resolve a STEP reference value to its entity, returning ``None`` if absent."""
+    ref = _as_step_ref(value)
+    if ref is None:
+        return None
+    return resolver.resolve_entity(ref)
+
+
+def _iter_resolved_entities(resolver: _EntityResolver, value: object) -> Iterable[Any]:
+    """Yield resolved entities for all STEP references contained in ``value``."""
+    for ref in _iter_step_refs(value):
+        entity = resolver.resolve_entity(ref)
+        if entity is not None:
+            yield entity
+
+
 def _axis2_placement(
     entity: Any,
     resolver: _EntityResolver,
@@ -163,8 +201,8 @@ def _axis2_placement(
         If optional ref_direction is missing, returns (1,0,0) as default.
     """
     # params: (name, cartesian_point_ref, axis_ref, [ref_direction_ref])
-    origin_entity = resolver.resolve_entity(entity.params[1])
-    axis_entity = resolver.resolve_entity(entity.params[2])
+    origin_entity = _resolve_ref_entity(resolver, entity.params[1])
+    axis_entity = _resolve_ref_entity(resolver, entity.params[2])
 
     origin = _point_from_cartesian(origin_entity) if origin_entity else (0.0, 0.0, 0.0)
     axis = _direction(axis_entity) if axis_entity else (0.0, 0.0, 1.0)
@@ -172,7 +210,7 @@ def _axis2_placement(
     # ref_direction is optional (param[3] may be None or missing)
     ref_dir = (1.0, 0.0, 0.0)
     if len(entity.params) > 3:
-        ref_entity = resolver.resolve_entity(entity.params[3])
+        ref_entity = _resolve_ref_entity(resolver, entity.params[3])
         if ref_entity is not None:
             ref_dir = _direction(ref_entity)
 
@@ -375,6 +413,48 @@ def _approximate_centroid(
     )
 
 
+def _normal_from_points(
+    points: list[tuple[float, float, float]],
+) -> tuple[float, float, float] | None:
+    """Return a unit normal from the first three points, if they are not colinear."""
+    if len(points) < 3:
+        return None
+    v0, v1, v2 = points[0], points[1], points[2]
+    u = (v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2])
+    v = (v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2])
+    nx = u[1] * v[2] - u[2] * v[1]
+    ny = u[2] * v[0] - u[0] * v[2]
+    nz = u[0] * v[1] - u[1] * v[0]
+    magnitude = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if magnitude < 1e-12:
+        return None
+    return (nx / magnitude, ny / magnitude, nz / magnitude)
+
+
+def _plane_projection_axes(
+    normal: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    """Build orthonormal in-plane axes for a face normal."""
+    abs_n = (abs(normal[0]), abs(normal[1]), abs(normal[2]))
+    if abs_n[0] < abs_n[1] and abs_n[0] < abs_n[2]:
+        axis_u = (0.0, -normal[2], normal[1])
+    elif abs_n[1] < abs_n[2]:
+        axis_u = (-normal[2], 0.0, normal[0])
+    else:
+        axis_u = (-normal[1], normal[0], 0.0)
+
+    magnitude = math.sqrt(axis_u[0] ** 2 + axis_u[1] ** 2 + axis_u[2] ** 2)
+    if magnitude < 1e-12:
+        return None
+    axis_u = (axis_u[0] / magnitude, axis_u[1] / magnitude, axis_u[2] / magnitude)
+    axis_v = (
+        normal[1] * axis_u[2] - normal[2] * axis_u[1],
+        normal[2] * axis_u[0] - normal[0] * axis_u[2],
+        normal[0] * axis_u[1] - normal[1] * axis_u[0],
+    )
+    return axis_u, axis_v
+
+
 def _approximate_area(
     face_entity: Any,
     resolver: _EntityResolver,
@@ -389,39 +469,13 @@ def _approximate_area(
     if len(vertices) < 3:
         return 0.0
 
-    # Compute face normal from first three vertices
-    v0, v1, v2 = vertices[0], vertices[1], vertices[2]
-    u = (v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2])
-    v = (v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2])
-    nx = u[1] * v[2] - u[2] * v[1]
-    ny = u[2] * v[0] - u[0] * v[2]
-    nz = u[0] * v[1] - u[1] * v[0]
-    n_mag = math.sqrt(nx * nx + ny * ny + nz * nz)
-    if n_mag < 1e-12:
+    normal = _normal_from_points(vertices)
+    if normal is None:
         return 0.0
-    n = (nx / n_mag, ny / n_mag, nz / n_mag)
-
-    # Project vertices onto plane perpendicular to dominant normal axis
-    # Find the two axes perpendicular to the normal
-    abs_n = (abs(n[0]), abs(n[1]), abs(n[2]))
-    if abs_n[0] < abs_n[1] and abs_n[0] < abs_n[2]:
-        axis_u = (0.0, -n[2], n[1])
-    elif abs_n[1] < abs_n[2]:
-        axis_u = (-n[2], 0.0, n[0])
-    else:
-        axis_u = (-n[1], n[0], 0.0)
-
-    u_mag = math.sqrt(axis_u[0] ** 2 + axis_u[1] ** 2 + axis_u[2] ** 2)
-    if u_mag < 1e-12:
+    axes = _plane_projection_axes(normal)
+    if axes is None:
         return 0.0
-    axis_u = (axis_u[0] / u_mag, axis_u[1] / u_mag, axis_u[2] / u_mag)
-
-    # Second axis = cross(normal, axis_u)
-    axis_v = (
-        n[1] * axis_u[2] - n[2] * axis_u[1],
-        n[2] * axis_u[0] - n[0] * axis_u[2],
-        n[0] * axis_u[1] - n[1] * axis_u[0],
-    )
+    axis_u, axis_v = axes
 
     # Project vertices
     origin = vertices[0]
@@ -457,98 +511,80 @@ def _collect_face_vertices(
     ADVANCED_FACE.bounds → FACE_OUTER_BOUND → EDGE_LOOP → ORIENTED_EDGE
     → EDGE_CURVE → edge geometry → vertex points.
     """
-    # face_entity.params[1] = bounds (ParameterList of refs)
+    for edge_curve in _iter_face_edge_curves(face_entity, resolver):
+        for point in _iter_edge_curve_vertices(edge_curve, resolver):
+            vertices.append(point)
+
+
+def _iter_face_bounds(face_entity: Any, resolver: _EntityResolver) -> Iterable[Any]:
+    """Yield resolved FACE_BOUND/FACE_OUTER_BOUND entities for a face."""
     if len(face_entity.params) < 2:
         return
+    yield from _iter_resolved_entities(resolver, face_entity.params[1])
 
-    bounds = face_entity.params[1]
-    # Could be a single Reference or a ParameterList
-    if isinstance(bounds, str) and bounds.startswith("#"):
-        bounds = [bounds]
-    if not hasattr(bounds, "__iter__"):
+
+def _loop_edge_list(loop_entity: Any) -> Iterable[object]:
+    """Return the oriented-edge list parameter from an EDGE_LOOP entity."""
+    for param in loop_entity.params:
+        if param in (None, "", "*"):
+            continue
+        if _as_step_ref(param) is not None:
+            return [param]
+        if not isinstance(param, str) and isinstance(param, Iterable):
+            return cast(Iterable[object], param)
+    return ()
+
+
+def _iter_bound_oriented_edges(bound_entity: Any, resolver: _EntityResolver) -> Iterable[Any]:
+    """Yield ORIENTED_EDGE entities referenced by a face bound."""
+    if len(bound_entity.params) < 2:
         return
+    loop_entity = _resolve_ref_entity(resolver, bound_entity.params[1])
+    if loop_entity is None:
+        return
+    yield from _iter_resolved_entities(resolver, _loop_edge_list(loop_entity))
 
-    for bound_ref in bounds:
-        if not isinstance(bound_ref, str) or not bound_ref.startswith("#"):
-            continue
-        bound_entity = resolver.resolve_entity(bound_ref)
-        if bound_entity is None:
-            continue
 
-        # FACE_OUTER_BOUND or FACE_BOUND
-        # params[1] = EDGE_LOOP ref
-        if len(bound_entity.params) < 2:
-            continue
-        loop_ref = bound_entity.params[1]
-        if not isinstance(loop_ref, str) or not loop_ref.startswith("#"):
-            continue
-
-        loop_entity = resolver.resolve_entity(loop_ref)
-        if loop_entity is None:
-            continue
-
-        # EDGE_LOOP: find the param that contains the oriented edge list.
-        # Schema position varies; search for a ParameterList or Reference.
-        edge_list: Iterable[object] | None = None
-        for param in loop_entity.params:
-            if param is not None and param != "" and param != "*":
-                if isinstance(param, str) and param.startswith("#"):
-                    edge_list = [param]  # Single edge: wrap in list
-                    break
-                elif hasattr(param, "__iter__") and not isinstance(param, str):
-                    edge_list = cast(Iterable[object], param)
-                    break
-
-        if edge_list is None:
-            continue
-
-        for edge_ref in edge_list:
-            if isinstance(edge_ref, tuple):
-                edge_ref = cast(tuple[object, ...], edge_ref)[0]
-            if not isinstance(edge_ref, str) or not edge_ref.startswith("#"):
-                continue
-
-            oriented = resolver.resolve_entity(edge_ref)
-            if oriented is None:
-                continue
-
-            # ORIENTED_EDGE: params[3] = EDGE_CURVE ref
+def _iter_face_edge_curves(face_entity: Any, resolver: _EntityResolver) -> Iterable[Any]:
+    """Yield EDGE_CURVE entities referenced by all bounds of a face."""
+    for bound_entity in _iter_face_bounds(face_entity, resolver):
+        for oriented in _iter_bound_oriented_edges(bound_entity, resolver):
             if len(oriented.params) < 4:
                 continue
-            ec_ref = oriented.params[3]
-            if not isinstance(ec_ref, str) or not ec_ref.startswith("#"):
-                continue
+            edge_curve = _resolve_ref_entity(resolver, oriented.params[3])
+            if edge_curve is not None:
+                yield edge_curve
 
-            edge_curve = resolver.resolve_entity(ec_ref)
-            if edge_curve is None:
-                continue
 
-            # EDGE_CURVE: params[1]=edge_start (VERTEX_POINT or CARTESIAN_POINT),
-            #             params[2]=edge_end (VERTEX_POINT or CARTESIAN_POINT),
-            #             params[3]=same_sense
-            # Or params might have VERTEX_POINT refs that contain CARTESIAN_POINT
-            for param_idx in (1, 2):
-                if len(edge_curve.params) <= param_idx:
-                    continue
-                v_ref = edge_curve.params[param_idx]
-                if not isinstance(v_ref, str) or not v_ref.startswith("#"):
-                    continue
+def _iter_edge_curve_vertices(
+    edge_curve: Any,
+    resolver: _EntityResolver,
+) -> Iterable[tuple[float, float, float]]:
+    """Yield start/end vertex positions for an EDGE_CURVE."""
+    for param_idx in (1, 2):
+        if len(edge_curve.params) <= param_idx:
+            continue
+        vertex = _resolve_ref_entity(resolver, edge_curve.params[param_idx])
+        if vertex is None:
+            continue
+        point = _vertex_point(vertex, resolver)
+        if point is not None:
+            yield point
 
-                vertex = resolver.resolve_entity(v_ref)
-                if vertex is None:
-                    continue
 
-                # Could be VERTEX_POINT (params[1]=CARTESIAN_POINT ref)
-                # or directly a CARTESIAN_POINT
-                if vertex.name == "VERTEX_POINT":
-                    if len(vertex.params) > 1:
-                        cp_ref = vertex.params[1]
-                        if isinstance(cp_ref, str) and cp_ref.startswith("#"):
-                            cp = resolver.resolve_entity(cp_ref)
-                            if cp is not None and cp.name == "CARTESIAN_POINT":
-                                vertices.append(_point_from_cartesian(cp))
-                elif vertex.name == "CARTESIAN_POINT":
-                    vertices.append(_point_from_cartesian(vertex))
+def _vertex_point(
+    vertex_entity: Any,
+    resolver: _EntityResolver,
+) -> tuple[float, float, float] | None:
+    """Resolve a VERTEX_POINT or CARTESIAN_POINT entity to coordinates."""
+    if vertex_entity.name == "CARTESIAN_POINT":
+        return _point_from_cartesian(vertex_entity)
+    if vertex_entity.name != "VERTEX_POINT" or len(vertex_entity.params) <= 1:
+        return None
+    cartesian = _resolve_ref_entity(resolver, vertex_entity.params[1])
+    if cartesian is None or cartesian.name != "CARTESIAN_POINT":
+        return None
+    return _point_from_cartesian(cartesian)
 
 # src/cady/write/step/ids.py
 
@@ -758,40 +794,11 @@ def extract_members_from_faces(faces: list[StepFace]) -> list[ExtrudedMember]:
     """
     planar = [f for f in faces if f.surface_type == "plane"]
     end_cap_pairs = find_end_caps(planar)
-
-    members: list[ExtrudedMember] = []
-    for idx, (cap_a, cap_b) in enumerate(end_cap_pairs):
-        axis_start = cap_a.centroid
-        axis_end = cap_b.centroid
-
-        extrusion_normal = cap_a.normal
-        if extrusion_normal is None:
-            continue
-
-        normal_vec = Vec3.from_xyz(extrusion_normal)
-
-        side_faces: list[StepFace] = []
-        for f in faces:
-            if f is cap_a or f is cap_b:
-                continue
-            if f.surface_type in ("cylinder", "cone"):
-                side_faces.append(f)
-            elif f.surface_type == "plane" and f.normal is not None:
-                dot = Vec3.from_xyz(f.normal).dot(normal_vec)
-                if abs(dot) < 0.01:
-                    side_faces.append(f)
-
-        section = classify_section_from_faces(side_faces, cap_a, cap_b)
-
-        members.append(
-            ExtrudedMember(
-                name=f"M{idx + 1}",
-                axis_start=axis_start,
-                axis_end=axis_end,
-                section=section,
-                faces=(cap_a, cap_b, *side_faces),
-            )
-        )
+    members = [
+        member
+        for idx, pair in enumerate(end_cap_pairs, start=1)
+        if (member := _member_from_end_caps(faces, pair, idx)) is not None
+    ]
 
     # Fallback: tube fast-path via cylinder grouping (no end caps found)
     if not members:
@@ -839,46 +846,17 @@ def group_cylinders_into_members(
         cyl = cylinders[i]
         if cyl.cylinder_axis is None or cyl.cylinder_radius is None:
             continue
-        axis = Vec3.from_xyz(cyl.cylinder_axis)
-        radius = cyl.cylinder_radius
-        axis_pt = Vec3.from_xyz(cyl.centroid)
-
-        group: list[StepFace] = [cyl]
-        assigned.add(i)
-
-        for j in range(len(cylinders)):
-            if j in assigned:
-                continue
-            other = cylinders[j]
-            if abs((other.cylinder_radius or 0) - (radius or 0)) > radius_tol:
-                continue
-            if other.cylinder_axis is None:
-                continue
-            other_axis = Vec3.from_xyz(other.cylinder_axis)
-            if axis.is_parallel(other_axis, tol=axis_tol):
-                group.append(other)
-                assigned.add(j)
-
-        # Project all cylinder centroids onto the shared axis to find endpoints
-        t_values: list[float] = []
-        for c in group:
-            pt = Vec3.from_xyz(c.centroid)
-            t = pt.project_onto_line(axis_pt, axis)
-            t_values.append(t)
-
-        if not t_values:
+        group = _collect_colinear_cylinder_group(
+            cylinders,
+            seed_index=i,
+            assigned=assigned,
+            axis_tol=axis_tol,
+            radius_tol=radius_tol,
+        )
+        endpoints = _cylinder_group_endpoints(group)
+        if endpoints is None:
             continue
-
-        t_min = min(t_values)
-        t_max = max(t_values)
-
-        if abs(t_max - t_min) < 1e-6:
-            # All cylinders share the same reference point — estimate length
-            t_min -= 1.0
-            t_max += 1.0
-
-        start = (axis_pt + axis * t_min).tuple()
-        end = (axis_pt + axis * t_max).tuple()
+        start, end = endpoints
 
         members.append(
             ExtrudedMember(
@@ -887,13 +865,113 @@ def group_cylinders_into_members(
                 axis_end=end,
                 section=ExtrudedSection(
                     section_type="tubular",
-                    dimensions={"diameter": radius * 2},
+                    dimensions={"diameter": cyl.cylinder_radius * 2},
                 ),
                 faces=tuple(group),
             )
         )
 
     return members
+
+
+def _member_from_end_caps(
+    faces: list[StepFace],
+    pair: tuple[StepFace, StepFace],
+    index: int,
+) -> ExtrudedMember | None:
+    """Build one member candidate from a matched end-cap pair."""
+    cap_a, cap_b = pair
+    if cap_a.normal is None:
+        return None
+    side_faces = _side_faces_for_end_caps(faces, cap_a, cap_b)
+    section = classify_section_from_faces(side_faces, cap_a, cap_b)
+    return ExtrudedMember(
+        name=f"M{index}",
+        axis_start=cap_a.centroid,
+        axis_end=cap_b.centroid,
+        section=section,
+        faces=(cap_a, cap_b, *side_faces),
+    )
+
+
+def _side_faces_for_end_caps(
+    faces: list[StepFace],
+    cap_a: StepFace,
+    cap_b: StepFace,
+) -> list[StepFace]:
+    """Collect non-cap faces that plausibly lie on the extrusion sides."""
+    if cap_a.normal is None:
+        return []
+    normal_vec = Vec3.from_xyz(cap_a.normal)
+    side_faces: list[StepFace] = []
+    for face in faces:
+        if face is cap_a or face is cap_b:
+            continue
+        if face.surface_type in ("cylinder", "cone"):
+            side_faces.append(face)
+            continue
+        if face.surface_type == "plane" and face.normal is not None:
+            dot = Vec3.from_xyz(face.normal).dot(normal_vec)
+            if abs(dot) < 0.01:
+                side_faces.append(face)
+    return side_faces
+
+
+def _collect_colinear_cylinder_group(
+    cylinders: list[StepFace],
+    *,
+    seed_index: int,
+    assigned: set[int],
+    axis_tol: float,
+    radius_tol: float,
+) -> list[StepFace]:
+    """Group cylinders that share the same radius and axis direction."""
+    seed = cylinders[seed_index]
+    if seed.cylinder_axis is None or seed.cylinder_radius is None:
+        return []
+    axis = Vec3.from_xyz(seed.cylinder_axis)
+    radius = float(seed.cylinder_radius)
+
+    group: list[StepFace] = [seed]
+    assigned.add(seed_index)
+
+    for index, other in enumerate(cylinders):
+        if index in assigned or other.cylinder_axis is None or other.cylinder_radius is None:
+            continue
+        if abs(other.cylinder_radius - radius) > radius_tol:
+            continue
+        if axis.is_parallel(Vec3.from_xyz(other.cylinder_axis), tol=axis_tol):
+            group.append(other)
+            assigned.add(index)
+
+    return group
+
+
+def _cylinder_group_endpoints(
+    group: list[StepFace],
+) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    """Estimate tubular member endpoints from grouped cylinder centroids."""
+    if not group or group[0].cylinder_axis is None:
+        return None
+    axis = Vec3.from_xyz(group[0].cylinder_axis)
+    axis_point = Vec3.from_xyz(group[0].centroid)
+    projections = [
+        Vec3.from_xyz(face.centroid).project_onto_line(axis_point, axis)
+        for face in group
+    ]
+    if not projections:
+        return None
+
+    t_min = min(projections)
+    t_max = max(projections)
+    if abs(t_max - t_min) < 1e-6:
+        t_min -= 1.0
+        t_max += 1.0
+
+    return (
+        (axis_point + axis * t_min).tuple(),
+        (axis_point + axis * t_max).tuple(),
+    )
 
 
 __all__ = [
@@ -909,6 +987,7 @@ read_step_faces = read_step
 
 
 def render(target: object, *, tolerance: float = 1e-3) -> str:
+    """Render a mesh-coercible target as a minimal STEP AP214-style document."""
     mesh = _mesh_from_target(target, tolerance=tolerance)
     if not mesh.faces:
         raise WriteError("cannot write empty STEP mesh")
@@ -924,6 +1003,7 @@ def render(target: object, *, tolerance: float = 1e-3) -> str:
     next_id = 1
     vertex_ids: list[int] = []
     for vertex in mesh.vertices:
+        # Vertices are emitted once, then referenced from each face loop.
         vertex_id = next_id
         next_id += 1
         vertex_ids.append(vertex_id)
@@ -939,36 +1019,23 @@ def render(target: object, *, tolerance: float = 1e-3) -> str:
 
 
 def write(target: object, path: str | Path, *, tolerance: float = 1e-3) -> object:
+    """Write a mesh-coercible target to ``path`` as STEP text."""
     Path(path).write_text(render(target, tolerance=tolerance), encoding="ascii")
     return target
 
 
 def read_faces(path: str | Path) -> list[StepFace]:
+    """Read STEP faces with resolved elementary-surface metadata."""
     return read_step(path)
 
 
 def read_members(path: str | Path) -> list[ExtrudedMember]:
+    """Read a STEP file and reconstruct extruded members from its faces."""
     return extract_members_from_faces(read_faces(path))
 
 
-def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3D:
-    if tolerance <= 0:
-        raise WriteError("tolerance must be positive")
-    if isinstance(target, Mesh3D):
-        return target
-    if isinstance(target, Document):
-        meshes: list[Mesh3D] = []
-        for item in (*target.parts, *target.assemblies):
-            meshes.append(_mesh_from_target(item.value, tolerance=tolerance))
-        if not meshes:
-            raise WriteError("document contains no meshable parts or assemblies")
-        return Mesh3D.merged(meshes)
-    to_mesh = getattr(target, "to_mesh", None)
-    if callable(to_mesh):
-        mesh = to_mesh(tolerance=tolerance)
-        if isinstance(mesh, Mesh3D):
-            return mesh
-    raise WriteError(f"{type(target).__name__} is not meshable")
+def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
+    return mesh_from_target(target, tolerance=tolerance)
 
 
 __all__ = [

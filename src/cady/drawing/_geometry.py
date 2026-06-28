@@ -1,3 +1,5 @@
+"""Shared 2D coercion and bounds helpers for drawing modules."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -8,12 +10,12 @@ Bounds2: TypeAlias = tuple[Point2, Point2]
 
 
 @runtime_checkable
-class Bounded2D(Protocol):
+class Bounded2(Protocol):
     def bounds(self) -> object: ...
 
 
 @runtime_checkable
-class ArrayConvertible2D(Protocol):
+class ArrayConvertible2(Protocol):
     def to_array(self, *, tolerance: float) -> object: ...
 
 
@@ -23,6 +25,7 @@ class XYLike(Protocol):
 
 
 def point2(value: object, *, name: str = "point") -> Point2:
+    """Coerce a point-like value to a 2D float tuple."""
     if hasattr(value, "x") and hasattr(value, "y"):
         xy = cast(XYLike, value)
         return (float(cast(float, xy.x)), float(cast(float, xy.y)))
@@ -34,6 +37,7 @@ def point2(value: object, *, name: str = "point") -> Point2:
 
 
 def bounds2(value: object, *, name: str = "bounds") -> Bounds2:
+    """Coerce a pair of points to a 2D bounds tuple."""
     if isinstance(value, Sequence):
         sequence = cast(Sequence[object], value)
         if len(sequence) == 2:
@@ -42,6 +46,7 @@ def bounds2(value: object, *, name: str = "bounds") -> Bounds2:
 
 
 def points_bounds(points: Iterable[object], *, name: str = "points") -> Bounds2:
+    """Return axis-aligned bounds for a non-empty point collection."""
     converted = tuple(point2(point, name=name) for point in points)
     if not converted:
         raise ValueError(f"{name} must contain at least one point")
@@ -53,6 +58,7 @@ def points_bounds(points: Iterable[object], *, name: str = "points") -> Bounds2:
 
 
 def merge_bounds(bounds: Iterable[Bounds2]) -> Bounds2:
+    """Return a single bounds box spanning all supplied bounds."""
     items = tuple(bounds)
     if not items:
         raise ValueError("cannot calculate bounds for an empty drawing")
@@ -64,6 +70,7 @@ def merge_bounds(bounds: Iterable[Bounds2]) -> Bounds2:
 
 
 def geometry_bounds(geometry: object) -> Bounds2:
+    """Extract bounds from a geometry object via ``bounds`` or ``points``."""
     raw_bounds = getattr(geometry, "bounds", None)
     if callable(raw_bounds):
         return bounds2(raw_bounds(), name="geometry bounds")
@@ -85,6 +92,7 @@ def transformed_bounds(
     scale: float = 1.0,
     rotation: float = 0.0,
 ) -> Bounds2:
+    """Transform axis-aligned bounds by scale, rotation, and translation."""
     import math
 
     (min_x, min_y), (max_x, max_y) = bounds

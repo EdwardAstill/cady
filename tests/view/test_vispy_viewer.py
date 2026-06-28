@@ -5,13 +5,26 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, PointCloud3D, Scene, Vec3, box
+from cady import (
+    Camera,
+    DirectionalLight,
+    DisplayStyle,
+    Document,
+    Mesh3,
+    Part,
+    PointCloud3,
+    Scene,
+    Vec3,
+    box,
+)
 from cady.view.vispy_viewer import (
     _camera_orientation,
     _mesh_edge_color,
     _orientation_edges,
+    _select_vispy_shader_backend,
     _require_vispy,
     _shaded_face_buffers,
+    _transform_from_pose,
     _view_relative_orthographic_axis_length,
     _zoomed_orthographic_scale,
     prepare_scene,
@@ -30,6 +43,29 @@ def test_require_vispy_raises_when_missing() -> None:
         pytest.raises(ImportError, match="requires vispy"),
     ):
         _require_vispy()
+
+
+def test_select_vispy_shader_backend_uses_es_for_opengl_es_context() -> None:
+    gl = mock.Mock()
+    gl.GL_VERSION = object()
+    gl.glGetParameter.return_value = "OpenGL ES 3.2 NVIDIA"
+    gl.current_backend.__name__ = "vispy.gloo.gl.gl2"
+
+    _select_vispy_shader_backend(gl)
+
+    gl.glGetParameter.assert_called_once_with(gl.GL_VERSION)
+    gl.use_gl.assert_called_once_with("es2")
+
+
+def test_select_vispy_shader_backend_leaves_desktop_context() -> None:
+    gl = mock.Mock()
+    gl.GL_VERSION = object()
+    gl.glGetParameter.return_value = "4.6.0 NVIDIA"
+    gl.current_backend.__name__ = "vispy.gloo.gl.gl2"
+
+    _select_vispy_shader_backend(gl)
+
+    gl.use_gl.assert_not_called()
 
 
 def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
@@ -58,6 +94,14 @@ def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
     assert prepared.light_direction == (-1.0, -1.0, -2.0)
 
 
+def test_transform_from_pose_preserves_viewer_message() -> None:
+    with pytest.raises(
+        TypeError,
+        match="scene object pose must be Transform3, Pose3-like, or a 3D translation",
+    ):
+        _transform_from_pose((1.0, 2.0))
+
+
 def test_prepare_scene_accepts_wire_polyline_targets() -> None:
     wire = (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5))
     scene = Scene("wires").add(
@@ -80,7 +124,7 @@ def test_prepare_scene_accepts_wire_polyline_targets() -> None:
 
 
 def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
-    mesh = Mesh3D(
+    mesh = Mesh3(
         (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5)),
         (),
         ((0, 1), (1, 2)),
@@ -95,8 +139,18 @@ def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
     np.testing.assert_array_equal(prepared.meshes[0].edges, [[0, 1], [1, 2]])
 
 
+def test_prepare_scene_accepts_document_targets() -> None:
+    document = Document("job").add_part(Part("box").with_body(box(1.0, 0.5, 0.25)))
+    scene = Scene("document").add(document)
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert len(prepared.meshes) == 1
+    assert prepared.lines == ()
+
+
 def test_prepare_scene_accepts_point_cloud_targets() -> None:
-    cloud = PointCloud3D((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 2.0, 3.0)))
+    cloud = PointCloud3((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 2.0, 3.0)))
     scene = Scene("points").add(
         cloud,
         name="samples",
@@ -126,7 +180,7 @@ def test_prepare_scene_accepts_point_cloud_targets() -> None:
 
 
 def test_wireframe_mesh_edges_use_style_color() -> None:
-    mesh = Mesh3D(
+    mesh = Mesh3(
         (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5)),
         (),
         ((0, 1),),

@@ -1,3 +1,5 @@
+"""Backend-agnostic view API with lazily imported viewer helpers."""
+
 from typing import TYPE_CHECKING
 
 from cady.view.camera import Camera
@@ -35,11 +37,13 @@ _VIEWER_EXPORTS = frozenset(
 
 
 def scene_from_target(target: object, *, name: str = "scene") -> Scene:
+    """Build a single-object scene from any supported view target."""
     return Scene.from_target(target, name=name)
 
 
 def __getattr__(name: str) -> object:
     if name in _VIEWER_EXPORTS:
+        # Defer viewer backend imports until a GUI-facing helper is requested.
         from cady.view import vispy_viewer
 
         return getattr(vispy_viewer, name)

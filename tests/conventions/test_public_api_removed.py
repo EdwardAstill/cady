@@ -11,8 +11,8 @@ def test_removed_top_level_api_names_are_not_exported() -> None:
         "Rectangle",
         "Revolution",
         "SceneError",
-        "Shape2D",
-        "Shape3D",
+        "Shape2",
+        "Shape3",
         "Sphere",
         "StlMesh",
     }

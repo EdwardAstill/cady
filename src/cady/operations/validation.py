@@ -1,3 +1,5 @@
+"""Validation helpers for numeric mesh and transform inputs."""
+
 from __future__ import annotations
 
 from typing import cast
@@ -18,6 +20,7 @@ def _as_float_array(value: object, *, name: str) -> np.ndarray:
 
 
 def as_points2(value: object, *, name: str = "points") -> PointArray2:
+    """Validate an ``(n, 2)`` float array of 2D points."""
     array = _as_float_array(value, name=name)
     if array.ndim != 2:
         raise ValueError(f"{name} must have rank 2")
@@ -27,6 +30,7 @@ def as_points2(value: object, *, name: str = "points") -> PointArray2:
 
 
 def as_points3(value: object, *, name: str = "points") -> PointArray3:
+    """Validate an ``(n, 3)`` float array of 3D points."""
     array = _as_float_array(value, name=name)
     if array.ndim != 2:
         raise ValueError(f"{name} must have rank 2")
@@ -36,6 +40,7 @@ def as_points3(value: object, *, name: str = "points") -> PointArray3:
 
 
 def as_faces(value: object, *, name: str = "faces") -> FaceArray:
+    """Validate an ``(n, 3)`` integer-like triangle index array."""
     raw = _as_float_array(value, name=name)
     if raw.ndim != 2:
         raise ValueError(f"{name} must have rank 2")
@@ -47,6 +52,7 @@ def as_faces(value: object, *, name: str = "faces") -> FaceArray:
 
 
 def as_edges(value: object, *, name: str = "edges") -> EdgeArray:
+    """Validate an ``(n, 2)`` integer-like edge index array."""
     raw = _as_float_array(value, name=name)
     if raw.ndim != 2:
         raise ValueError(f"{name} must have rank 2")
@@ -58,6 +64,7 @@ def as_edges(value: object, *, name: str = "edges") -> EdgeArray:
 
 
 def as_matrix3(value: object, *, name: str = "matrix") -> Matrix3:
+    """Validate a 3x3 affine or rotation matrix."""
     array = _as_float_array(value, name=name)
     if array.shape != (3, 3):
         raise ValueError(f"{name} must have shape (3, 3)")
@@ -65,6 +72,7 @@ def as_matrix3(value: object, *, name: str = "matrix") -> Matrix3:
 
 
 def as_matrix4(value: object, *, name: str = "matrix") -> Matrix4:
+    """Validate a 4x4 affine transform matrix."""
     array = _as_float_array(value, name=name)
     if array.shape != (4, 4):
         raise ValueError(f"{name} must have shape (4, 4)")

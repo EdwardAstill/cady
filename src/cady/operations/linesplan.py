@@ -1,10 +1,12 @@
+"""Linesplan classification and coarse surface meshing helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from cady.geometry import Mesh3D, Wireframe3D
+from cady.geometry import Mesh3, Wireframe3
 from cady.vec import Vec3, promote3
 
 Point3Like = Vec3 | tuple[float, float, float]
@@ -19,6 +21,8 @@ class _SourceCurveLike(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class LinesplanCurve:
+    """Normalised source curve record used by linesplan operations."""
+
     vertices: tuple[Vec3, ...]
     layer: str | None = None
     source_index: int = 0
@@ -40,12 +44,16 @@ class LinesplanCurve:
 
 @dataclass(frozen=True, slots=True)
 class RejectedLinesplanCurve:
+    """Source curve that could not be classified into the network."""
+
     curve: LinesplanCurve
     reason: str
 
 
 @dataclass(frozen=True, slots=True)
 class GuideCoverage:
+    """Coverage of one guide curve across ordered section stations."""
+
     guide_kind: str
     curve: LinesplanCurve
     matched_sections: tuple[int, ...]
@@ -54,6 +62,8 @@ class GuideCoverage:
 
 @dataclass(frozen=True, slots=True)
 class CompatibilityReport:
+    """Summary of whether a classified linesplan can be meshed reliably."""
+
     section_count: int
     buttock_count: int
     waterline_count: int
@@ -68,6 +78,8 @@ class CompatibilityReport:
 
 @dataclass(frozen=True, slots=True)
 class LinesplanNetwork:
+    """Grouped linesplan curves and the report derived from them."""
+
     sections: tuple[LinesplanCurve, ...]
     buttocks: tuple[LinesplanCurve, ...]
     waterlines: tuple[LinesplanCurve, ...]
@@ -77,10 +89,11 @@ class LinesplanNetwork:
 
 
 def classify_linesplan_curves(
-    curves: Iterable[object] | Wireframe3D,
+    curves: Iterable[object] | Wireframe3,
     *,
     tolerance: float,
 ) -> LinesplanNetwork:
+    """Group source curves into sections, buttocks, waterlines, and knuckles."""
     if tolerance <= 0:
         raise ValueError("tolerance must be positive")
 
@@ -132,7 +145,8 @@ def mesh_linesplan_network(
     *,
     tolerance: float,
     samples_per_curve: int = 12,
-) -> Mesh3D:
+) -> Mesh3:
+    """Build a simple quad-strip mesh across classified section curves."""
     if tolerance <= 0:
         raise ValueError("tolerance must be positive")
     if samples_per_curve < 2:
@@ -165,11 +179,11 @@ def mesh_linesplan_network(
         for col in range(width):
             start = row * width + col
             edge_set.add((start, start + width))
-    return Mesh3D(vertices, tuple(faces), tuple(sorted(edge_set)))
+    return Mesh3(vertices, tuple(faces), tuple(sorted(edge_set)))
 
 
-def _source_curves(curves: Iterable[object] | Wireframe3D) -> tuple[LinesplanCurve, ...]:
-    if isinstance(curves, Wireframe3D):
+def _source_curves(curves: Iterable[object] | Wireframe3) -> tuple[LinesplanCurve, ...]:
+    if isinstance(curves, Wireframe3):
         return tuple(
             LinesplanCurve((curves.vertices[vertex] for vertex in path), source_index=index)
             for index, path in enumerate(_wireframe_paths(curves))
@@ -188,7 +202,7 @@ def _source_curves(curves: Iterable[object] | Wireframe3D) -> tuple[LinesplanCur
     return tuple(result)
 
 
-def _wireframe_paths(wireframe: Wireframe3D) -> tuple[tuple[int, ...], ...]:
+def _wireframe_paths(wireframe: Wireframe3) -> tuple[tuple[int, ...], ...]:
     adjacency: dict[int, list[int]] = {}
     for start, end in wireframe.edges:
         adjacency.setdefault(start, []).append(end)
@@ -206,6 +220,7 @@ def _wireframe_paths(wireframe: Wireframe3D) -> tuple[tuple[int, ...], ...]:
             visited_edges.add(edge)
             previous, current = start, neighbour
             while True:
+                # Continue only through unambiguous degree-2 runs; branching stays split.
                 candidates = [
                     vertex
                     for vertex in sorted(adjacency[current])

@@ -1,3 +1,5 @@
+"""Display style values shared across viewer backends."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -13,6 +15,8 @@ RenderMode = Literal["shaded", "wireframe", "points"]
 
 @dataclass(frozen=True, slots=True)
 class DisplayStyle:
+    """Rendering hints for a scene object."""
+
     color: Color | None = None
     opacity: float = 1.0
     line_width: float = 1.0
@@ -34,6 +38,7 @@ class DisplayStyle:
         object.__setattr__(self, "metadata", metadata_items(self.metadata))
 
     def with_metadata(self, **metadata: Any) -> DisplayStyle:
+        """Return a copy with merged metadata."""
         return DisplayStyle(
             color=self.color,
             opacity=self.opacity,
@@ -46,6 +51,7 @@ class DisplayStyle:
 
 
 def style_from_mapping(values: Mapping[str, object]) -> DisplayStyle:
+    """Create a display style from a plain mapping."""
     opacity = cast(float | str, values.get("opacity", 1.0))
     line_width = cast(float | str, values.get("line_width", 1.0))
     point_size = cast(float | str, values.get("point_size", 4.0))

@@ -1,3 +1,5 @@
+"""Shared exception hierarchy for cady packages."""
+
 class CadError(Exception):
     """Base class for cady failures."""
 

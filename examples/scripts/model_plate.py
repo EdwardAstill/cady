@@ -5,7 +5,7 @@ from pathlib import Path
 
 from example_geometry import GALLERY_DIR, plate_document
 
-from cady import Document, Drawing2D, Part
+from cady import Document, Drawing2, Part
 from cady.files import dxf, stl
 
 
@@ -24,7 +24,7 @@ def main() -> None:
     document = build_document()
     drawing = document.get("drawing", "front")
     part = document.get("part", "plate")
-    if not isinstance(drawing, Drawing2D) or not isinstance(part, Part):
+    if not isinstance(drawing, Drawing2) or not isinstance(part, Part):
         raise TypeError("model_plate document has unexpected contents")
 
     dxf.write(drawing, args.out / "model_plate.dxf", tolerance=args.tolerance)

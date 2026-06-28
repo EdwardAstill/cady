@@ -1,3 +1,5 @@
+"""Point-level transforms and validated affine transform containers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -140,6 +142,8 @@ def _normalised3(a: Point3) -> Point3:
 
 @dataclass(frozen=True, slots=True)
 class Transform2:
+    """Homogeneous 2D affine transform wrapper."""
+
     matrix: Matrix3
 
     def __post_init__(self) -> None:
@@ -220,6 +224,8 @@ class Transform2:
 
 @dataclass(frozen=True, slots=True)
 class Transform3:
+    """Homogeneous 3D affine transform wrapper."""
+
     matrix: Matrix4
 
     def __post_init__(self) -> None:
@@ -314,8 +320,32 @@ class Transform3:
         return transformed[:, :3]
 
 
+def coerce_transform3(value: object | None, *, allow_none: bool = False) -> Transform3:
+    """Coerce a transform, pose-like object, or translation tuple into ``Transform3``."""
+    if value is None:
+        if allow_none:
+            return Transform3.identity()
+        raise TypeError("value must not be None")
+    if isinstance(value, Transform3):
+        return value
+    to_transform3 = getattr(value, "to_transform3", None)
+    if callable(to_transform3):
+        transform = to_transform3()
+        if isinstance(transform, Transform3):
+            return transform
+    try:
+        values = tuple(float(component) for component in value)  # type: ignore[reportUnknownVariableType]
+    except TypeError:
+        values = ()
+    if len(values) == 3:
+        return Transform3.translation(values[0], values[1], values[2])
+    raise TypeError("value must be Transform3, Pose3-like, or a 3D translation")
+
+
 @dataclass(frozen=True, slots=True)
 class Pose3:
+    """Rigid 3D pose stored as rotation matrix plus translation."""
+
     rotation: Matrix3
     translation: FloatArray
 

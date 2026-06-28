@@ -1,9 +1,14 @@
+"""Helpers for opening a quick fitted view of a single target."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sized
 from math import sqrt
 from typing import Any, Literal, cast
 
+from cady.document import Document
+from cady.geometry import Mesh3
+from cady.utils import positive_tolerance
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import DirectionalLight, Light
@@ -34,6 +39,7 @@ def open_target_view(
     center: bool = True,
     tolerance: float = 1e-3,
 ) -> None:
+    """Open an interactive view for one target with a fitted camera."""
     if tolerance <= 0.0:
         raise ViewError("tolerance must be positive")
 
@@ -54,6 +60,7 @@ def open_target_view(
         .with_light(light or DEFAULT_VIEW_LIGHT)
     )
 
+    # Import through the public view module so GUI backends stay lazy.
     from cady import view as view_module
 
     view_scene = cast(Callable[..., None], view_module.view_scene)
@@ -67,6 +74,7 @@ def _default_style(
     render_mode: RenderMode | None,
     wire_only: bool,
 ) -> DisplayStyle:
+    """Choose a default style for shaded and wire-only targets."""
     resolved_mode = render_mode or ("wireframe" if wire_only else "shaded")
     resolved_color = color or (
         DEFAULT_WIRE_COLOR if resolved_mode == "wireframe" else DEFAULT_VIEW_COLOR
@@ -90,13 +98,42 @@ def _target_bounds_and_wire_mode(
 def _mesh_like(target: object, *, tolerance: float) -> object:
     if callable(getattr(target, "bounds", None)):
         return target
-    to_mesh = getattr(target, "to_mesh", None)
-    if callable(to_mesh):
-        return to_mesh(tolerance=tolerance)
+    # Delegate mesh coercion here so documents, mesh values, and meshable domain
+    # objects all share the same compatibility rules and error messages.
+    if isinstance(target, (Document, Mesh3)) or callable(getattr(target, "to_mesh", None)):
+        return _mesh_from_target(target, tolerance=tolerance)
     to_array = getattr(target, "to_array", None)
     if callable(to_array):
         return to_array(tolerance=tolerance)
     return target
+
+
+def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
+    try:
+        positive_tolerance(tolerance)
+    except ValueError as exc:
+        raise ViewError(str(exc)) from exc
+
+    if isinstance(target, Mesh3):
+        return target
+
+    if isinstance(target, Document):
+        meshes = [
+            _mesh_from_target(item.value, tolerance=tolerance)
+            for item in (*target.parts, *target.assemblies)
+        ]
+        if not meshes:
+            raise ViewError("document contains no meshable parts or assemblies")
+        return Mesh3.merged(meshes)
+
+    to_mesh = getattr(target, "to_mesh", None)
+    if callable(to_mesh):
+        mesh = to_mesh(tolerance=tolerance)
+        if isinstance(mesh, Mesh3):
+            return mesh
+        raise ViewError("to_mesh() must return Mesh3")
+
+    raise ViewError("view target must expose bounds() or to_mesh(tolerance=...)")
 
 
 def _is_wire_only(target: object) -> bool:
@@ -112,6 +149,7 @@ def _fit_camera(
     *,
     projection: Projection,
 ) -> Camera:
+    """Fit a simple front-right-above camera to the given bounds."""
     lower, upper = bounds
     centre = (
         (lower[0] + upper[0]) / 2.0,

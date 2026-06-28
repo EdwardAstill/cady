@@ -1,3 +1,5 @@
+"""Mesh-to-render-buffer helpers for the VisPy backend."""
+
 from __future__ import annotations
 
 from math import cos, radians
@@ -138,6 +140,7 @@ def _coordinate_edge_ownership(
     dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]],
     dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]],
 ]:
+    """Group face edges by quantised endpoint coordinates."""
     coordinate_tolerance = _coordinate_tolerance(vertices)
     edge_faces: dict[tuple[tuple[int, int, int], tuple[int, int, int]], list[int]] = {}
     edge_indices: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
@@ -165,6 +168,7 @@ def _smooth_face_roots(
     angle_tolerance_degrees: float,
     curved_patch_angle_tolerance_degrees: float = CURVED_PATCH_ANGLE_TOLERANCE_DEGREES,
 ) -> np.ndarray:
+    """Cluster adjacent faces that should share smoothed shading normals."""
     cos_tolerance = cos(radians(angle_tolerance_degrees))
     parents = list(range(len(normals)))
 

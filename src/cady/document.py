@@ -1,3 +1,5 @@
+"""Top-level registry for named drawings, parts, assemblies, and scenes."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -11,6 +13,8 @@ DocumentKind = Literal["drawing", "part", "assembly", "scene"]
 
 @dataclass(frozen=True, slots=True)
 class DocumentItem:
+    """Named typed entry stored inside a document registry."""
+
     name: str
     value: object
     kind: DocumentKind
@@ -26,6 +30,8 @@ class DocumentItem:
 
 @dataclass(frozen=True, slots=True)
 class Document:
+    """Immutable container for related CAD artefacts."""
+
     name: str = "document"
     units: str = "m"
     drawings: tuple[DocumentItem, ...] = field(default_factory=tuple)
@@ -50,18 +56,23 @@ class Document:
         _reject_duplicates(self.scenes, "scene")
 
     def add_drawing(self, drawing: object, *, name: str | None = None) -> Document:
+        """Return a new document with an added drawing entry."""
         return self._add("drawing", drawing, name=name)
 
     def add_part(self, part: object, *, name: str | None = None) -> Document:
+        """Return a new document with an added part entry."""
         return self._add("part", part, name=name)
 
     def add_assembly(self, assembly: object, *, name: str | None = None) -> Document:
+        """Return a new document with an added assembly entry."""
         return self._add("assembly", assembly, name=name)
 
     def add_scene(self, scene: object, *, name: str | None = None) -> Document:
+        """Return a new document with an added scene entry."""
         return self._add("scene", scene, name=name)
 
     def with_metadata(self, **metadata: Any) -> Document:
+        """Return a new document with merged metadata values."""
         return Document(
             name=self.name,
             units=self.units,
@@ -73,12 +84,14 @@ class Document:
         )
 
     def get(self, kind: DocumentKind, name: str) -> object:
+        """Return a named item value from the requested document bucket."""
         for item in self._items(kind):
             if item.name == name:
                 return item.value
         raise KeyError(f"no {kind} named {name!r}")
 
     def names(self, kind: DocumentKind) -> tuple[str, ...]:
+        """Return all stored names for a document bucket."""
         return tuple(item.name for item in self._items(kind))
 
     def _add(self, kind: DocumentKind, value: object, *, name: str | None = None) -> Document:
@@ -131,6 +144,7 @@ def document_from_mapping(
     units: str = "m",
     metadata: Mapping[str, Any] | Metadata | None = None,
 ) -> Document:
+    """Build an empty document from loose mapping-style inputs."""
     return Document(name=name, units=units, metadata=metadata_items(metadata))
 
 

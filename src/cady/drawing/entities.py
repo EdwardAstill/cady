@@ -1,3 +1,5 @@
+"""Drawing entities and reusable block definitions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,6 +9,8 @@ from cady.drawing._geometry import Bounds2, Point2, geometry_bounds, point2
 
 @dataclass(frozen=True, slots=True)
 class DrawingEntity:
+    """Geometry wrapper that assigns authoring objects to a drawing layer."""
+
     geometry: object
     layer: str = "0"
 
@@ -15,9 +19,11 @@ class DrawingEntity:
             raise ValueError("entity layer must be non-empty")
 
     def bounds(self) -> Bounds2:
+        """Return entity bounds using the wrapped geometry's protocol."""
         return geometry_bounds(self.geometry)
 
     def to_array(self, *, tolerance: float) -> object:
+        """Convert wrapped geometry through its ``to_array`` implementation."""
         converter = getattr(self.geometry, "to_array", None)
         if not callable(converter):
             raise TypeError("drawing geometry must provide to_array(tolerance=...)")
@@ -25,7 +31,9 @@ class DrawingEntity:
 
 
 @dataclass(frozen=True, slots=True)
-class Text2D:
+class Text2:
+    """Single-line text annotation anchored at a 2D point."""
+
     text: str
     at: Point2
     height: float
@@ -46,7 +54,9 @@ class Text2D:
 
 
 @dataclass(frozen=True, slots=True)
-class Hatch2D:
+class Hatch2:
+    """Simple hatch fill for a closed 2D boundary."""
+
     boundary: object
     layer: str = "0"
     pattern: str = "ANSI31"
@@ -72,7 +82,9 @@ class Hatch2D:
 
 
 @dataclass(frozen=True, slots=True)
-class Insert2D:
+class Insert2:
+    """Placed instance of a named block definition."""
+
     name: str
     at: Point2
     layer: str = "0"
@@ -94,11 +106,13 @@ class Insert2D:
         return self.at, self.at
 
 
-DrawingPrimitive = DrawingEntity | Text2D | Hatch2D | Insert2D
+DrawingPrimitive = DrawingEntity | Text2 | Hatch2 | Insert2
 
 
 @dataclass(frozen=True, slots=True)
 class BlockDefinition:
+    """Reusable block made from drawing primitives and a base point."""
+
     name: str
     base: Point2 = (0.0, 0.0)
     layers: tuple[object, ...] = ()
@@ -112,9 +126,11 @@ class BlockDefinition:
         object.__setattr__(self, "entities", tuple(self.entities))
 
     def add(self, geometry: object, *, layer: str = "0") -> BlockDefinition:
+        """Wrap geometry in a drawing entity and append it to the block."""
         return self.add_entity(DrawingEntity(geometry, layer))
 
     def add_entity(self, entity: DrawingPrimitive) -> BlockDefinition:
+        """Return a new block definition with the entity appended."""
         return BlockDefinition(
             self.name,
             self.base,
@@ -132,7 +148,7 @@ class BlockDefinition:
         rotation: float = 0.0,
     ) -> BlockDefinition:
         anchor = point2(at, name="text anchor")
-        return self.add_entity(Text2D(text, anchor, height, layer, rotation))
+        return self.add_entity(Text2(text, anchor, height, layer, rotation))
 
     def hatch(
         self,
@@ -143,7 +159,7 @@ class BlockDefinition:
         angle: float = 45.0,
         scale: float = 1.0,
     ) -> BlockDefinition:
-        return self.add_entity(Hatch2D(boundary, layer, pattern, angle, scale))
+        return self.add_entity(Hatch2(boundary, layer, pattern, angle, scale))
 
     def bounds(self) -> Bounds2:
         from cady.drawing._geometry import merge_bounds

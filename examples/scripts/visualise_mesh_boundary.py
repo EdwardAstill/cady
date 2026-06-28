@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from math import cos, sin
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, Wireframe3D
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Vec3, Wireframe3
 from cady.operations import ArrayPolyline3
 
 MESH_STYLE = DisplayStyle(color=(0.46, 0.52, 0.50), opacity=0.9)
@@ -57,7 +57,7 @@ def main() -> None:
     )
 
 
-def build_complicated_mesh() -> Mesh3D:
+def build_complicated_mesh() -> Mesh3:
     x_cells = 32
     y_cells = 24
     vertices: list[Vec3] = []
@@ -80,10 +80,10 @@ def build_complicated_mesh() -> Mesh3D:
             faces.append((lower_left, lower_right, upper_right))
             faces.append((lower_left, upper_right, upper_left))
 
-    return Mesh3D(tuple(vertices), tuple(faces), _display_edges(faces))
+    return Mesh3(tuple(vertices), tuple(faces), _display_edges(faces))
 
 
-def build_scene(mesh: Mesh3D, boundaries: tuple[Wireframe3D, ...]) -> Scene:
+def build_scene(mesh: Mesh3, boundaries: tuple[Wireframe3, ...]) -> Scene:
     lower, upper = mesh.bounds()
     centre = _bounds_centre(lower, upper)
     camera = _fit_camera(lower, upper)
@@ -129,11 +129,11 @@ def _display_edges(faces: list[tuple[int, int, int]]) -> tuple[tuple[int, int], 
 
 def _wireframes_from_boundary_loops(
     loops: tuple[ArrayPolyline3, ...],
-) -> tuple[Wireframe3D, ...]:
+) -> tuple[Wireframe3, ...]:
     return tuple(_wireframe_from_boundary_loop(loop) for loop in loops)
 
 
-def _wireframe_from_boundary_loop(loop: ArrayPolyline3) -> Wireframe3D:
+def _wireframe_from_boundary_loop(loop: ArrayPolyline3) -> Wireframe3:
     points = [
         Vec3(float(point[0]), float(point[1]), float(point[2]))
         for point in loop.vertices
@@ -141,14 +141,14 @@ def _wireframe_from_boundary_loop(loop: ArrayPolyline3) -> Wireframe3D:
     if len(points) >= 2 and points[0] == points[-1]:
         points = points[:-1]
     edges = tuple((index, (index + 1) % len(points)) for index in range(len(points)))
-    return Wireframe3D(tuple(points), edges)
+    return Wireframe3(tuple(points), edges)
 
 
 def _boundary_style(index: int) -> DisplayStyle:
     return BOUNDARY_STYLES[index % len(BOUNDARY_STYLES)]
 
 
-def print_mesh_summary(label: str, mesh: Mesh3D) -> None:
+def print_mesh_summary(label: str, mesh: Mesh3) -> None:
     lower, upper = mesh.bounds()
     print(
         f"{label}: {len(mesh.vertices)} vertices, {len(mesh.edges)} edges, "

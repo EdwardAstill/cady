@@ -1,48 +1,47 @@
+"""Import-light constructor wrappers for authoring-layer factories."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from cady.geometry.body3d import Body3D
-    from cady.geometry.curves2d import (
-        Arc2D,
-        Circle2D,
-        ClosedPolyline2D,
-        Line2D,
-        Point2Like,
-        Polyline2D,
+    from cady.geometry.arc2 import Arc2
+    from cady.geometry.body3 import Body3
+    from cady.geometry.conic2 import Circle2
+    from cady.geometry.curves2 import Point2Like
+    from cady.geometry.frame3 import Frame3, Point3Like
+    from cady.geometry.line2 import Line2
+    from cady.geometry.polyline2 import ClosedPolyline2, Polyline2
+    from cady.geometry.polyline3 import (
+        Arc3,
+        Curve3,
+        Line3,
+        Polyline3,
+        Spline3,
     )
-    from cady.geometry.frame3d import Frame3D, Point3Like
-    from cady.geometry.polyline3d import (
-        Arc3D,
-        Curve3D,
-        Line3D,
-        Polyline3D,
-        Spline3D,
-    )
-    from cady.geometry.profile2d import Profile2D
+    from cady.geometry.profile2 import Profile2
 
 
-def line2d(start: Point2Like, end: Point2Like) -> Line2D:
-    from cady.geometry.curves2d import Line2D
+def line2(start: Point2Like, end: Point2Like) -> Line2:
+    from cady.geometry.line2 import Line2
 
-    return Line2D(start, end)
-
-
-def arc2d(centre: Point2Like, radius: float, start_rad: float, end_rad: float) -> Arc2D:
-    from cady.geometry.curves2d import Arc2D
-
-    return Arc2D(centre, radius, start_rad, end_rad)
+    return Line2(start, end)
 
 
-def line3d(start: Point3Like, end: Point3Like) -> Line3D:
-    from cady.geometry.polyline3d import Line3D
+def arc2(centre: Point2Like, radius: float, start_rad: float, end_rad: float) -> Arc2:
+    from cady.geometry.arc2 import Arc2
 
-    return Line3D(start, end)
+    return Arc2(centre, radius, start_rad, end_rad)
 
 
-def arc3d(
+def line3(start: Point3Like, end: Point3Like) -> Line3:
+    from cady.geometry.polyline3 import Line3
+
+    return Line3(start, end)
+
+
+def arc3(
     centre: Point3Like,
     radius: float,
     start_rad: float,
@@ -50,10 +49,10 @@ def arc3d(
     *,
     x_axis: Point3Like = (1.0, 0.0, 0.0),
     y_axis: Point3Like = (0.0, 1.0, 0.0),
-) -> Arc3D:
-    from cady.geometry.polyline3d import Arc3D
+) -> Arc3:
+    from cady.geometry.polyline3 import Arc3
 
-    return Arc3D(
+    return Arc3(
         centre,
         radius,
         start_rad,
@@ -63,34 +62,34 @@ def arc3d(
     )
 
 
-def spline3d(control_points: Iterable[Point3Like]) -> Spline3D:
-    from cady.geometry.polyline3d import Spline3D
+def spline3(control_points: Iterable[Point3Like]) -> Spline3:
+    from cady.geometry.polyline3 import Spline3
 
-    return Spline3D(control_points)
-
-
-def polyline3d(items: Iterable[Curve3D | Point3Like]) -> Polyline3D:
-    from cady.geometry.polyline3d import Polyline3D
-
-    return Polyline3D(items)
+    return Spline3(control_points)
 
 
-def circle2d(centre: Point2Like, radius: float) -> Circle2D:
-    from cady.geometry.curves2d import Circle2D
+def polyline3(items: Iterable[Curve3 | Point3Like]) -> Polyline3:
+    from cady.geometry.polyline3 import Polyline3
 
-    return Circle2D(centre, radius)
+    return Polyline3(items)
 
 
-def polyline2d(
+def circle2(centre: Point2Like, radius: float) -> Circle2:
+    from cady.geometry.conic2 import Circle2
+
+    return Circle2(centre, radius)
+
+
+def polyline2(
     vertices: tuple[Point2Like, ...],
     *,
     closed: bool = False,
-) -> Polyline2D | ClosedPolyline2D:
-    from cady.geometry.curves2d import ClosedPolyline2D, Polyline2D
+) -> Polyline2 | ClosedPolyline2:
+    from cady.geometry.polyline2 import ClosedPolyline2, Polyline2
 
     if closed:
-        return ClosedPolyline2D(vertices)
-    return Polyline2D(vertices)
+        return ClosedPolyline2(vertices)
+    return Polyline2(vertices)
 
 
 def profile_rectangle(
@@ -98,16 +97,16 @@ def profile_rectangle(
     height: float,
     *,
     origin: Point2Like = (0.0, 0.0),
-) -> Profile2D:
-    from cady.geometry.profile2d import Profile2D
+) -> Profile2:
+    from cady.geometry.profile2 import Profile2
 
-    return Profile2D.rectangle(width, height, origin=origin)
+    return Profile2.rectangle(width, height, origin=origin)
 
 
-def profile_circle(radius: float, *, centre: Point2Like = (0.0, 0.0)) -> Profile2D:
-    from cady.geometry.profile2d import Profile2D
+def profile_circle(radius: float, *, centre: Point2Like = (0.0, 0.0)) -> Profile2:
+    from cady.geometry.profile2 import Profile2
 
-    return Profile2D.circle(radius, centre=centre)
+    return Profile2.circle(radius, centre=centre)
 
 
 def box(
@@ -115,29 +114,29 @@ def box(
     depth: float,
     height: float,
     *,
-    frame: Frame3D | None = None,
-) -> Body3D:
-    from cady.geometry.body3d import Body3D
+    frame: Frame3 | None = None,
+) -> Body3:
+    from cady.geometry.body3 import Body3
 
-    return Body3D.box(width=width, depth=depth, height=height, frame=frame)
+    return Body3.box(width=width, depth=depth, height=height, frame=frame)
 
 
 def cylinder(
     radius: float,
     height: float,
     *,
-    frame: Frame3D | None = None,
-) -> Body3D:
-    from cady.geometry.body3d import Body3D
+    frame: Frame3 | None = None,
+) -> Body3:
+    from cady.geometry.body3 import Body3
 
-    return Body3D.cylinder(radius=radius, height=height, frame=frame)
+    return Body3.cylinder(radius=radius, height=height, frame=frame)
 
 
 def sphere(
     radius: float,
     *,
     centre: Point3Like = (0.0, 0.0, 0.0),
-) -> Body3D:
-    from cady.geometry.body3d import Body3D
+) -> Body3:
+    from cady.geometry.body3 import Body3
 
-    return Body3D.sphere(radius=radius, centre=centre)
+    return Body3.sphere(radius=radius, centre=centre)

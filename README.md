@@ -8,9 +8,9 @@ Start with [docs/index.md](docs/index.md) for the full documentation.
 
 ## What cady provides
 
-- immutable 2D geometry values such as `Line2D`, `Circle2D`, `Polyline2D`,
-  `ClosedPolyline2D`, `Spline2D`, `Ellipse2D`, `Profile2D`, and `Mesh2D`;
-- meshable 3D geometry through `Body3D`, `Face3D`, `Frame3D`, `Mesh3D`, and
+- immutable 2D geometry values such as `Line2`, `Circle2`, `Polyline2`,
+  `ClosedPolyline2`, `Spline2`, `Ellipse2`, `Profile2`, and `Mesh2`;
+- meshable 3D geometry through `Body3`, `Face3`, `Frame3`, `Mesh3`, and
   closed 3D polylines;
 - product structure with `Part`, `Assembly`, placed part instances, materials,
   and metadata;
@@ -52,24 +52,24 @@ Build a plate profile, put the 2D curves into a drawing, extrude the profile
 into a part, and write DXF/STL files:
 
 ```python
-from cady import Body3D, Drawing2D, Part, Profile2D, circle2d, line2d, profile_rectangle
+from cady import Body3, Drawing2, Part, Profile2, circle2, line2, profile_rectangle
 from cady.files import dxf, stl
 
 outline = profile_rectangle(1.0, 0.6)
-hole = circle2d((0.5, 0.3), 0.12)
-profile = Profile2D(outline.outer, holes=(hole,))
+hole = circle2((0.5, 0.3), 0.12)
+profile = Profile2(outline.outer, holes=(hole,))
 
 drawing = (
-    Drawing2D("front")
+    Drawing2("front")
     .add_layer("PLATE", color=7)
     .add_layer("CENTER", color=3, linetype="CENTER")
     .add(profile.outer, layer="PLATE")
     .add(hole, layer="PLATE")
-    .add(line2d((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
+    .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
     .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
 )
 
-body = Body3D.from_profile(profile).extrude(0.04)
+body = Body3.from_profile(profile).extrude(0.04)
 part = Part("plate").with_body(body)
 
 dxf.write(drawing, "plate.dxf", tolerance=1e-3)
@@ -84,8 +84,8 @@ and `.with_metadata(...)` return new values rather than mutating the original.
 cady does not require a top-level model object. Use the object that matches the
 work:
 
-- use `Drawing2D` for 2D drafting and DXF output;
-- use `Body3D` for editable meshable geometry;
+- use `Drawing2` for 2D drafting and DXF output;
+- use `Body3` for editable meshable geometry;
 - use `Part` for one named manufacturable item;
 - use `Assembly` for placed parts or subassemblies;
 - use `Scene` for cameras, lights, display styles, and viewer state;
@@ -126,11 +126,11 @@ members = step.read_members("member.step")
 Current file support is deliberately small:
 
 - DXF writes `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, and `TEXT` entities from a
-  `Drawing2D`; profile-like objects are sampled to closed polylines when no
+  `Drawing2`; profile-like objects are sampled to closed polylines when no
   direct DXF entity exists.
 - DXF reads basic 2D drawing entities, `3DFACE` triangles/quads, and 3D
   polyline wires. ACIS-backed solids are reported as skipped records.
-- STL writes binary or ASCII triangle meshes from `Mesh3D`, `Body3D`, `Part`,
+- STL writes binary or ASCII triangle meshes from `Mesh3`, `Body3`, `Part`,
   `Assembly`, or meshable `Document` contents.
 - STEP write currently emits mesh vertices and triangular face loops from
   meshable targets. STEP read remains analysis-oriented and extracts elementary
@@ -143,7 +143,7 @@ PYTHONPATH=src .venv/bin/python examples/scripts/plate_with_hole.py
 PYTHONPATH=src .venv/bin/python examples/scripts/model_plate.py
 PYTHONPATH=src .venv/bin/python examples/scripts/production_dxf.py
 PYTHONPATH=src .venv/bin/python examples/scripts/production_step.py
-PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3d.py --shape all
+PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3.py --shape all
 ```
 
 Most scripts write to `examples/gallery` and accept `--out <dir>`.
@@ -163,7 +163,7 @@ cady.files        DXF, STL, and STEP facades
 cady.errors       shared exception hierarchy
 ```
 
-The legacy `Model`, `Shape2D`, `Shape3D`, `Rectangle`, `Prism`, `Extrusion`,
+The legacy `Model`, `Shape2`, `Shape3`, `Rectangle`, `Prism`, `Extrusion`,
 `DxfDrawing`, `StlMesh`, `cady.domain`, `cady.build`, `cady.plotting`, and
 `write_model(...)` APIs have been removed from this branch.
 

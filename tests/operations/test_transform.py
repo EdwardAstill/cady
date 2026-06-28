@@ -3,8 +3,9 @@ from __future__ import annotations
 from math import pi
 
 import numpy as np
+import pytest
 
-from cady.operations.transforms import Pose3, Transform2, Transform3
+from cady.operations.transforms import Pose3, Transform2, Transform3, coerce_transform3
 
 
 def test_transform2_rotation_origin_and_centre() -> None:
@@ -76,3 +77,35 @@ def test_pose3_and_vectorised_large_transform() -> None:
     assert transformed.shape == (1000, 3)
     np.testing.assert_allclose(transformed[0], [1.0, 3.0, 3.0])
     np.testing.assert_allclose(pose.to_transform3().apply_points(points), transformed)
+
+
+def test_coerce_transform3_accepts_none_transform_pose_and_translation() -> None:
+    pose = Pose3(np.eye(3), np.array([1.0, 2.0, 3.0]))
+
+    np.testing.assert_allclose(
+        coerce_transform3(None, allow_none=True).matrix,
+        Transform3.identity().matrix,
+    )
+    np.testing.assert_allclose(
+        coerce_transform3(Transform3.translation(1.0, 2.0, 3.0)).matrix,
+        Transform3.translation(1.0, 2.0, 3.0).matrix,
+    )
+    np.testing.assert_allclose(
+        coerce_transform3(pose).matrix,
+        pose.to_transform3().matrix,
+    )
+    np.testing.assert_allclose(
+        coerce_transform3((4.0, 5.0, 6.0)).matrix,
+        Transform3.translation(4.0, 5.0, 6.0).matrix,
+    )
+
+
+def test_coerce_transform3_rejects_invalid_values() -> None:
+    with pytest.raises(TypeError, match="value must not be None"):
+        coerce_transform3(None)
+
+    with pytest.raises(
+        TypeError,
+        match="value must be Transform3, Pose3-like, or a 3D translation",
+    ):
+        coerce_transform3((1.0, 2.0))

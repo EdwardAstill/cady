@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3D
+from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3
 from cady.files import dxf
 from cady.operations import Transform3
 from cady.view import Camera as CameraType
@@ -33,7 +33,7 @@ def main() -> None:
 
     wf = dxf.read_wireframe(LINESPLAN_DXF)
     print_wireframe_summary(wf)
-    wf.view(title="linesplan 9m - Wireframe3D", style=MESH_STYLE)
+    wf.view(title="linesplan 9m - Wireframe3", style=MESH_STYLE)
 
 
 def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
@@ -77,7 +77,7 @@ def print_wire_summary(result: dxf.DxfImportResult, scene: Scene) -> None:
     print(f"camera scale: {camera.orthographic_scale:g}")
 
 
-def print_wireframe_summary(wf: Wireframe3D) -> None:
+def print_wireframe_summary(wf: Wireframe3) -> None:
     print(f"wireframe vertices: {len(wf.vertices)}")
     print(f"wireframe edges: {len(wf.edges)}")
 

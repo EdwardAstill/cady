@@ -2,15 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from cady import Drawing2D, Line2D, box
+from cady import Document, Drawing2, Line2, Part, box
 from cady.errors import ReadError
 from cady.files import dxf, step, stl
-from cady.geometry import Mesh3D
+from cady.geometry import Mesh3
 from cady.vec import Vec3
 
 
 def test_dxf_write_and_read_drawing(tmp_path: Path) -> None:
-    drawing = Drawing2D("front").add(Line2D((0, 0), (1, 0)), layer="CUT")
+    drawing = Drawing2("front").add(Line2((0, 0), (1, 0)), layer="CUT")
     path = tmp_path / "front.dxf"
 
     dxf.write(drawing, path, tolerance=1e-3)
@@ -186,7 +186,7 @@ def test_dxf_read_mesh_rejects_legacy_line_mesh_kwargs(tmp_path: Path) -> None:
 
 
 def test_stl_write_mesh(tmp_path: Path) -> None:
-    mesh = Mesh3D((Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)), ((0, 1, 2),))
+    mesh = Mesh3((Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)), ((0, 1, 2),))
     path = tmp_path / "mesh.stl"
 
     stl.write(mesh, path, ascii=True, tolerance=1e-3)
@@ -194,8 +194,26 @@ def test_stl_write_mesh(tmp_path: Path) -> None:
     assert path.read_text(encoding="ascii").startswith("solid cady")
 
 
+def test_stl_write_document_with_meshable_parts(tmp_path: Path) -> None:
+    document = Document("job").add_part(Part("box").with_body(box(1, 1, 1)))
+    path = tmp_path / "job.stl"
+
+    stl.write(document, path, ascii=True, tolerance=1e-3)
+
+    assert path.read_text(encoding="ascii").startswith("solid cady")
+
+
 def test_step_render_body() -> None:
     text = step.render(box(1, 1, 1), tolerance=1e-3)
+
+    assert "ISO-10303-21" in text
+    assert "POLY_LOOP" in text
+
+
+def test_step_render_document_with_meshable_parts() -> None:
+    document = Document("job").add_part(Part("box").with_body(box(1, 1, 1)))
+
+    text = step.render(document, tolerance=1e-3)
 
     assert "ISO-10303-21" in text
     assert "POLY_LOOP" in text

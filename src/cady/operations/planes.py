@@ -1,3 +1,5 @@
+"""Plane fitting and projection helpers for mesh operations."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -7,6 +9,7 @@ Point3Array = NDArray[np.float64]
 
 
 def vector3(value: object, *, name: str) -> Point3Array:
+    """Validate a single 3D vector-like input."""
     array = np.array(value, dtype=np.float64, copy=True)
     if array.shape != (3,) or not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must be a finite 3D vector")
@@ -14,6 +17,7 @@ def vector3(value: object, *, name: str) -> Point3Array:
 
 
 def unit3(value: object, *, name: str) -> Point3Array:
+    """Validate and normalise a 3D vector-like input."""
     vector = vector3(value, name=name)
     length = float(np.linalg.norm(vector))
     if length == 0.0:
@@ -22,6 +26,7 @@ def unit3(value: object, *, name: str) -> Point3Array:
 
 
 def basis_for_plane(normal: Point3Array) -> tuple[Point3Array, Point3Array]:
+    """Build an orthonormal in-plane basis for a plane normal."""
     reference = (
         np.array([1.0, 0.0, 0.0], dtype=np.float64)
         if abs(float(normal[0])) < 0.9
@@ -39,6 +44,7 @@ def project_loop(
     origin: Point3Array,
     normal: Point3Array,
 ) -> list[tuple[float, float]]:
+    """Project a 3D vertex loop into plane-local 2D coordinates."""
     u_axis, v_axis = basis_for_plane(normal)
     projected: list[tuple[float, float]] = []
     for vertex_index in loop:

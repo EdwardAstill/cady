@@ -15,10 +15,12 @@ from typing import Any, cast
 
 import numpy as np
 
-from cady.geometry import Mesh3D, PointCloud3D, Wireframe3D
-from cady.operations.transforms import Transform3
+from cady.geometry import Mesh3, PointCloud3, Wireframe3
+from cady.operations.transforms import Transform3, coerce_transform3
 from cady.product import Assembly, Part
+from cady.utils import positive_tolerance
 from cady.view import AmbientLight, Camera, DirectionalLight, Scene
+from cady.view.errors import ViewError
 from cady.view.mesh_buffers import orientation_edges as _orientation_edges
 from cady.view.mesh_buffers import shaded_face_buffers as _shaded_face_buffers
 from cady.view.style import DisplayStyle
@@ -90,6 +92,8 @@ LineVertices = Sequence[Sequence[float]] | np.ndarray
 
 @dataclass(frozen=True, slots=True)
 class SceneMesh:
+    """Mesh payload prepared for the viewer backend."""
+
     name: str
     vertices: np.ndarray
     faces: np.ndarray
@@ -101,6 +105,8 @@ class SceneMesh:
 
 @dataclass(frozen=True, slots=True)
 class SceneLine:
+    """Polyline payload prepared for the viewer backend."""
+
     name: str
     vertices: np.ndarray
     indices: np.ndarray
@@ -109,6 +115,8 @@ class SceneLine:
 
 @dataclass(frozen=True, slots=True)
 class PreparedScene:
+    """Scene data converted into arrays and lighting values for rendering."""
+
     name: str
     meshes: tuple[SceneMesh, ...]
     lines: tuple[SceneLine, ...]
@@ -118,9 +126,46 @@ class PreparedScene:
     light_direction: tuple[float, float, float]
 
 
+@dataclass(frozen=True, slots=True)
+class _DrawBatch:
+    positions: np.ndarray
+    normals: np.ndarray
+    colors: np.ndarray
+    primitive: str
+    index_buffer: object | None = None
+    point_size: float = 4.0
+
+
+@dataclass(frozen=True, slots=True)
+class _SceneBounds:
+    local_centre: np.ndarray
+    radius: float
+
+
+@dataclass(frozen=True, slots=True)
+class _CanvasGeometry:
+    face_batches: tuple[_DrawBatch, ...]
+    edge_batches: tuple[_DrawBatch, ...]
+    point_batches: tuple[_DrawBatch, ...]
+    bounds: _SceneBounds
+
+
 def _require_vispy() -> None:
     if not _HAS_VISPY:
         raise ImportError("Interactive 3D viewing requires vispy; install cady[view]")
+
+
+def _select_vispy_shader_backend(gl: Any) -> None:
+    """Keep VisPy's shader conversion aligned with the active GL context."""
+    version = gl.glGetParameter(gl.GL_VERSION)
+    if isinstance(version, bytes):
+        version = version.decode("utf-8", errors="replace")
+    if not str(version).startswith("OpenGL ES"):
+        return
+
+    backend_name = getattr(gl.current_backend, "__name__", "")
+    if ".es" not in backend_name:
+        gl.use_gl("es2")
 
 
 def _translation_matrix(offset: tuple[float, float, float] | np.ndarray) -> np.ndarray:
@@ -321,6 +366,118 @@ def _vertex_attributes(
     )
 
 
+def _solid_color_vertices(
+    vertices: np.ndarray,
+    color: tuple[float, float, float],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    colors = np.tile(np.array(color, dtype=np.float32), (len(vertices), 1))
+    normals = np.tile(np.array((0.0, 0.0, 1.0), dtype=np.float32), (len(vertices), 1))
+    return _vertex_attributes(vertices, normals, colors)
+
+
+def _line_batch(line: SceneLine, gloo: Any) -> _DrawBatch:
+    positions, normals, colors = _solid_color_vertices(line.vertices, line.color)
+    return _DrawBatch(
+        positions=positions,
+        normals=normals,
+        colors=colors,
+        primitive="lines",
+        index_buffer=gloo.IndexBuffer(line.indices),
+    )
+
+
+def _face_batch(mesh: SceneMesh, gloo: Any) -> _DrawBatch | None:
+    if mesh.render_mode != "shaded" or len(mesh.faces) == 0:
+        return None
+    face_vertices, face_indices, face_normals = _shaded_face_buffers(
+        mesh.vertices,
+        mesh.faces,
+    )
+    colors = np.tile(np.array(mesh.color, dtype=np.float32), (len(face_vertices), 1))
+    positions, normals, color_data = _vertex_attributes(face_vertices, face_normals, colors)
+    return _DrawBatch(
+        positions=positions,
+        normals=normals,
+        colors=color_data,
+        primitive="triangles",
+        index_buffer=gloo.IndexBuffer(face_indices),
+    )
+
+
+def _edge_batch(mesh: SceneMesh, gloo: Any) -> _DrawBatch | None:
+    if mesh.render_mode not in {"shaded", "wireframe"}:
+        return None
+    edge_indices = (
+        mesh.edges
+        if len(mesh.edges) > 0
+        else _orientation_edges(mesh.vertices, mesh.faces)
+    )
+    if len(edge_indices) == 0:
+        return None
+    positions, normals, colors = _solid_color_vertices(mesh.vertices, _mesh_edge_color(mesh))
+    return _DrawBatch(
+        positions=positions,
+        normals=normals,
+        colors=colors,
+        primitive="lines",
+        index_buffer=gloo.IndexBuffer(edge_indices),
+    )
+
+
+def _point_batch(mesh: SceneMesh) -> _DrawBatch | None:
+    if mesh.render_mode != "points":
+        return None
+    positions, normals, colors = _solid_color_vertices(mesh.vertices, mesh.color)
+    return _DrawBatch(
+        positions=positions,
+        normals=normals,
+        colors=colors,
+        primitive="points",
+        point_size=mesh.point_size,
+    )
+
+
+def _scene_bounds(geometry_vertices: Sequence[np.ndarray]) -> _SceneBounds:
+    if not geometry_vertices:
+        raise ValueError("viewer requires at least one vertex")
+    all_vertices = np.vstack(geometry_vertices)
+    local_centre = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2.0
+    spans = all_vertices.max(axis=0) - all_vertices.min(axis=0)
+    radius = float(np.max(spans)) * 1.2 or 1.0
+    return _SceneBounds(local_centre=local_centre, radius=radius)
+
+
+def _build_canvas_geometry(prepared: PreparedScene, gloo: Any) -> _CanvasGeometry:
+    """Convert prepared scene arrays into GPU-ready draw batches."""
+    face_batches: list[_DrawBatch] = []
+    edge_batches: list[_DrawBatch] = []
+    point_batches: list[_DrawBatch] = []
+    geometry_vertices: list[np.ndarray] = []
+
+    for line in prepared.lines:
+        geometry_vertices.append(line.vertices)
+        edge_batches.append(_line_batch(line, gloo))
+
+    for mesh in prepared.meshes:
+        geometry_vertices.append(mesh.vertices)
+        face_batch = _face_batch(mesh, gloo)
+        if face_batch is not None:
+            face_batches.append(face_batch)
+        edge_batch = _edge_batch(mesh, gloo)
+        if edge_batch is not None:
+            edge_batches.append(edge_batch)
+        point_batch = _point_batch(mesh)
+        if point_batch is not None:
+            point_batches.append(point_batch)
+
+    return _CanvasGeometry(
+        face_batches=tuple(face_batches),
+        edge_batches=tuple(edge_batches),
+        point_batches=tuple(point_batches),
+        bounds=_scene_bounds(geometry_vertices),
+    )
+
+
 def _make_canvas(
     prepared: PreparedScene,
     *,
@@ -334,6 +491,7 @@ def _make_canvas(
     perspective = transforms.perspective
     ortho = transforms.ortho
     canvas_base = cast(type[Any], app.Canvas)
+    geometry = _build_canvas_geometry(prepared, gloo)
 
     class _Canvas(canvas_base):
         def __init__(self) -> None:
@@ -344,93 +502,14 @@ def _make_canvas(
                 config={"samples": 4},
             )
 
+            _select_vispy_shader_backend(gloo.gl)
             self._program = gloo.Program(_VERT_SHADER, _FRAG_SHADER)
             self._camera = prepared.camera
-
-            self._face_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
-            self._edge_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, object]] = []
-            self._point_data: list[tuple[np.ndarray, np.ndarray, np.ndarray, float]] = []
-            geometry_vertices: list[np.ndarray] = []
-
-            for line in prepared.lines:
-                geometry_vertices.append(line.vertices)
-                colors = np.tile(
-                    np.array(line.color, dtype=np.float32),
-                    (len(line.vertices), 1),
-                )
-                normals = np.tile(
-                    np.array((0.0, 0.0, 1.0), dtype=np.float32),
-                    (len(line.vertices), 1),
-                )
-                self._edge_data.append(
-                    (
-                        *_vertex_attributes(line.vertices, normals, colors),
-                        gloo.IndexBuffer(line.indices),
-                    )
-                )
-
-            for mesh in prepared.meshes:
-                geometry_vertices.append(mesh.vertices)
-                edge_indices = (
-                    mesh.edges
-                    if len(mesh.edges) > 0
-                    else _orientation_edges(mesh.vertices, mesh.faces)
-                )
-                if mesh.render_mode == "shaded" and len(mesh.faces) > 0:
-                    face_vertices, face_indices, face_normals = _shaded_face_buffers(
-                        mesh.vertices,
-                        mesh.faces,
-                    )
-                    colors = np.tile(
-                        np.array(mesh.color, dtype=np.float32),
-                        (len(face_vertices), 1),
-                    )
-                    positions, normal_data, color_data = _vertex_attributes(
-                        face_vertices,
-                        face_normals,
-                        colors,
-                    )
-                    self._face_data.append(
-                        (positions, normal_data, color_data, gloo.IndexBuffer(face_indices))
-                    )
-
-                if mesh.render_mode in {"shaded", "wireframe"} and len(edge_indices) > 0:
-                    edge_colors = np.tile(
-                        np.array(_mesh_edge_color(mesh), dtype=np.float32),
-                        (len(mesh.vertices), 1),
-                    )
-                    normals = np.tile(
-                        np.array((0.0, 0.0, 1.0), dtype=np.float32),
-                        (len(mesh.vertices), 1),
-                    )
-                    positions, normal_data, color_data = _vertex_attributes(
-                        mesh.vertices,
-                        normals,
-                        edge_colors,
-                    )
-                    self._edge_data.append(
-                        (positions, normal_data, color_data, gloo.IndexBuffer(edge_indices))
-                    )
-
-                if mesh.render_mode == "points":
-                    colors = np.tile(
-                        np.array(mesh.color, dtype=np.float32),
-                        (len(mesh.vertices), 1),
-                    )
-                    normals = np.tile(
-                        np.array((0.0, 0.0, 1.0), dtype=np.float32),
-                        (len(mesh.vertices), 1),
-                    )
-                    self._point_data.append(
-                        (*_vertex_attributes(mesh.vertices, normals, colors), mesh.point_size)
-                    )
-
-            if not geometry_vertices:
-                raise ValueError("viewer requires at least one vertex")
-            all_v = np.vstack(geometry_vertices)
-            self._local_centre = (all_v.min(axis=0) + all_v.max(axis=0)) / 2.0
-            spans = all_v.max(axis=0) - all_v.min(axis=0)
-            self._radius = float(np.max(spans)) * 1.2 or 1.0
+            self._face_batches = geometry.face_batches
+            self._edge_batches = geometry.edge_batches
+            self._point_batches = geometry.point_batches
+            self._local_centre = geometry.bounds.local_centre
+            self._radius = geometry.bounds.radius
             requested_distance = float(
                 np.linalg.norm(
                     np.array(self._camera.position, dtype=np.float32)
@@ -439,18 +518,9 @@ def _make_canvas(
             )
             self._distance = max(requested_distance, self._radius * 0.8)
             self._pan = np.zeros(2, dtype=np.float32)
-            axis_vertices, axis_indices, axis_colors = _local_axis_line_data(
-                self._local_centre,
-                1.0,
+            self._axis_positions, self._axis_normals, self._axis_colors, self._axis_index_buffer = (
+                self._create_axis_buffers(1.0)
             )
-            axis_normals = np.tile(
-                np.array((0.0, 0.0, 1.0), dtype=np.float32),
-                (len(axis_vertices), 1),
-            )
-            self._axis_positions = np.ascontiguousarray(axis_vertices, dtype=np.float32)
-            self._axis_colors = np.ascontiguousarray(axis_colors, dtype=np.float32)
-            self._axis_normals = np.ascontiguousarray(axis_normals, dtype=np.float32)
-            self._axis_index_buffer = gloo.IndexBuffer(axis_indices)
             self._show_local_axes = False
             self._orientation = _camera_orientation(self._camera)
             self._orthographic_scale = self._camera.orthographic_scale
@@ -458,11 +528,19 @@ def _make_canvas(
             self._last_mouse: tuple[float, float] | None = None
             self._mouse_button: int | None = None
 
+            self._configure_program_uniforms()
+            self._configure_canvas_state()
+
+            self._update_matrices()
+            self.show()
+
+        def _configure_program_uniforms(self) -> None:
             self._program["u_light_direction"] = prepared.light_direction
             self._program["u_ambient_light"] = prepared.ambient_light
             self._program["u_diffuse_light"] = prepared.diffuse_light
             self._program["u_point_size"] = 4.0
 
+        def _configure_canvas_state(self) -> None:
             gloo.set_state(
                 clear_color="white",
                 depth_test=True,
@@ -471,15 +549,27 @@ def _make_canvas(
                 line_width=1.0,
             )
 
-            self._update_matrices()
-            self.show()
-
-        def _update_local_axis_length(self, length: float) -> None:
-            axis_vertices, _axis_indices, _axis_colors = _local_axis_line_data(
+        def _create_axis_buffers(
+            self,
+            length: float,
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray, object]:
+            axis_vertices, axis_indices, axis_colors = _local_axis_line_data(
                 self._local_centre,
                 length,
             )
-            self._axis_positions = np.ascontiguousarray(axis_vertices, dtype=np.float32)
+            _positions, normals, _colors = _solid_color_vertices(
+                axis_vertices,
+                (0.0, 0.0, 0.0),
+            )
+            return (
+                np.ascontiguousarray(axis_vertices, dtype=np.float32),
+                normals,
+                np.ascontiguousarray(axis_colors, dtype=np.float32),
+                gloo.IndexBuffer(axis_indices),
+            )
+
+        def _update_local_axis_length(self, length: float) -> None:
+            self._axis_positions, _, _, _ = self._create_axis_buffers(length)
 
         def _projection(self, width: int, height: int) -> np.ndarray:
             near, far = _projection_clip_planes(self._radius, self._distance, self._camera)
@@ -502,6 +592,7 @@ def _make_canvas(
 
             view = _translation_matrix((self._pan[0], self._pan[1], -self._distance))
             model = _model_matrix(self._local_centre, self._orientation)
+            # Keep the local axis triad visually stable on screen as zoom changes.
             if self._camera.projection == "orthographic":
                 axis_length = _view_relative_orthographic_axis_length(
                     self._orthographic_scale,
@@ -519,9 +610,17 @@ def _make_canvas(
             self._program["u_view"] = view
             self._program["u_model"] = model
 
-        def on_draw(self, event: object) -> None:
-            gloo.clear(color=True, depth=True)
+        def _draw_batch(self, batch: _DrawBatch) -> None:
+            self._program["a_position"] = batch.positions
+            self._program["a_normal"] = batch.normals
+            self._program["a_color"] = batch.colors
+            if batch.primitive == "points":
+                self._program["u_point_size"] = batch.point_size
+                self._program.draw(batch.primitive)
+                return
+            self._program.draw(batch.primitive, batch.index_buffer)
 
+        def _draw_face_batches(self) -> None:
             gloo.set_state(
                 blend=False,
                 depth_test=True,
@@ -529,12 +628,10 @@ def _make_canvas(
                 polygon_offset_fill=True,
             )
             self._program["u_lighting"] = 1.0
-            for positions, normals, colors, ibuf in self._face_data:
-                self._program["a_position"] = positions
-                self._program["a_normal"] = normals
-                self._program["a_color"] = colors
-                self._program.draw("triangles", ibuf)
+            for batch in self._face_batches:
+                self._draw_batch(batch)
 
+        def _draw_edge_batches(self) -> None:
             gloo.set_state(
                 blend=True,
                 depth_test=True,
@@ -543,36 +640,42 @@ def _make_canvas(
                 line_width=1.0,
             )
             self._program["u_lighting"] = 0.0
-            for positions, normals, colors, ibuf in self._edge_data:
-                self._program["a_position"] = positions
-                self._program["a_normal"] = normals
-                self._program["a_color"] = colors
-                self._program.draw("lines", ibuf)
-            if self._point_data:
-                gloo.set_state(
-                    blend=True,
-                    depth_test=True,
-                    depth_mask=False,
-                    polygon_offset_fill=False,
-                )
-                for positions, normals, colors, point_size in self._point_data:
-                    self._program["u_point_size"] = point_size
-                    self._program["a_position"] = positions
-                    self._program["a_normal"] = normals
-                    self._program["a_color"] = colors
-                    self._program.draw("points")
-            if self._show_local_axes:
-                gloo.set_state(
-                    blend=False,
-                    depth_test=False,
-                    depth_mask=False,
-                    polygon_offset_fill=False,
-                    line_width=3.0,
-                )
-                self._program["a_position"] = self._axis_positions
-                self._program["a_normal"] = self._axis_normals
-                self._program["a_color"] = self._axis_colors
-                self._program.draw("lines", self._axis_index_buffer)
+            for batch in self._edge_batches:
+                self._draw_batch(batch)
+
+        def _draw_point_batches(self) -> None:
+            if not self._point_batches:
+                return
+            gloo.set_state(
+                blend=True,
+                depth_test=True,
+                depth_mask=False,
+                polygon_offset_fill=False,
+            )
+            for batch in self._point_batches:
+                self._draw_batch(batch)
+
+        def _draw_local_axes(self) -> None:
+            if not self._show_local_axes:
+                return
+            gloo.set_state(
+                blend=False,
+                depth_test=False,
+                depth_mask=False,
+                polygon_offset_fill=False,
+                line_width=3.0,
+            )
+            self._program["a_position"] = self._axis_positions
+            self._program["a_normal"] = self._axis_normals
+            self._program["a_color"] = self._axis_colors
+            self._program.draw("lines", self._axis_index_buffer)
+
+        def on_draw(self, event: object) -> None:
+            gloo.clear(color=True, depth=True)
+            self._draw_face_batches()
+            self._draw_edge_batches()
+            self._draw_point_batches()
+            self._draw_local_axes()
             gloo.set_state(depth_mask=True, line_width=1.0)
 
         def on_resize(self, event: object) -> None:
@@ -639,6 +742,7 @@ def _make_canvas(
 
 
 def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
+    """Convert scene objects into mesh and line buffers for VisPy rendering."""
     meshes: list[SceneMesh] = []
     lines: list[SceneLine] = []
     for scene_object in scene.objects:
@@ -723,6 +827,7 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
 
 
 def view_scene(scene: Scene, *, tolerance: float = 1e-3, title: str | None = None) -> object:
+    """Open an interactive window for a prepared scene."""
     _require_vispy()
     app = cast(Any, importlib.import_module("vispy.app"))
     _make_canvas(prepare_scene(scene, tolerance=tolerance), title=title)
@@ -736,6 +841,7 @@ def view_target(
     tolerance: float = 1e-3,
     title: str | None = None,
 ) -> object:
+    """Open an interactive window for a single target."""
     scene = Scene.from_target(target, name=title or "cady 3D viewer").with_camera(
         _DEFAULT_CAMERA,
         name="camera",
@@ -744,6 +850,7 @@ def view_target(
 
 
 def view_mesh(mesh: object, *, tolerance: float = 1e-3, title: str | None = None) -> object:
+    """Open an interactive window for one mesh-like target."""
     return view_target(mesh, tolerance=tolerance, title=title or "cady 3D mesh")
 
 
@@ -753,6 +860,7 @@ def view_meshes(
     tolerance: float = 1e-3,
     title: str = "cady 3D meshes",
 ) -> object:
+    """Open an interactive window for multiple mesh-like targets."""
     scene = Scene(name=title)
     for index, mesh in enumerate(meshes):
         scene = scene.add(mesh, name=f"mesh_{index + 1}")
@@ -765,6 +873,7 @@ def view_lines(
     *,
     title: str = "cady 3D wire viewer",
 ) -> object:
+    """Open an interactive window for one or more polylines."""
     _require_vispy()
     vertices: list[np.ndarray] = []
     indices: list[np.ndarray] = []
@@ -803,20 +912,36 @@ def view_lines(
     return None
 
 
-def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3D:
-    if isinstance(target, Mesh3D):
+def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
+    from cady.document import Document
+
+    if isinstance(target, Wireframe3):
+        return Mesh3(target.vertices, (), target.edges)
+    try:
+        positive_tolerance(tolerance)
+    except ValueError as exc:
+        raise ViewError(str(exc)) from exc
+    if isinstance(target, Mesh3):
         return target
-    if isinstance(target, Wireframe3D):
-        return Mesh3D(target.vertices, (), target.edges)
+    if isinstance(target, Document):
+        meshes = [
+            _mesh_from_target(item.value, tolerance=tolerance)
+            for item in (*target.parts, *target.assemblies)
+        ]
+        if not meshes:
+            raise ViewError("document contains no meshable parts or assemblies")
+        return Mesh3.merged(meshes)
     to_mesh = getattr(target, "to_mesh", None)
     if callable(to_mesh):
         mesh = to_mesh(tolerance=tolerance)
-        return _mesh_from_target(mesh, tolerance=tolerance)
-    raise TypeError("scene target must be Mesh3D or expose to_mesh(tolerance=...)")
+        if isinstance(mesh, Mesh3):
+            return mesh
+        raise ViewError("to_mesh() must return Mesh3")
+    raise ViewError("scene target must be Mesh3, Wireframe3, or expose to_mesh(tolerance=...)")
 
 
-def _point_cloud_from_target(target: object) -> PointCloud3D | None:
-    if isinstance(target, PointCloud3D):
+def _point_cloud_from_target(target: object) -> PointCloud3 | None:
+    if isinstance(target, PointCloud3):
         return target
     return None
 
@@ -836,20 +961,12 @@ def _line_from_target(
 
 
 def _transform_from_pose(pose: object) -> Transform3:
-    if isinstance(pose, Transform3):
-        return pose
-    to_transform3 = getattr(pose, "to_transform3", None)
-    if callable(to_transform3):
-        transform = to_transform3()
-        if isinstance(transform, Transform3):
-            return transform
     try:
-        values = tuple(float(component) for component in pose)  # type: ignore[reportUnknownVariableType]
-    except TypeError:
-        values = ()
-    if len(values) == 3:
-        return Transform3.translation(values[0], values[1], values[2])
-    raise TypeError("scene object pose must be Transform3, Pose3-like, or a 3D translation")
+        return coerce_transform3(pose)
+    except TypeError as exc:
+        raise TypeError(
+            "scene object pose must be Transform3, Pose3-like, or a 3D translation"
+        ) from exc
 
 
 def _style_color(target: object, style: DisplayStyle) -> tuple[float, float, float]:

@@ -11,7 +11,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3D, Scene, Vec3, Wireframe3D
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Vec3, Wireframe3
 from cady.files import dxf
 from cady.operations import ArrayPolyline3
 
@@ -97,7 +97,7 @@ def main() -> None:
     view_scene(build_scene(mesh, boundaries), title="linesplan 9m - mesh boundary")
 
 
-def build_scene(mesh: Mesh3D, boundaries: tuple[Mesh3D, ...]) -> Scene:
+def build_scene(mesh: Mesh3, boundaries: tuple[Mesh3, ...]) -> Scene:
     lower, upper = mesh.bounds()
     lower = _point_tuple(lower)
     upper = _point_tuple(upper)
@@ -115,7 +115,7 @@ def build_scene(mesh: Mesh3D, boundaries: tuple[Mesh3D, ...]) -> Scene:
     )
 
 
-def print_mesh_summary(label: str, mesh: Mesh3D) -> None:
+def print_mesh_summary(label: str, mesh: Mesh3) -> None:
     lower, upper = mesh.bounds()
     print(
         f"{label}: {len(mesh.vertices)} vertices, {len(mesh.edges)} edges, "
@@ -125,7 +125,7 @@ def print_mesh_summary(label: str, mesh: Mesh3D) -> None:
     )
 
 
-def print_wireframe_summary(label: str, wireframe: Wireframe3D) -> None:
+def print_wireframe_summary(label: str, wireframe: Wireframe3) -> None:
     lower, upper = wireframe.bounds()
     print(
         f"{label}: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "
@@ -136,11 +136,11 @@ def print_wireframe_summary(label: str, wireframe: Wireframe3D) -> None:
 
 def _meshes_from_boundary_loops(
     loops: tuple[ArrayPolyline3, ...],
-) -> tuple[Mesh3D, ...]:
+) -> tuple[Mesh3, ...]:
     return tuple(_mesh_from_boundary_loop(loop) for loop in loops)
 
 
-def _mesh_from_boundary_loop(loop: ArrayPolyline3) -> Mesh3D:
+def _mesh_from_boundary_loop(loop: ArrayPolyline3) -> Mesh3:
     points = [
         Vec3(float(point[0]), float(point[1]), float(point[2]))
         for point in loop.vertices
@@ -148,7 +148,7 @@ def _mesh_from_boundary_loop(loop: ArrayPolyline3) -> Mesh3D:
     if len(points) >= 2 and points[0] == points[-1]:
         points = points[:-1]
     edges = tuple((index, (index + 1) % len(points)) for index in range(len(points)))
-    return Mesh3D(tuple(points), (), edges)
+    return Mesh3(tuple(points), (), edges)
 
 
 def _boundary_style(index: int) -> DisplayStyle:

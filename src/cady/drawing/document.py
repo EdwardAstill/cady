@@ -1,3 +1,5 @@
+"""Immutable 2D drawing document container."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -6,18 +8,18 @@ from types import MappingProxyType
 
 from cady.drawing._geometry import Bounds2, merge_bounds, point2, transformed_bounds
 from cady.drawing.dimensions import (
-    AlignedDimension2D,
-    AngularDimension2D,
-    DiameterDimension2D,
-    Dimension2D,
+    AlignedDimension2,
+    AngularDimension2,
+    DiameterDimension2,
+    Dimension2,
     DimStyle,
-    LinearDimension2D,
-    RadiusDimension2D,
+    LinearDimension2,
+    RadiusDimension2,
 )
-from cady.drawing.entities import BlockDefinition, DrawingEntity, Hatch2D, Insert2D, Text2D
+from cady.drawing.entities import BlockDefinition, DrawingEntity, Hatch2, Insert2, Text2
 from cady.drawing.layers import Layer
 
-DrawingItem = DrawingEntity | Text2D | Hatch2D | Insert2D | Dimension2D
+DrawingItem = DrawingEntity | Text2 | Hatch2 | Insert2 | Dimension2
 
 
 def _default_dim_styles() -> tuple[DimStyle, ...]:
@@ -33,7 +35,9 @@ def _empty_metadata() -> dict[str, object]:
 
 
 @dataclass(frozen=True, slots=True)
-class Drawing2D:
+class Drawing2:
+    """2D drawing composed of layers, entities, blocks, and dimension styles."""
+
     name: str = "drawing"
     units: str = "m"
     layers: tuple[Layer, ...] = ()
@@ -62,6 +66,7 @@ class Drawing2D:
         object.__setattr__(self, "entities", entities)
         object.__setattr__(self, "blocks", blocks)
         object.__setattr__(self, "dim_styles", dim_styles)
+        # Freeze mapping-like inputs so downstream code cannot mutate document state.
         object.__setattr__(self, "header", MappingProxyType(dict(self.header)))
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
@@ -71,7 +76,8 @@ class Drawing2D:
         *,
         color: int = 7,
         linetype: str = "CONTINUOUS",
-    ) -> Drawing2D:
+    ) -> Drawing2:
+        """Return a new drawing with an added layer definition."""
         value = layer if isinstance(layer, Layer) else Layer(layer, color=color, linetype=linetype)
         existing = self.layer(value.name)
         if existing == value:
@@ -86,16 +92,19 @@ class Drawing2D:
         *,
         color: int = 7,
         linetype: str = "CONTINUOUS",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_layer(layer, color=color, linetype=linetype)
 
     def layer(self, name: str) -> Layer | None:
+        """Return the named layer, if present."""
         return next((layer for layer in self.layers if layer.name == name), None)
 
-    def add(self, geometry: object, *, layer: str = "0") -> Drawing2D:
+    def add(self, geometry: object, *, layer: str = "0") -> Drawing2:
+        """Wrap geometry in a drawing entity and append it to the drawing."""
         return self.add_entity(DrawingEntity(geometry, layer))
 
-    def add_entity(self, entity: DrawingItem) -> Drawing2D:
+    def add_entity(self, entity: DrawingItem) -> Drawing2:
+        """Return a new drawing with an already constructed entity appended."""
         drawing = self._with_entity_layers(entity)
         drawing._validate_entity(entity)
         return replace(drawing, entities=(*drawing.entities, entity))
@@ -108,9 +117,9 @@ class Drawing2D:
         height: float,
         layer: str = "0",
         rotation: float = 0.0,
-    ) -> Drawing2D:
+    ) -> Drawing2:
         anchor = point2(at, name="text anchor")
-        return self.add_entity(Text2D(text, anchor, height, layer, rotation))
+        return self.add_entity(Text2(text, anchor, height, layer, rotation))
 
     def hatch(
         self,
@@ -120,15 +129,17 @@ class Drawing2D:
         pattern: str = "ANSI31",
         angle: float = 45.0,
         scale: float = 1.0,
-    ) -> Drawing2D:
-        return self.add_entity(Hatch2D(boundary, layer, pattern, angle, scale))
+    ) -> Drawing2:
+        return self.add_entity(Hatch2(boundary, layer, pattern, angle, scale))
 
-    def add_block(self, block: BlockDefinition) -> Drawing2D:
+    def add_block(self, block: BlockDefinition) -> Drawing2:
+        """Return a new drawing with an added block definition."""
         if self.block(block.name) is not None:
             raise ValueError(f"block already exists: {block.name}")
         return replace(self, blocks=(*self.blocks, block))
 
     def block(self, name: str) -> BlockDefinition | None:
+        """Return the named block definition, if present."""
         return next((block for block in self.blocks if block.name == name), None)
 
     def insert(
@@ -139,13 +150,14 @@ class Drawing2D:
         layer: str = "0",
         scale: float = 1.0,
         rotation: float = 0.0,
-    ) -> Drawing2D:
+    ) -> Drawing2:
         if self.block(name) is None:
             raise ValueError(f"unknown block: {name}")
         insert_at = point2(at, name="insert point")
-        return self.add_entity(Insert2D(name, insert_at, layer, scale, rotation))
+        return self.add_entity(Insert2(name, insert_at, layer, scale, rotation))
 
-    def with_dim_style(self, style: DimStyle) -> Drawing2D:
+    def with_dim_style(self, style: DimStyle) -> Drawing2:
+        """Return a new drawing with an added dimension style."""
         existing = self.dim_style(style.name)
         if existing == style:
             return self
@@ -154,9 +166,10 @@ class Drawing2D:
         return replace(self, dim_styles=(*self.dim_styles, style))
 
     def dim_style(self, name: str) -> DimStyle | None:
+        """Return the named dimension style, if present."""
         return next((style for style in self.dim_styles if style.name == name), None)
 
-    def add_dimension(self, dimension: Dimension2D) -> Drawing2D:
+    def add_dimension(self, dimension: Dimension2) -> Drawing2:
         return self.add_entity(dimension)
 
     def linear_dimension(
@@ -169,9 +182,9 @@ class Drawing2D:
         text: str | None = None,
         text_height: float = 0.025,
         dim_style: str = "Standard",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_dimension(
-            LinearDimension2D(
+            LinearDimension2(
                 point2(p1, name="dimension p1"),
                 point2(p2, name="dimension p2"),
                 offset,
@@ -192,9 +205,9 @@ class Drawing2D:
         text: str | None = None,
         text_height: float = 0.025,
         dim_style: str = "Standard",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_dimension(
-            AlignedDimension2D(
+            AlignedDimension2(
                 point2(p1, name="dimension p1"),
                 point2(p2, name="dimension p2"),
                 offset,
@@ -215,9 +228,9 @@ class Drawing2D:
         text: str | None = None,
         text_height: float = 0.025,
         dim_style: str = "Standard",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_dimension(
-            RadiusDimension2D(
+            RadiusDimension2(
                 point2(center, name="dimension center"),
                 radius,
                 angle,
@@ -238,9 +251,9 @@ class Drawing2D:
         text: str | None = None,
         text_height: float = 0.025,
         dim_style: str = "Standard",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_dimension(
-            DiameterDimension2D(
+            DiameterDimension2(
                 point2(center, name="dimension center"),
                 radius,
                 angle,
@@ -262,9 +275,9 @@ class Drawing2D:
         text: str | None = None,
         text_height: float = 0.025,
         dim_style: str = "Standard",
-    ) -> Drawing2D:
+    ) -> Drawing2:
         return self.add_dimension(
-            AngularDimension2D(
+            AngularDimension2(
                 point2(center, name="angular dimension center"),
                 point2(p1, name="angular dimension p1"),
                 point2(p2, name="angular dimension p2"),
@@ -276,12 +289,12 @@ class Drawing2D:
             )
         )
 
-    def with_header(self, name: str, value: int | float | str) -> Drawing2D:
+    def with_header(self, name: str, value: int | float | str) -> Drawing2:
         header = dict(self.header)
         header[name] = value
         return replace(self, header=header)
 
-    def with_metadata(self, name: str, value: object) -> Drawing2D:
+    def with_metadata(self, name: str, value: object) -> Drawing2:
         metadata = dict(self.metadata)
         metadata[name] = value
         return replace(self, metadata=metadata)
@@ -294,13 +307,13 @@ class Drawing2D:
         for entity in self.entities:
             if isinstance(entity, DrawingEntity):
                 arrays.append(entity.to_array(tolerance=tolerance))
-            elif isinstance(entity, Hatch2D):
+            elif isinstance(entity, Hatch2):
                 converter = getattr(entity.boundary, "to_array", None)
                 if callable(converter):
                     arrays.append(converter(tolerance=tolerance))
         return tuple(arrays)
 
-    def _with_entity_layers(self, entity: DrawingItem) -> Drawing2D:
+    def _with_entity_layers(self, entity: DrawingItem) -> Drawing2:
         layer = getattr(entity, "layer", None)
         if isinstance(layer, str) and self.layer(layer) is None:
             return self.add_layer(layer)
@@ -310,11 +323,11 @@ class Drawing2D:
         dim_style = getattr(entity, "dim_style", None)
         if isinstance(dim_style, str) and self.dim_style(dim_style) is None:
             raise ValueError(f"unknown dimstyle: {dim_style}")
-        if isinstance(entity, Insert2D) and self.block(entity.name) is None:
+        if isinstance(entity, Insert2) and self.block(entity.name) is None:
             raise ValueError(f"unknown block: {entity.name}")
 
     def _entity_bounds(self, entity: DrawingItem) -> Bounds2:
-        if isinstance(entity, Insert2D):
+        if isinstance(entity, Insert2):
             block = self.block(entity.name)
             if block is None:
                 return entity.bounds()

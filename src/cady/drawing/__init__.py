@@ -1,32 +1,34 @@
+"""Public drawing API."""
+
 from cady.drawing.dimensions import (
-    AlignedDimension2D,
-    AngularDimension2D,
-    DiameterDimension2D,
-    Dimension2D,
+    AlignedDimension2,
+    AngularDimension2,
+    DiameterDimension2,
+    Dimension2,
     DimStyle,
-    LinearDimension2D,
-    RadiusDimension2D,
+    LinearDimension2,
+    RadiusDimension2,
     format_measurement,
 )
-from cady.drawing.document import Drawing2D, DrawingItem
-from cady.drawing.entities import BlockDefinition, DrawingEntity, Hatch2D, Insert2D, Text2D
+from cady.drawing.document import Drawing2, DrawingItem
+from cady.drawing.entities import BlockDefinition, DrawingEntity, Hatch2, Insert2, Text2
 from cady.drawing.layers import Layer
 
 __all__ = [
-    "AlignedDimension2D",
-    "AngularDimension2D",
+    "AlignedDimension2",
+    "AngularDimension2",
     "BlockDefinition",
-    "DiameterDimension2D",
-    "Dimension2D",
+    "DiameterDimension2",
+    "Dimension2",
     "DimStyle",
-    "Drawing2D",
+    "Drawing2",
     "DrawingEntity",
     "DrawingItem",
-    "Hatch2D",
-    "Insert2D",
+    "Hatch2",
+    "Insert2",
     "Layer",
-    "LinearDimension2D",
-    "RadiusDimension2D",
-    "Text2D",
+    "LinearDimension2",
+    "RadiusDimension2",
+    "Text2",
     "format_measurement",
 ]

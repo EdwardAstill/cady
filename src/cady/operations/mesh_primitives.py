@@ -1,16 +1,19 @@
+"""Triangle generators for primitive solids and swept profiles."""
+
 from __future__ import annotations
 
 from math import ceil, cos, pi, sin
 from typing import TypeAlias
 
-from cady.operations.polygons2d import Triangle2, dedupe_closed
-from cady.operations.sampling2d import Point2, segments_for_circle
+from cady.operations.polygons2 import Triangle2, dedupe_closed
+from cady.operations.sampling2 import Point2, segments_for_circle
 
 Point3: TypeAlias = tuple[float, float, float]
 Triangle3: TypeAlias = tuple[Point3, Point3, Point3]
 
 
 def prism_triangles(origin: Point3, size: Point3) -> list[Triangle3]:
+    """Return triangles for an axis-aligned prism."""
     x0, y0, z0 = origin
     x1, y1, z1 = x0 + size[0], y0 + size[1], z0 + size[2]
     p = (
@@ -35,6 +38,7 @@ def prism_triangles(origin: Point3, size: Point3) -> list[Triangle3]:
 
 
 def basis_for_axis(axis: Point3, axis_name: str | None = None) -> tuple[Point3, Point3, Point3]:
+    """Build a local orthonormal basis whose ``w`` axis follows ``axis``."""
     w = _normalised(axis)
     u = (1.0, 0.0, 0.0) if abs(w[2]) == 1 else _normalised(_cross((0.0, 0.0, 1.0), w))
     v = _normalised(_cross(w, u))
@@ -55,6 +59,7 @@ def extrusion_triangles(
     axis_name: str | None,
     distance: float,
 ) -> list[Triangle3]:
+    """Extrude triangulated caps and profile side walls along an axis."""
     u, v, w = basis_for_axis(axis, axis_name)
     start = offset
     end = _add(offset, _scale(w, distance))
@@ -84,6 +89,7 @@ def revolution_triangles(
     angle_rad: float,
     tolerance: float,
 ) -> list[Triangle3]:
+    """Approximate a surface of revolution around the positive Z axis."""
     pts2 = dedupe_closed(profile_points)
     axis = _normalised(axis_direction)
     if axis != (0.0, 0.0, 1.0):
@@ -110,6 +116,7 @@ def revolution_triangles(
 
 
 def sphere_triangles(centre: Point3, radius: float, *, tolerance: float) -> list[Triangle3]:
+    """Approximate a sphere with latitude-longitude triangles."""
     rings = min(64, max(8, segments_for_circle(radius, tolerance) // 2))
     segs = rings * 2
     tris: list[Triangle3] = []

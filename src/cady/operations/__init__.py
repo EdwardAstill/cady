@@ -1,33 +1,35 @@
-from cady.operations.arrays2d import (
+"""Public numeric operations helpers re-exported for convenience."""
+
+from cady.operations.arrays2 import (
     ArrayBezierSpline2,
     ArrayPolygon2,
     ArrayPolyline2,
     evaluate_bezier_spline2,
     sample_bezier_spline2,
 )
-from cady.operations.arrays3d import ArrayMesh3, ArrayPolyline3
+from cady.operations.arrays3 import ArrayMesh3, ArrayPolyline3
 from cady.operations.bounds import bounds2, bounds3
 from cady.operations.constructors import (
-    arc2d,
-    arc3d,
+    arc2,
+    arc3,
     box,
-    circle2d,
+    circle2,
     cylinder,
-    line2d,
-    line3d,
-    polyline2d,
-    polyline3d,
+    line2,
+    line3,
+    polyline2,
+    polyline3,
     profile_circle,
     profile_rectangle,
     sphere,
-    spline3d,
+    spline3,
 )
 from cady.operations.mesh_caps import close_boundary, close_planar_cap
 from cady.operations.mesh_clipping import cut_mesh_by_plane
 from cady.operations.mesh_primitives import sphere_triangles
-from cady.operations.polygons2d import area2, dedupe_closed, triangulate_polygon
+from cady.operations.polygons2 import area2, dedupe_closed, triangulate_polygon
 from cady.operations.profiles import midpoint, offset_point, perpendicular
-from cady.operations.sampling2d import arc_points, circle_points, segments_for_circle
+from cady.operations.sampling2 import arc_points, circle_points, segments_for_circle
 from cady.operations.transforms import (
     Pose3,
     Transform2,
@@ -60,8 +62,8 @@ __all__ = [
     "Transform2",
     "Transform3",
     "arc_points",
-    "arc2d",
-    "arc3d",
+    "arc2",
+    "arc3",
     "area2",
     "as_edges",
     "as_faces",
@@ -72,7 +74,7 @@ __all__ = [
     "box",
     "bounds2",
     "bounds3",
-    "circle2d",
+    "circle2",
     "circle_points",
     "close_boundary",
     "close_planar_cap",
@@ -80,15 +82,15 @@ __all__ = [
     "cylinder",
     "dedupe_closed",
     "evaluate_bezier_spline2",
-    "line2d",
-    "line3d",
+    "line2",
+    "line3",
     "midpoint",
     "mirror_point2",
     "mirror_point3",
     "offset_point",
     "perpendicular",
-    "polyline2d",
-    "polyline3d",
+    "polyline2",
+    "polyline3",
     "profile_circle",
     "profile_rectangle",
     "rotate_point2",
@@ -98,7 +100,7 @@ __all__ = [
     "segments_for_circle",
     "sphere",
     "sphere_triangles",
-    "spline3d",
+    "spline3",
     "translate_point2",
     "translate_point3",
     "triangulate_float32",

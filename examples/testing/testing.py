@@ -13,12 +13,12 @@ from cady import (
     Camera,
     DirectionalLight,
     DisplayStyle,
-    Mesh3D,
-    PointCloud3D,
-    Polyline3D,
+    Mesh3,
+    PointCloud3,
+    Polyline3,
     Scene,
     Vec3,
-    Wireframe3D,
+    Wireframe3,
 )
 from cady.view import view_scene
 
@@ -95,14 +95,14 @@ def quarter_sphere_polylines(
     *,
     radius: float,
     samples: int,
-) -> dict[str, Polyline3D]:
+) -> dict[str, Polyline3]:
     if radius <= 0.0:
         raise ValueError("radius must be positive")
     if samples < 3:
         raise ValueError("samples must be at least 3")
 
     return {
-        f"arc_{index}": Polyline3D(
+        f"arc_{index}": Polyline3(
             sphere_arc(radius=radius, section_angle=angle, samples=samples)
         )
         for index, angle in enumerate(ARC_ANGLES, start=1)
@@ -131,7 +131,7 @@ def sphere_arc(
     return tuple(points)
 
 
-def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
+def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Vec3] = []
     vertex_indices: dict[Point3, int] = {}
     edges: list[tuple[int, int]] = []
@@ -149,14 +149,14 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
                 edges.append((previous, current))
             previous = current
 
-    return Wireframe3D(tuple(vertices), tuple(edges))
+    return Wireframe3(tuple(vertices), tuple(edges))
 
 
 def slice_planes(
     *,
     radius: float,
     y_values: Iterable[float],
-) -> tuple[tuple[float, Mesh3D], ...]:
+) -> tuple[tuple[float, Mesh3], ...]:
     return tuple(
         (
             y,
@@ -181,7 +181,7 @@ def plane_grid(
     z_min: float,
     z_max: float,
     steps: int,
-) -> Mesh3D:
+) -> Mesh3:
     vertices = [
         Vec3(x_min, y, z_max),
         Vec3(x_max, y, z_max),
@@ -196,7 +196,7 @@ def plane_grid(
         edges.append(_add_segment(vertices, (x, y, z_min), (x, y, z_max)))
         edges.append(_add_segment(vertices, (x_min, y, z), (x_max, y, z)))
 
-    return Mesh3D(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
+    return Mesh3(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
 
 
 def _add_segment(
@@ -211,7 +211,7 @@ def _add_segment(
 
 
 def intersection_nodes(
-    wireframe: Wireframe3D,
+    wireframe: Wireframe3,
     *,
     y_values: Iterable[float],
     tolerance: float = INTERSECTION_TOLERANCE,
@@ -241,18 +241,18 @@ def intersection_nodes_to_point_cloud(
     node_groups: Iterable[Iterable[Vec3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> PointCloud3D:
+) -> PointCloud3:
     """Flatten grouped intersection nodes into a point cloud for display."""
     _validate_tolerance(tolerance)
 
-    return PointCloud3D(_unique_nodes(node_groups, tolerance=tolerance))
+    return PointCloud3(_unique_nodes(node_groups, tolerance=tolerance))
 
 
 def intersection_nodes_to_edge_mesh(
     node_groups: Iterable[Iterable[Vec3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> Mesh3D:
+) -> Mesh3:
     """Return a mesh connecting grouped nodes as a row-major grid."""
     _validate_tolerance(tolerance)
 
@@ -261,7 +261,7 @@ def intersection_nodes_to_edge_mesh(
     edges = _grid_edges(row_indices)
     faces = _grid_faces(row_indices)
 
-    return Mesh3D(tuple(vertices), tuple(faces), tuple(edges))
+    return Mesh3(tuple(vertices), tuple(faces), tuple(edges))
 
 
 def _validate_tolerance(tolerance: float) -> None:
@@ -425,9 +425,9 @@ def _points_close(
 
 
 def build_scene(
-    wireframe: Wireframe3D,
-    planes: Iterable[tuple[float, Mesh3D]],
-    nodes: Iterable[Iterable[Vec3]] | PointCloud3D | None = None,
+    wireframe: Wireframe3,
+    planes: Iterable[tuple[float, Mesh3]],
+    nodes: Iterable[Iterable[Vec3]] | PointCloud3 | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_slice_planes").add(
         wireframe,
@@ -440,7 +440,7 @@ def build_scene(
             name=f"slice_plane_y_{y:g}",
             style=PLANE_STYLES[index % len(PLANE_STYLES)],
         )
-    if nodes is not None and not isinstance(nodes, PointCloud3D):
+    if nodes is not None and not isinstance(nodes, PointCloud3):
         node_groups = tuple(tuple(group) for group in nodes)
         node_mesh = intersection_nodes_to_edge_mesh(node_groups)
         if node_mesh.vertices and node_mesh.edges:
@@ -450,7 +450,7 @@ def build_scene(
                 style=NODE_MESH_STYLE,
             )
         nodes = intersection_nodes_to_point_cloud(node_groups)
-    if isinstance(nodes, PointCloud3D) and nodes.vertices:
+    if isinstance(nodes, PointCloud3) and nodes.vertices:
         scene = scene.add(
             nodes,
             name="plane_intersection_nodes",
@@ -459,7 +459,7 @@ def build_scene(
     return scene.with_camera(CAMERA, name="isometric").with_light(LIGHT)
 
 
-def print_wireframe_summary(wireframe: Wireframe3D) -> None:
+def print_wireframe_summary(wireframe: Wireframe3) -> None:
     lower, upper = wireframe.bounds()
     print(
         f"wireframe: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "

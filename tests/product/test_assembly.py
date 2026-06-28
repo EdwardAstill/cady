@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from cady.geometry import Mesh3D
+from cady.geometry import Mesh3
 from cady.operations.transforms import Transform3
 from cady.product import Assembly, Part, ProductError
 from cady.vec import Vec3
 
 
-def _point_mesh() -> Mesh3D:
-    return Mesh3D((Vec3(0.0, 0.0, 0.0),), ())
+def _point_mesh() -> Mesh3:
+    return Mesh3((Vec3(0.0, 0.0, 0.0),), ())
 
 
 def test_assembly_add_returns_new_assembly_and_reuses_parts_as_instances() -> None:
@@ -57,3 +57,13 @@ def test_assembly_rejects_cycles_and_duplicate_instance_names() -> None:
     part = Part("plate").with_body(_point_mesh())
     with pytest.raises(ProductError):
         Assembly("assy").add(part, name="same").add(part, name="same")
+
+
+def test_assembly_pose_validation_message_is_preserved() -> None:
+    part = Part("plate").with_body(_point_mesh())
+
+    with pytest.raises(
+        ProductError,
+        match="pose must be None, Transform3, Pose3-like, or a 3D translation",
+    ):
+        Assembly("assy").add(part, pose=(1.0, 2.0))

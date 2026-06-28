@@ -1,73 +1,51 @@
-from cady.geometry.body3d import Body3D
-from cady.geometry.curves2d import (
-    Arc2D,
-    Circle2D,
-    ClosedCurve2D,
-    ClosedPolyline2D,
-    Curve2D,
-    Ellipse2D,
-    Line2D,
-    Point2Like,
-    Polyline2D,
-    Spline2D,
+"""Public geometry value types."""
+
+from cady.geometry.arc2 import Arc2
+from cady.geometry.body3 import Body3
+from cady.geometry.conic2 import Circle2, Ellipse2
+from cady.geometry.curves2 import ClosedCurve2, Curve2, Point2Like
+from cady.geometry.face3 import Face3
+from cady.geometry.frame3 import Frame3
+from cady.geometry.line2 import Line2
+from cady.geometry.mesh2 import Mesh2
+from cady.geometry.mesh3 import Mesh3
+from cady.geometry.pointcloud3 import PointCloud3
+from cady.geometry.polyline2 import ClosedPolyline2, Polyline2
+from cady.geometry.polyline3 import (
+    Arc3,
+    ClosedPolyline3,
+    Curve3,
+    Line3,
+    Polyline3,
+    Spline3,
 )
-from cady.geometry.face3d import Face3D
-from cady.geometry.features import (
-    BooleanFeature,
-    ChamferFeature,
-    ExtrudeFeature,
-    Feature,
-    FilletFeature,
-    PrimitiveFeature,
-    ProfileFeature,
-    RevolveFeature,
-)
-from cady.geometry.frame3d import Frame3D
-from cady.geometry.mesh2d import Mesh2D
-from cady.geometry.mesh3d import Mesh3D
-from cady.geometry.pointcloud3d import PointCloud3D
-from cady.geometry.polyline3d import (
-    Arc3D,
-    ClosedPolyline3D,
-    Curve3D,
-    Line3D,
-    Polyline3D,
-    Spline3D,
-)
-from cady.geometry.profile2d import Profile2D
-from cady.geometry.wireframe3d import Wireframe3D
+from cady.geometry.profile2 import Profile2
+from cady.geometry.spline2 import Spline2
+from cady.geometry.wireframe3 import Wireframe3
 
 __all__ = [
-    "Arc2D",
-    "Arc3D",
-    "Body3D",
-    "BooleanFeature",
-    "ChamferFeature",
-    "Circle2D",
-    "ClosedCurve2D",
-    "ClosedPolyline2D",
-    "ClosedPolyline3D",
-    "Curve2D",
-    "Curve3D",
-    "Ellipse2D",
-    "ExtrudeFeature",
-    "Face3D",
-    "Feature",
-    "FilletFeature",
-    "Frame3D",
-    "Line2D",
-    "Line3D",
-    "Mesh2D",
-    "Mesh3D",
+    "Arc2",
+    "Arc3",
+    "Body3",
+    "Circle2",
+    "ClosedCurve2",
+    "ClosedPolyline2",
+    "ClosedPolyline3",
+    "Curve2",
+    "Curve3",
+    "Ellipse2",
+    "Face3",
+    "Frame3",
+    "Line2",
+    "Line3",
+    "Mesh2",
+    "Mesh3",
     "Point2Like",
-    "PointCloud3D",
-    "Polyline2D",
-    "Polyline3D",
-    "PrimitiveFeature",
-    "Profile2D",
-    "ProfileFeature",
-    "RevolveFeature",
-    "Spline2D",
-    "Spline3D",
-    "Wireframe3D",
+    "PointCloud3",
+    "Polyline2",
+    "Polyline3",
+    "Profile2",
+    "Spline2",
+    "Spline3",
+    "Wireframe3",
 ]

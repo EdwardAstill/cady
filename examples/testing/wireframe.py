@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt
 
-from cady import Polyline3D, Vec3, Wireframe3D
+from cady import Polyline3, Vec3, Wireframe3
 
 Point3 = tuple[float, float, float]
 EdgeIndex = tuple[int, int]
@@ -24,11 +24,11 @@ DIAGONAL_SCALE = 1.0 / sqrt(2.0)
 @dataclass(frozen=True)
 class WireframeObject:
     radius: float
-    linesplan: tuple[Polyline3D, ...]
-    wireframe: Wireframe3D
+    linesplan: tuple[Polyline3, ...]
+    wireframe: Wireframe3
 
 
-def quarter_sphere_linesplan(*, radius: float, samples: int) -> tuple[Polyline3D, ...]:
+def quarter_sphere_linesplan(*, radius: float, samples: int) -> tuple[Polyline3, ...]:
     if radius <= 0.0:
         raise ValueError("radius must be positive")
     if samples < 3:
@@ -36,14 +36,14 @@ def quarter_sphere_linesplan(*, radius: float, samples: int) -> tuple[Polyline3D
 
     sample_offsets = semicircle_sample_offsets(radius=radius, samples=samples)
     linesplan = (
-        Polyline3D(tuple((side, y, 0.0) for side, y in sample_offsets)),
-        Polyline3D(
+        Polyline3(tuple((side, y, 0.0) for side, y in sample_offsets)),
+        Polyline3(
             tuple(
                 (side * DIAGONAL_SCALE, y, -side * DIAGONAL_SCALE)
                 for side, y in sample_offsets
             )
         ),
-        Polyline3D(tuple((0.0, y, -side) for side, y in sample_offsets)),
+        Polyline3(tuple((0.0, y, -side) for side, y in sample_offsets)),
     )
     validate_matching_y_bounds(linesplan)
     return linesplan
@@ -65,7 +65,7 @@ def semicircle_sample_offsets(
 
 
 def validate_matching_y_bounds(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
 ) -> None:
@@ -89,7 +89,7 @@ def validate_matching_y_bounds(
             )
 
 
-def polyline_y_bounds(polyline: Polyline3D) -> tuple[float, float]:
+def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
     if not polyline.vertices:
         raise ValueError("linesplan polylines must contain at least one vertex")
 
@@ -97,7 +97,7 @@ def polyline_y_bounds(polyline: Polyline3D) -> tuple[float, float]:
     return min(y_values), max(y_values)
 
 
-def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
+def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Vec3] = []
     vertex_indices: dict[Point3, int] = {}
     edges: list[EdgeIndex] = []
@@ -110,7 +110,7 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
                 append_unique_edge(edges, (previous_index, current_index))
             previous_index = current_index
 
-    return Wireframe3D(tuple(vertices), tuple(edges))
+    return Wireframe3(tuple(vertices), tuple(edges))
 
 
 def index_point(

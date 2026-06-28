@@ -1,3 +1,5 @@
+"""Layer definitions for 2D drawing entities."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +8,7 @@ SUPPORTED_LINETYPES = {"CONTINUOUS", "HIDDEN", "CENTER"}
 
 
 def normalise_linetype(linetype: str) -> str:
+    """Validate and canonicalise a DXF-style linetype name."""
     value = linetype.upper()
     if value not in SUPPORTED_LINETYPES:
         raise ValueError(f"unsupported linetype: {linetype}")
@@ -14,6 +17,8 @@ def normalise_linetype(linetype: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Layer:
+    """Named drawing layer with colour and linetype metadata."""
+
     name: str
     color: int = 7
     linetype: str = "CONTINUOUS"

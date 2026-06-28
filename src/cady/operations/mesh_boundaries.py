@@ -1,8 +1,10 @@
+"""Boundary edge detection and loop stitching for triangle meshes."""
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 
-from cady.operations.arrays3d import ArrayMesh3
+from cady.operations.arrays3 import ArrayMesh3
 
 Segment = tuple[int, int]
 
@@ -18,6 +20,7 @@ def boundary_edges(mesh: ArrayMesh3) -> list[Segment]:
 
 
 def stitch_segments(segments: list[Segment]) -> list[list[int]]:
+    """Stitch undirected boundary segments into simple vertex loops."""
     neighbours: dict[int, set[int]] = defaultdict(set)
     unused_edges: set[tuple[int, int]] = set()
     for start, end in segments:

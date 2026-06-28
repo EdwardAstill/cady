@@ -1,14 +1,17 @@
+"""Minimal DXF reader/writer for drawings, meshes, and wire geometry."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import degrees, dist, radians
+from math import degrees, radians
 from pathlib import Path
 from typing import cast
 
-from cady.drawing import Drawing2D, DrawingEntity, Text2D
+from cady.drawing import Drawing2, DrawingEntity, Text2
 from cady.errors import ReadError, WriteError
-from cady.geometry import Arc2D, Circle2D, ClosedPolyline2D, Line2D, Mesh3D, Polyline2D, Wireframe3D
+from cady.geometry import Arc2, Circle2, ClosedPolyline2, Line2, Mesh3, Polyline2, Wireframe3
+from cady.operations.section_loft import loft_section_polylines
 from cady.vec import Vec2, Vec3
 
 Point2 = tuple[float, float]
@@ -16,6 +19,8 @@ Point2 = tuple[float, float]
 
 @dataclass(frozen=True, slots=True)
 class DxfSkippedEntity:
+    """Unsupported DXF entity encountered during import."""
+
     entity_type: str
     reason: str
     layer: str | None = None
@@ -23,15 +28,19 @@ class DxfSkippedEntity:
 
 @dataclass(frozen=True, slots=True)
 class DxfImportResult:
-    drawing: Drawing2D | None = None
-    meshes: tuple[Mesh3D, ...] = ()
-    wireframes: tuple[Wireframe3D, ...] = ()
+    """Structured result from a DXF import pass."""
+
+    drawing: Drawing2 | None = None
+    meshes: tuple[Mesh3, ...] = ()
+    wireframes: tuple[Wireframe3, ...] = ()
     curves: tuple[DxfWireCurve, ...] = ()
     skipped: tuple[DxfSkippedEntity, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class DxfWireCurve:
+    """Wire-like DXF entity normalised to vertices and indexed edges."""
+
     vertices: tuple[Vec3, ...]
     edges: tuple[tuple[int, int], ...]
     layer: str
@@ -58,6 +67,7 @@ class _Pair:
 
 
 def read(path: str | Path) -> DxfImportResult:
+    """Read supported DXF entities from ``path`` into semantic cady objects."""
     text = Path(path).read_text(encoding="ascii")
     pairs = _pairs(text)
     drawing = _parse_drawing(pairs)
@@ -71,7 +81,8 @@ def read(path: str | Path) -> DxfImportResult:
     )
 
 
-def read_drawing(path: str | Path) -> Drawing2D:
+def read_drawing(path: str | Path) -> Drawing2:
+    """Read 2D drawing entities from a DXF file."""
     result = read(path)
     if result.drawing is None:
         raise ReadError("DXF contained no supported 2D drawing entities")
@@ -87,7 +98,8 @@ def read_mesh(
     close_normal: object | None = None,
     tolerance: float = 1e-3,
     max_distance: float | None = None,
-) -> Mesh3D:
+) -> Mesh3:
+    """Read mesh entities from a DXF file and merge them into one ``Mesh3``."""
     result = read(path)
     if _line_mesh_requested(
         mirror_origin=mirror_origin,
@@ -99,21 +111,23 @@ def read_mesh(
         raise ReadError("read_mesh no longer converts DXF line geometry to mesh faces")
     if not result.meshes:
         raise ReadError("DXF contained no supported mesh geometry")
-    return Mesh3D.merged(result.meshes)
+    return Mesh3.merged(result.meshes)
 
 
 def read_curves(path: str | Path) -> tuple[DxfWireCurve, ...]:
+    """Read 3D polyline-style entities as indexed wire curves."""
     return read(path).curves
 
 
-def read_wireframe(path: str | Path) -> Wireframe3D:
+def read_wireframe(path: str | Path) -> Wireframe3:
+    """Read supported wire entities and merge them into one ``Wireframe3``."""
     result = read(path)
     if not result.wireframes:
         raise ReadError("DXF contained no supported 3D wire geometry")
     return _merge_wireframes(result.wireframes)
 
 
-def _merge_wireframes(wireframes: Iterable[Wireframe3D]) -> Wireframe3D:
+def _merge_wireframes(wireframes: Iterable[Wireframe3]) -> Wireframe3:
     vertices: list[Vec3] = []
     edges: list[tuple[int, int]] = []
     offset = 0
@@ -121,7 +135,7 @@ def _merge_wireframes(wireframes: Iterable[Wireframe3D]) -> Wireframe3D:
         vertices.extend(wf.vertices)
         edges.extend((a + offset, b + offset) for a, b in wf.edges)
         offset += len(wf.vertices)
-    return Wireframe3D(tuple(vertices), tuple(edges))
+    return Wireframe3(tuple(vertices), tuple(edges))
 
 
 def _line_mesh_requested(
@@ -145,7 +159,7 @@ def _line_mesh_requested(
 
 
 def _mesh_from_line_geometry(  # pyright: ignore[reportUnusedFunction]
-    wireframes: tuple[Wireframe3D, ...],
+    wireframes: tuple[Wireframe3, ...],
     *,
     mirror_origin: object | None,
     mirror_normal: object | None,
@@ -153,7 +167,7 @@ def _mesh_from_line_geometry(  # pyright: ignore[reportUnusedFunction]
     close_normal: object | None,
     tolerance: float,
     max_distance: float | None,
-) -> Mesh3D:
+) -> Mesh3:
     if (mirror_origin is None) != (mirror_normal is None):
         raise ValueError("mirror_origin and mirror_normal must be provided together")
     has_close_plane = (
@@ -183,63 +197,40 @@ def _mesh_from_line_geometry(  # pyright: ignore[reportUnusedFunction]
     wireframe = _merge_wireframes(wireframes)
     if mirror_origin is not None and mirror_normal is not None:
         wireframe = wireframe.mirror(mirror_origin, mirror_normal)
-    mesh = Mesh3D(wireframe.vertices, (), wireframe.edges).close_to_plane(
+    mesh = Mesh3(wireframe.vertices, (), wireframe.edges).close_to_plane(
         close_origin,
         close_normal,
         tolerance=tolerance,
         max_distance=max_distance,
     )
-    return Mesh3D(mesh.vertices, mesh.faces)
+    return Mesh3(mesh.vertices, mesh.faces)
 
 
 def _loft_section_wireframes_to_mesh(
-    wireframes: tuple[Wireframe3D, ...],
+    wireframes: tuple[Wireframe3, ...],
     *,
     tolerance: float,
-) -> Mesh3D | None:
-    sections = _section_curves(wireframes, tolerance=tolerance)
-    if len(sections) < 2:
-        return None
-
-    sample_count = min(max(len(vertices) for _x, vertices in sections), 96)
-    if sample_count < 2:
-        return None
-
-    rows = tuple(
-        _resample_polyline(_orient_section(vertices), sample_count)
-        for _x, vertices in sections
+) -> Mesh3 | None:
+    loft_mesh = loft_section_polylines(
+        (
+            tuple(point.tuple() for point in wireframe.vertices)
+            for wireframe in wireframes
+        ),
+        tolerance=tolerance,
     )
-    vertices = tuple(point for row in rows for point in row)
-    faces: list[tuple[int, int, int]] = []
-    edges: set[tuple[int, int]] = set()
-
-    for section_index in range(len(rows)):
-        row_start = section_index * sample_count
-        for sample_index in range(sample_count - 1):
-            edges.add((row_start + sample_index, row_start + sample_index + 1))
-
-    for section_index in range(len(rows) - 1):
-        left_start = section_index * sample_count
-        right_start = (section_index + 1) * sample_count
-        for sample_index in range(sample_count):
-            edges.add((left_start + sample_index, right_start + sample_index))
-        for sample_index in range(sample_count - 1):
-            a = left_start + sample_index
-            b = right_start + sample_index
-            c = left_start + sample_index + 1
-            d = right_start + sample_index + 1
-            _append_face_if_valid(faces, vertices, (a, b, d), tolerance)
-            _append_face_if_valid(faces, vertices, (a, d, c), tolerance)
-
-    if not faces:
+    if loft_mesh is None:
         return None
-    return Mesh3D(vertices, tuple(faces), tuple(sorted(edges)))
+    return Mesh3(
+        tuple(Vec3(x, y, z) for x, y, z in loft_mesh.vertices),
+        loft_mesh.faces,
+        loft_mesh.edges,
+    )
 
 
 def _mesh_with_wireframe_display_edges(
-    mesh: Mesh3D,
-    wireframes: tuple[Wireframe3D, ...],
-) -> Mesh3D:
+    mesh: Mesh3,
+    wireframes: tuple[Wireframe3, ...],
+) -> Mesh3:
     vertices = list(mesh.vertices)
     edges = list(mesh.edges)
     offset = len(vertices)
@@ -247,102 +238,11 @@ def _mesh_with_wireframe_display_edges(
         vertices.extend(wireframe.vertices)
         edges.extend((a + offset, b + offset) for a, b in wireframe.edges)
         offset += len(wireframe.vertices)
-    return Mesh3D(tuple(vertices), mesh.faces, tuple(edges))
+    return Mesh3(tuple(vertices), mesh.faces, tuple(edges))
 
 
-def _section_curves(
-    wireframes: tuple[Wireframe3D, ...],
-    *,
-    tolerance: float,
-) -> tuple[tuple[float, tuple[Vec3, ...]], ...]:
-    x_tolerance = max(tolerance, 1e-3)
-    grouped: dict[int, list[tuple[float, tuple[Vec3, ...]]]] = {}
-    for wireframe in wireframes:
-        vertices = wireframe.vertices
-        if len(vertices) < 4:
-            continue
-        xs = [point.x for point in vertices]
-        ys = [point.y for point in vertices]
-        zs = [point.z for point in vertices]
-        if max(xs) - min(xs) > x_tolerance:
-            continue
-        if max(ys) - min(ys) <= x_tolerance or max(zs) - min(zs) <= x_tolerance:
-            continue
-        length = _polyline_length(vertices)
-        if length <= x_tolerance:
-            continue
-        x = sum(xs) / len(xs)
-        grouped.setdefault(round(x / x_tolerance), []).append((length, vertices))
-
-    sections: list[tuple[float, tuple[Vec3, ...]]] = []
-    for group in grouped.values():
-        _length, vertices = max(group, key=lambda item: item[0])
-        x = sum(point.x for point in vertices) / len(vertices)
-        sections.append((x, vertices))
-    return tuple(sorted(sections, key=lambda item: item[0]))
-
-
-def _orient_section(vertices: tuple[Vec3, ...]) -> tuple[Vec3, ...]:
-    if vertices[0].z > vertices[-1].z:
-        return tuple(reversed(vertices))
-    return vertices
-
-
-def _resample_polyline(vertices: tuple[Vec3, ...], count: int) -> tuple[Vec3, ...]:
-    if count < 2:
-        raise ValueError("count must be at least 2")
-    distances = [0.0]
-    for previous, current in zip(vertices, vertices[1:], strict=False):
-        distances.append(distances[-1] + dist(previous.tuple(), current.tuple()))
-    total = distances[-1]
-    if total == 0.0:
-        return tuple(vertices[0] for _ in range(count))
-
-    sampled: list[Vec3] = []
-    segment_index = 0
-    for sample_index in range(count):
-        target = total * sample_index / (count - 1)
-        while segment_index < len(distances) - 2 and distances[segment_index + 1] < target:
-            segment_index += 1
-        start = vertices[segment_index]
-        end = vertices[segment_index + 1]
-        start_distance = distances[segment_index]
-        segment_length = distances[segment_index + 1] - start_distance
-        ratio = 0.0 if segment_length == 0.0 else (target - start_distance) / segment_length
-        sampled.append(
-            Vec3(
-                start.x + (end.x - start.x) * ratio,
-                start.y + (end.y - start.y) * ratio,
-                start.z + (end.z - start.z) * ratio,
-            )
-        )
-    return tuple(sampled)
-
-
-def _polyline_length(vertices: tuple[Vec3, ...]) -> float:
-    return sum(
-        dist(previous.tuple(), current.tuple())
-        for previous, current in zip(vertices, vertices[1:], strict=False)
-    )
-
-
-def _append_face_if_valid(
-    faces: list[tuple[int, int, int]],
-    vertices: tuple[Vec3, ...],
-    face: tuple[int, int, int],
-    tolerance: float,
-) -> None:
-    a, b, c = (vertices[index] for index in face)
-    if (
-        dist(a.tuple(), b.tuple()) <= tolerance
-        or dist(b.tuple(), c.tuple()) <= tolerance
-        or dist(c.tuple(), a.tuple()) <= tolerance
-    ):
-        return
-    faces.append(face)
-
-
-def render(drawing: Drawing2D, *, tolerance: float = 1e-3) -> str:
+def render(drawing: Drawing2, *, tolerance: float = 1e-3) -> str:
+    """Render a ``Drawing2`` as an ASCII DXF R2018 document."""
     if tolerance <= 0:
         raise WriteError("tolerance must be positive")
     if not drawing.entities:
@@ -392,7 +292,8 @@ def render(drawing: Drawing2D, *, tolerance: float = 1e-3) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write(drawing: Drawing2D, path: str | Path, *, tolerance: float = 1e-3) -> Drawing2D:
+def write(drawing: Drawing2, path: str | Path, *, tolerance: float = 1e-3) -> Drawing2:
+    """Write a ``Drawing2`` to ``path`` as ASCII DXF."""
     Path(path).write_text(render(drawing, tolerance=tolerance), encoding="ascii")
     return drawing
 
@@ -400,7 +301,7 @@ def write(drawing: Drawing2D, path: str | Path, *, tolerance: float = 1e-3) -> D
 def _entity_lines(item: object, *, tolerance: float) -> list[str]:
     if isinstance(item, DrawingEntity):
         return _geometry_lines(item.geometry, item.layer, tolerance=tolerance)
-    if isinstance(item, Text2D):
+    if isinstance(item, Text2):
         x, y = item.at
         return [
             "0",
@@ -420,7 +321,7 @@ def _entity_lines(item: object, *, tolerance: float) -> list[str]:
 
 
 def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[str]:
-    if isinstance(geometry, Line2D):
+    if isinstance(geometry, Line2):
         return [
             "0",
             "LINE",
@@ -435,11 +336,11 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "21",
             _f(geometry.end.y),
         ]
-    if isinstance(geometry, Polyline2D | ClosedPolyline2D):
+    if isinstance(geometry, Polyline2 | ClosedPolyline2):
         vertices = geometry.vertices
-        closed = isinstance(geometry, ClosedPolyline2D)
+        closed = isinstance(geometry, ClosedPolyline2)
         return _lwpolyline_lines(vertices, layer, closed=closed)
-    if isinstance(geometry, Circle2D):
+    if isinstance(geometry, Circle2):
         return [
             "0",
             "CIRCLE",
@@ -452,7 +353,7 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "40",
             _f(geometry.radius),
         ]
-    if isinstance(geometry, Arc2D):
+    if isinstance(geometry, Arc2):
         return [
             "0",
             "ARC",
@@ -500,13 +401,14 @@ def _lwpolyline_lines(
     return lines
 
 
-def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2D:
-    drawing = Drawing2D()
+def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2:
+    """Build a ``Drawing2`` from supported entities in the DXF ENTITIES section."""
+    drawing = Drawing2()
     for entity_type, chunk in _entity_chunks(pairs):
         layer = _string(chunk, 8, "0")
         if entity_type == "LINE":
             drawing = drawing.add(
-                Line2D(
+                Line2(
                     (_float(chunk, 10), _float(chunk, 20)),
                     (_float(chunk, 11), _float(chunk, 21)),
                 ),
@@ -516,16 +418,16 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2D:
             points = _lwpolyline_points(chunk)
             if len(points) >= 2:
                 closed = bool(_int(chunk, 70, 0) & 1)
-                geometry = ClosedPolyline2D(points) if closed else Polyline2D(points)
+                geometry = ClosedPolyline2(points) if closed else Polyline2(points)
                 drawing = drawing.add(geometry, layer=layer)
         elif entity_type == "CIRCLE":
             drawing = drawing.add(
-                Circle2D((_float(chunk, 10), _float(chunk, 20)), _float(chunk, 40)),
+                Circle2((_float(chunk, 10), _float(chunk, 20)), _float(chunk, 40)),
                 layer=layer,
             )
         elif entity_type == "ARC":
             drawing = drawing.add(
-                Arc2D(
+                Arc2(
                     (_float(chunk, 10), _float(chunk, 20)),
                     _float(chunk, 40),
                     radians(_float(chunk, 50)),
@@ -546,13 +448,14 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2D:
 def _parse_meshes(
     pairs: tuple[_Pair, ...],
 ) -> tuple[
-    tuple[Mesh3D, ...],
-    tuple[Wireframe3D, ...],
+    tuple[Mesh3, ...],
+    tuple[Wireframe3, ...],
     tuple[DxfWireCurve, ...],
     tuple[DxfSkippedEntity, ...],
 ]:
-    meshes: list[Mesh3D] = []
-    wireframes: list[Wireframe3D] = []
+    """Parse mesh and wire entities from the DXF ENTITIES section."""
+    meshes: list[Mesh3] = []
+    wireframes: list[Wireframe3] = []
     curves: list[DxfWireCurve] = []
     skipped: list[DxfSkippedEntity] = []
     chunks = _entity_chunks(pairs)
@@ -565,6 +468,7 @@ def _parse_meshes(
             vertices: list[Vec3] = []
             layer = _string(chunk, 8, None)
             index += 1
+            # POLYLINE owns a run of VERTEX records terminated by SEQEND.
             while index < len(chunks) and chunks[index][0] != "SEQEND":
                 child_type, child = chunks[index]
                 if child_type == "VERTEX":
@@ -580,7 +484,7 @@ def _parse_meshes(
                     len(curves),
                 )
                 curves.append(curve)
-                wireframes.append(Wireframe3D(curve.vertices, curve.edges))
+                wireframes.append(Wireframe3(curve.vertices, curve.edges))
             else:
                 skipped.append(
                     DxfSkippedEntity(
@@ -601,7 +505,7 @@ def _parse_meshes(
     return tuple(meshes), tuple(wireframes), tuple(curves), tuple(skipped)
 
 
-def _mesh_from_3dface(chunk: tuple[_Pair, ...]) -> Mesh3D:
+def _mesh_from_3dface(chunk: tuple[_Pair, ...]) -> Mesh3:
     p1 = _vec3(chunk, 10, 20, 30)
     p2 = _vec3(chunk, 11, 21, 31)
     p3 = _vec3(chunk, 12, 22, 32)
@@ -611,10 +515,11 @@ def _mesh_from_3dface(chunk: tuple[_Pair, ...]) -> Mesh3D:
     if p4 is not None and p4 != p3:
         vertices = (p1, p2, p3, p4)
         faces = ((0, 1, 2), (0, 2, 3))
-    return Mesh3D(vertices, faces)
+    return Mesh3(vertices, faces)
 
 
 def _pairs(text: str) -> tuple[_Pair, ...]:
+    """Parse alternating DXF group-code/value lines into typed pairs."""
     lines = text.splitlines()
     if len(lines) % 2 != 0:
         raise ReadError("malformed DXF: expected group-code/value line pairs")
@@ -629,6 +534,7 @@ def _pairs(text: str) -> tuple[_Pair, ...]:
 
 
 def _entity_chunks(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ...]], ...]:
+    """Return entity records from the DXF ``ENTITIES`` section only."""
     chunks: list[tuple[str, tuple[_Pair, ...]]] = []
     for section_name, section_pairs in _sections(pairs):
         if section_name != "ENTITIES":
@@ -638,6 +544,7 @@ def _entity_chunks(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ..
 
 
 def _sections(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ...]], ...]:
+    """Split raw DXF pairs into ``SECTION`` bodies keyed by section name."""
     sections: list[tuple[str, tuple[_Pair, ...]]] = []
     index = 0
     while index < len(pairs):
@@ -659,6 +566,7 @@ def _sections(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ...]], 
 
 
 def _chunks(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ...]], ...]:
+    """Chunk section pairs into entity bodies starting at group code ``0``."""
     chunks: list[tuple[str, tuple[_Pair, ...]]] = []
     index = 0
     while index < len(pairs):
@@ -676,6 +584,7 @@ def _chunks(pairs: tuple[_Pair, ...]) -> tuple[tuple[str, tuple[_Pair, ...]], ..
 
 
 def _lwpolyline_points(chunk: tuple[_Pair, ...]) -> tuple[tuple[float, float], ...]:
+    """Extract ordered ``(x, y)`` vertices from an ``LWPOLYLINE`` chunk."""
     points: list[tuple[float, float]] = []
     pending_x: float | None = None
     for pair in chunk:

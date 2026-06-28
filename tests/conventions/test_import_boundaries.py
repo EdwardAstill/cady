@@ -75,7 +75,11 @@ def test_files_do_not_import_viewer_or_numpy_at_module_scope() -> None:
 
 
 def test_export_code_does_not_hide_discretisation_constants() -> None:
-    checked = [*(SRC / "files" / "dxf").glob("*.py"), *(SRC / "files" / "stl").glob("*.py")]
+    checked = [
+        SRC / "files" / "dxf.py",
+        SRC / "files" / "stl.py",
+        SRC / "files" / "step.py",
+    ]
     offenders: list[str] = []
     for path in checked:
         text = path.read_text(encoding="utf-8")

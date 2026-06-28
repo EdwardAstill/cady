@@ -14,12 +14,12 @@ from cady import (
     Camera,
     DirectionalLight,
     DisplayStyle,
-    Mesh3D,
-    PointCloud3D,
-    Polyline3D,
+    Mesh3,
+    PointCloud3,
+    Polyline3,
     Scene,
     Vec3,
-    Wireframe3D,
+    Wireframe3,
 )
 from cady.view import view_scene
 
@@ -67,7 +67,7 @@ class WireframeArray:
             [_as_vec3(point) for point in row] for row in self.node_array
         ]
 
-    def to_mesh(self) -> Mesh3D:
+    def to_mesh(self) -> Mesh3:
         return node_array_to_mesh(self.node_array)
 
 
@@ -127,7 +127,7 @@ def quarter_sphere_linesplan(
     *,
     radius: float,
     samples: int,
-) -> list[Polyline3D]:
+) -> list[Polyline3]:
     if radius <= 0.0:
         raise ValueError("radius must be positive")
     if samples < 3:
@@ -135,16 +135,16 @@ def quarter_sphere_linesplan(
 
     sample_offsets = semicircle_sample_offsets(radius=radius, samples=samples)
 
-    x_axis_polyline = Polyline3D(
+    x_axis_polyline = Polyline3(
         tuple((side, y, 0.0) for side, y in sample_offsets)
     )
-    diagonal_polyline = Polyline3D(
+    diagonal_polyline = Polyline3(
         tuple(
             (side * DIAGONAL_SCALE, y, -side * DIAGONAL_SCALE)
             for side, y in sample_offsets
         )
     )
-    z_axis_polyline = Polyline3D(
+    z_axis_polyline = Polyline3(
         tuple((0.0, y, -side) for side, y in sample_offsets)
     )
 
@@ -168,7 +168,7 @@ def semicircle_sample_offsets(
 
 
 def validate_matching_y_bounds(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
 ) -> None:
@@ -192,14 +192,14 @@ def validate_matching_y_bounds(
             )
 
 
-def polyline_y_bounds(polyline: Polyline3D) -> tuple[float, float]:
+def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
     if not polyline.vertices:
         raise ValueError("linesplan polylines must contain at least one vertex")
     y_values = [vertex.y for vertex in polyline.vertices]
     return min(y_values), max(y_values)
 
 
-def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
+def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Vec3] = []
     vertex_indices: dict[Point3, int] = {}
     edges: list[tuple[int, int]] = []
@@ -217,14 +217,14 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3D]) -> Wireframe3D:
                 edges.append((previous, current))
             previous = current
 
-    return Wireframe3D(tuple(vertices), tuple(edges))
+    return Wireframe3(tuple(vertices), tuple(edges))
 
 
 def slice_planes(
     *,
     radius: float,
     y_values: Iterable[float],
-) -> tuple[tuple[float, Mesh3D], ...]:
+) -> tuple[tuple[float, Mesh3], ...]:
     return tuple(
         (
             y,
@@ -249,7 +249,7 @@ def plane_grid(
     z_min: float,
     z_max: float,
     steps: int,
-) -> Mesh3D:
+) -> Mesh3:
     vertices = [
         Vec3(x_min, y, z_max),
         Vec3(x_max, y, z_max),
@@ -264,7 +264,7 @@ def plane_grid(
         edges.append(_add_segment(vertices, (x, y, z_min), (x, y, z_max)))
         edges.append(_add_segment(vertices, (x_min, y, z), (x_max, y, z)))
 
-    return Mesh3D(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
+    return Mesh3(tuple(vertices), ((0, 1, 2), (0, 2, 3)), tuple(edges))
 
 
 def _add_segment(
@@ -279,7 +279,7 @@ def _add_segment(
 
 
 def split_wireframe_with_planes(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     *,
     y_values: Iterable[float],
     tolerance: float = INTERSECTION_TOLERANCE,
@@ -311,18 +311,18 @@ def node_array_to_point_cloud(
     node_array: Iterable[Iterable[Vec3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> PointCloud3D:
+) -> PointCloud3:
     """Flatten a node array into a point cloud for display."""
     _validate_tolerance(tolerance)
 
-    return PointCloud3D(_unique_nodes(node_array, tolerance=tolerance))
+    return PointCloud3(_unique_nodes(node_array, tolerance=tolerance))
 
 
 def node_array_to_mesh(
     node_array: Iterable[Iterable[Vec3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> Mesh3D:
+) -> Mesh3:
     """Return a mesh connecting a node array as a row-major grid."""
     _validate_tolerance(tolerance)
 
@@ -332,7 +332,7 @@ def node_array_to_mesh(
     edges = _grid_edges(row_indices)
     faces = _grid_faces(row_indices)
 
-    return Mesh3D(tuple(vertices), tuple(faces), tuple(edges))
+    return Mesh3(tuple(vertices), tuple(faces), tuple(edges))
 
 
 def _validate_tolerance(tolerance: float) -> None:
@@ -374,7 +374,7 @@ def _validate_rectangular_node_array(
 
 
 def _polyline_y_intersection(
-    polyline: Polyline3D,
+    polyline: Polyline3,
     y: float,
     *,
     tolerance: float,
@@ -502,7 +502,7 @@ def _points_close(
 
 
 def add_node(
-    mesh: Mesh3D,
+    mesh: Mesh3,
     node_array: NodeArray,
     *,
     row_index: int,
@@ -511,7 +511,7 @@ def add_node(
     t: float = 0.5,
     tolerance: float = INTERSECTION_TOLERANCE,
     require_point_on_current_edge: bool = False,
-) -> tuple[Mesh3D, NodeArray]:
+) -> tuple[Mesh3, NodeArray]:
     """Add one local node by splitting one row edge of a mesh.
 
     The selected edge is:
@@ -571,14 +571,14 @@ def add_node(
 
 
 def add_node_by_one_based_position(
-    mesh: Mesh3D,
+    mesh: Mesh3,
     node_array: NodeArray,
     *,
     position: float,
     point: PointLike3 | None = None,
     tolerance: float = INTERSECTION_TOLERANCE,
     require_point_on_current_edge: bool = False,
-) -> tuple[Mesh3D, NodeArray]:
+) -> tuple[Mesh3, NodeArray]:
     """Add a local node from a shorthand position like 10.5.
 
     position=10.5 means split one-based row edge 10--11. This only supports
@@ -607,7 +607,7 @@ def add_node_by_one_based_position(
 
 
 def node_on_original_line_by_one_based_position(
-    polylines: Iterable[Polyline3D],
+    polylines: Iterable[Polyline3],
     node_array: NodeArray,
     *,
     position: float,
@@ -706,13 +706,13 @@ def _interpolate_vec3(
 
 
 def _split_mesh_edge(
-    mesh: Mesh3D,
+    mesh: Mesh3,
     start_index: int,
     end_index: int,
     new_node: Vec3,
     *,
     tolerance: float,
-) -> Mesh3D:
+) -> Mesh3:
     """Split one mesh edge and all faces that use it."""
     _validate_tolerance(tolerance)
 
@@ -756,7 +756,7 @@ def _split_mesh_edge(
     for opposite in opposite_vertices:
         _append_unique_edge(edges, (new_index, opposite))
 
-    return Mesh3D(tuple(vertices), tuple(faces), tuple(edges))
+    return Mesh3(tuple(vertices), tuple(faces), tuple(edges))
 
 
 def _face_contains_edge(
@@ -937,9 +937,9 @@ def _distance(
 
 
 def build_scene(
-    wireframe: Wireframe3D,
-    planes: Iterable[tuple[float, Mesh3D]],
-    nodes: Mesh3D | WireframeArray | Iterable[Iterable[Vec3]] | PointCloud3D | None = None,
+    wireframe: Wireframe3,
+    planes: Iterable[tuple[float, Mesh3]],
+    nodes: Mesh3 | WireframeArray | Iterable[Iterable[Vec3]] | PointCloud3 | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_slice_planes").add(
         wireframe,
@@ -952,7 +952,7 @@ def build_scene(
             name=f"slice_plane_y_{y:g}",
             style=PLANE_STYLES[index % len(PLANE_STYLES)],
         )
-    if isinstance(nodes, Mesh3D):
+    if isinstance(nodes, Mesh3):
         node_mesh = nodes
 
         if node_mesh.vertices and (node_mesh.edges or node_mesh.faces):
@@ -963,9 +963,9 @@ def build_scene(
             )
 
         if node_mesh.vertices:
-            nodes = PointCloud3D(node_mesh.vertices)
+            nodes = PointCloud3(node_mesh.vertices)
 
-    elif nodes is not None and not isinstance(nodes, PointCloud3D):
+    elif nodes is not None and not isinstance(nodes, PointCloud3):
         if isinstance(nodes, WireframeArray):
             node_array = nodes.node_array
             node_mesh = nodes.to_mesh()
@@ -979,7 +979,7 @@ def build_scene(
                 style=NODE_MESH_STYLE,
             )
         nodes = node_array_to_point_cloud(node_array)
-    if isinstance(nodes, PointCloud3D) and nodes.vertices:
+    if isinstance(nodes, PointCloud3) and nodes.vertices:
         scene = scene.add(
             nodes,
             name="plane_intersection_nodes",
@@ -988,7 +988,7 @@ def build_scene(
     return scene.with_camera(CAMERA, name="isometric").with_light(LIGHT)
 
 
-def print_wireframe_summary(wireframe: Wireframe3D) -> None:
+def print_wireframe_summary(wireframe: Wireframe3) -> None:
     lower, upper = wireframe.bounds()
     print(
         f"wireframe: {len(wireframe.vertices)} vertices, {len(wireframe.edges)} edges, "

@@ -1,3 +1,5 @@
+"""Shared NumPy and tuple type aliases for operations modules."""
+
 from __future__ import annotations
 
 import numpy as np

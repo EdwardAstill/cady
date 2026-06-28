@@ -1,3 +1,5 @@
+"""Dimension entities and style records for 2D drawings."""
+
 from __future__ import annotations
 
 import math
@@ -8,6 +10,7 @@ from cady.drawing._geometry import Bounds2, Point2, point2, points_bounds
 
 
 def format_measurement(value: float) -> str:
+    """Format a numeric measurement without trailing zero noise."""
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
@@ -17,6 +20,8 @@ def _distance(a: Point2, b: Point2) -> float:
 
 @dataclass(frozen=True, slots=True)
 class DimStyle:
+    """Shared styling values for generated dimension annotations."""
+
     name: str = "Standard"
     text_height: float = 0.18
     arrow_size: float = 0.18
@@ -42,7 +47,9 @@ class DimStyle:
 
 
 @dataclass(frozen=True, slots=True)
-class LinearDimension2D:
+class LinearDimension2:
+    """Horizontal or vertical linear measurement between two points."""
+
     p1: Point2
     p2: Point2
     offset: float
@@ -84,7 +91,9 @@ class LinearDimension2D:
 
 
 @dataclass(frozen=True, slots=True)
-class AlignedDimension2D:
+class AlignedDimension2:
+    """Measurement between two points along their connecting direction."""
+
     p1: Point2
     p2: Point2
     offset: float
@@ -120,7 +129,9 @@ class AlignedDimension2D:
 
 
 @dataclass(frozen=True, slots=True)
-class RadiusDimension2D:
+class RadiusDimension2:
+    """Radial measurement for a circular feature."""
+
     center: Point2
     radius: float
     angle: float = 0.0
@@ -143,6 +154,7 @@ class RadiusDimension2D:
 
     @property
     def end(self) -> Point2:
+        """Return the leader endpoint at the current angle."""
         return (
             self.center[0] + self.radius * math.cos(self.angle),
             self.center[1] + self.radius * math.sin(self.angle),
@@ -153,7 +165,9 @@ class RadiusDimension2D:
 
 
 @dataclass(frozen=True, slots=True)
-class DiameterDimension2D:
+class DiameterDimension2:
+    """Diameter measurement for a circular feature."""
+
     center: Point2
     radius: float
     angle: float = 0.0
@@ -176,6 +190,7 @@ class DiameterDimension2D:
 
     @property
     def p1(self) -> Point2:
+        """Return the first endpoint of the measured diameter."""
         return (
             self.center[0] - self.radius * math.cos(self.angle),
             self.center[1] - self.radius * math.sin(self.angle),
@@ -183,6 +198,7 @@ class DiameterDimension2D:
 
     @property
     def p2(self) -> Point2:
+        """Return the second endpoint of the measured diameter."""
         return (
             self.center[0] + self.radius * math.cos(self.angle),
             self.center[1] + self.radius * math.sin(self.angle),
@@ -193,7 +209,9 @@ class DiameterDimension2D:
 
 
 @dataclass(frozen=True, slots=True)
-class AngularDimension2D:
+class AngularDimension2:
+    """Angular measurement between two rays from a shared centre."""
+
     center: Point2
     p1: Point2
     p2: Point2
@@ -221,6 +239,7 @@ class AngularDimension2D:
             object.__setattr__(self, "text", format_measurement(self.measurement_degrees()))
 
     def measurement_degrees(self) -> float:
+        """Return the included angle in degrees."""
         v1 = (self.p1[0] - self.center[0], self.p1[1] - self.center[1])
         v2 = (self.p2[0] - self.center[0], self.p2[1] - self.center[1])
         mag1 = math.hypot(*v1)
@@ -232,12 +251,12 @@ class AngularDimension2D:
         return points_bounds((self.center, self.p1, self.p2), name="angular dimension points")
 
 
-Dimension2D: TypeAlias = (
-    LinearDimension2D
-    | AlignedDimension2D
-    | RadiusDimension2D
-    | DiameterDimension2D
-    | AngularDimension2D
+Dimension2: TypeAlias = (
+    LinearDimension2
+    | AlignedDimension2
+    | RadiusDimension2
+    | DiameterDimension2
+    | AngularDimension2
 )
 
 
