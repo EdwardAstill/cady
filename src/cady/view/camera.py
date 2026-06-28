@@ -4,38 +4,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import acos, degrees, isfinite, sqrt
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from cady.view.errors import ViewError
 
 Projection = Literal["perspective", "orthographic"]
-Vec3Like = tuple[float, float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 
-def vec3(value: object, *, name: str) -> Vec3Like:
-    """Coerce a value to a finite 3D vector."""
+def _finite_point3(value: object, *, name: str) -> Point3:
     try:
         raw = tuple(float(component) for component in value)  # type: ignore[reportUnknownVariableType]
     except TypeError as exc:
-        raise ViewError(f"{name} must be a finite 3D vector") from exc
+        raise ViewError(f"{name} must be a finite 3D coordinate") from exc
     if len(raw) != 3 or any(not isfinite(component) for component in raw):
-        raise ViewError(f"{name} must be a finite 3D vector")
+        raise ViewError(f"{name} must be a finite 3D coordinate")
     return raw
 
 
-def _sub(a: Vec3Like, b: Vec3Like) -> Vec3Like:
+def _sub(a: Point3, b: Point3) -> Point3:
     return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
 
-def _dot(a: Vec3Like, b: Vec3Like) -> float:
+def _dot(a: Point3, b: Point3) -> float:
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
-def _length(a: Vec3Like) -> float:
+def _length(a: Point3) -> float:
     return sqrt(_dot(a, a))
 
 
-def _reject_degenerate_basis(position: Vec3Like, target: Vec3Like, up: Vec3Like) -> None:
+def _reject_degenerate_basis(position: Point3, target: Point3, up: Point3) -> None:
     view = _sub(target, position)
     view_length = _length(view)
     up_length = _length(up)
@@ -52,9 +51,9 @@ def _reject_degenerate_basis(position: Vec3Like, target: Vec3Like, up: Vec3Like)
 class Camera:
     """Immutable camera description used by scene viewers."""
 
-    position: Vec3Like
-    target: Vec3Like
-    up: Vec3Like = (0.0, 0.0, 1.0)
+    position: Point3
+    target: Point3
+    up: Point3 = (0.0, 0.0, 1.0)
     projection: Projection = "perspective"
     fov_degrees: float = 45.0
     orthographic_scale: float = 1.0
@@ -62,9 +61,9 @@ class Camera:
     far: float = 1e6
 
     def __post_init__(self) -> None:
-        position = vec3(self.position, name="position")
-        target = vec3(self.target, name="target")
-        up = vec3(self.up, name="up")
+        position = _finite_point3(self.position, name="position")
+        target = _finite_point3(self.target, name="target")
+        up = _finite_point3(self.up, name="up")
         _reject_degenerate_basis(position, target, up)
         if self.projection not in ("perspective", "orthographic"):
             raise ViewError("projection must be 'perspective' or 'orthographic'")
@@ -90,9 +89,9 @@ class Camera:
     ) -> Camera:
         """Create a camera from explicit position, target, and up vectors."""
         return cls(
-            vec3(position, name="position"),
-            vec3(target, name="target"),
-            vec3(up, name="up"),
+            _finite_point3(position, name="position"),
+            _finite_point3(target, name="target"),
+            _finite_point3(up, name="up"),
         )
 
     @classmethod
@@ -106,9 +105,9 @@ class Camera:
     ) -> Camera:
         """Create a perspective camera."""
         return cls(
-            vec3(position, name="position"),
-            vec3(target, name="target"),
-            vec3(up, name="up"),
+            _finite_point3(position, name="position"),
+            _finite_point3(target, name="target"),
+            _finite_point3(up, name="up"),
             projection="perspective",
             fov_degrees=fov_degrees,
         )
@@ -124,12 +123,12 @@ class Camera:
     ) -> Camera:
         """Create an orthographic camera."""
         return cls(
-            vec3(position, name="position"),
-            vec3(target, name="target"),
-            vec3(up, name="up"),
+            _finite_point3(position, name="position"),
+            _finite_point3(target, name="target"),
+            _finite_point3(up, name="up"),
             projection="orthographic",
             orthographic_scale=scale,
         )
 
 
-__all__ = ["Camera", "Projection", "Vec3Like", "vec3"]
+__all__ = ["Camera", "Projection"]

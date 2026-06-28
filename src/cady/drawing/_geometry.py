@@ -19,35 +19,18 @@ class ArrayConvertible2(Protocol):
     def to_array(self, *, tolerance: float) -> object: ...
 
 
-class XYLike(Protocol):
-    x: object
-    y: object
-
-
-def point2(value: object, *, name: str = "point") -> Point2:
-    """Coerce a point-like value to a 2D float tuple."""
-    if hasattr(value, "x") and hasattr(value, "y"):
-        xy = cast(XYLike, value)
-        return (float(cast(float, xy.x)), float(cast(float, xy.y)))
-    if isinstance(value, Sequence):
-        sequence = cast(Sequence[object], value)
-        if len(sequence) == 2:
-            return (float(cast(float, sequence[0])), float(cast(float, sequence[1])))
-    raise TypeError(f"{name} must be a 2D point")
-
-
 def bounds2(value: object, *, name: str = "bounds") -> Bounds2:
-    """Coerce a pair of points to a 2D bounds tuple."""
+    """Return a pair of 2D bounds tuples."""
     if isinstance(value, Sequence):
         sequence = cast(Sequence[object], value)
         if len(sequence) == 2:
-            return (point2(sequence[0], name=f"{name}[0]"), point2(sequence[1], name=f"{name}[1]"))
+            return cast(Bounds2, (sequence[0], sequence[1]))
     raise TypeError(f"{name} must be a pair of 2D points")
 
 
 def points_bounds(points: Iterable[object], *, name: str = "points") -> Bounds2:
     """Return axis-aligned bounds for a non-empty point collection."""
-    converted = tuple(point2(point, name=name) for point in points)
+    converted = tuple(cast(Point2, point) for point in points)
     if not converted:
         raise ValueError(f"{name} must contain at least one point")
     min_x = min(point[0] for point in converted)

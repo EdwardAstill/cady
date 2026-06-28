@@ -12,11 +12,11 @@ from cady import (
     Document,
     Drawing2,
     Part,
-    Profile2,
+    Region2,
     Scene,
     circle2,
     line2,
-    profile_rectangle,
+    region_rectangle,
 )
 from cady.view import SceneObject
 
@@ -33,17 +33,17 @@ HOLE_RADIUS = 0.12
 class PlateExample:
     drawing: Drawing2
     part: Part
-    profile: Profile2
+    region: Region2
 
 
-def plate_profile() -> Profile2:
-    outline = profile_rectangle(PLATE_WIDTH, PLATE_HEIGHT)
+def plate_region() -> Region2:
+    outline = region_rectangle(PLATE_WIDTH, PLATE_HEIGHT)
     hole = circle2(HOLE_CENTRE, HOLE_RADIUS)
-    return Profile2(outline.outer, holes=(hole,))
+    return Region2(outline.outer, holes=(hole,))
 
 
 def plate_body() -> Body3:
-    return Body3.from_profile(plate_profile()).extrude(PLATE_THICKNESS)
+    return Body3.from_region(plate_region()).extrude(PLATE_THICKNESS)
 
 
 def plate_part(*, name: str = "plate") -> Part:
@@ -51,14 +51,14 @@ def plate_part(*, name: str = "plate") -> Part:
 
 
 def plate_drawing(*, name: str = "front", title: str = "PLATE") -> Drawing2:
-    profile = plate_profile()
-    hole = profile.holes[0]
+    region = plate_region()
+    hole = region.holes[0]
     return (
         Drawing2(name)
         .add_layer("PLATE", color=7)
         .add_layer("CENTER", color=3, linetype="CENTER")
         .add_layer("TEXT", color=2)
-        .add(profile.outer, layer="PLATE")
+        .add(region.outer, layer="PLATE")
         .add(hole, layer="PLATE")
         .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
         .add(line2((0.38, 0.3), (0.62, 0.3)), layer="CENTER")
@@ -81,7 +81,7 @@ def plate_example() -> PlateExample:
     return PlateExample(
         drawing=plate_drawing(),
         part=plate_part(),
-        profile=plate_profile(),
+        region=plate_region(),
     )
 
 

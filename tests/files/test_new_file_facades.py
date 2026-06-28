@@ -6,7 +6,6 @@ from cady import Document, Drawing2, Line2, Part, box
 from cady.errors import ReadError
 from cady.files import dxf, step, stl
 from cady.geometry import Mesh3
-from cady.vec import Vec3
 
 
 def test_dxf_write_and_read_drawing(tmp_path: Path) -> None:
@@ -111,7 +110,7 @@ def test_dxf_read_polyline_curves_and_legacy_wireframes(tmp_path: Path) -> None:
     assert len(result.curves) == 1
     curve = result.curves[0]
     assert isinstance(curve, dxf.DxfWireCurve)
-    assert [point.tuple() for point in curve.vertices] == [
+    assert [point for point in curve.vertices] == [
         (0.0, 0.0, 1.0),
         (2.0, 0.0, 3.0),
     ]
@@ -124,7 +123,7 @@ def test_dxf_read_polyline_curves_and_legacy_wireframes(tmp_path: Path) -> None:
     assert curve.constant_z is False
 
     assert len(result.wireframes) == 1
-    assert [point.tuple() for point in result.wireframes[0].vertices] == [
+    assert [point for point in result.wireframes[0].vertices] == [
         (0.0, 0.0, 1.0),
         (2.0, 0.0, 3.0),
     ]
@@ -186,7 +185,7 @@ def test_dxf_read_mesh_rejects_legacy_line_mesh_kwargs(tmp_path: Path) -> None:
 
 
 def test_stl_write_mesh(tmp_path: Path) -> None:
-    mesh = Mesh3((Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)), ((0, 1, 2),))
+    mesh = Mesh3(((0, 0, 0), (1, 0, 0), (0, 1, 0)), ((0, 1, 2),))
     path = tmp_path / "mesh.stl"
 
     stl.write(mesh, path, ascii=True, tolerance=1e-3)

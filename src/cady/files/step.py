@@ -29,7 +29,13 @@ from typing import Any, Protocol, cast
 from cady.errors import WriteError
 from cady.files.utils import mesh_from_target
 from cady.geometry import Mesh3
-from cady.vec import Vec3
+from cady.operations.coordinates import (
+    add3,
+    dot3,
+    is_parallel3,
+    project_onto_line3,
+    scale3,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -704,12 +710,12 @@ def find_end_caps(
     for i, fa in enumerate(sorted_faces):
         if i in used or fa.normal is None:
             continue
-        na = Vec3.from_xyz(fa.normal)
+        na = fa.normal
         for j, fb in enumerate(sorted_faces):
             if j <= i or j in used or fb.normal is None:
                 continue
-            nb = Vec3.from_xyz(fb.normal)
-            if not na.is_parallel(nb):
+            nb = fb.normal
+            if not is_parallel3(na, nb):
                 continue
             if fa.area < fb.area * area_min_ratio or fb.area < fa.area * area_min_ratio:
                 continue
@@ -902,7 +908,7 @@ def _side_faces_for_end_caps(
     """Collect non-cap faces that plausibly lie on the extrusion sides."""
     if cap_a.normal is None:
         return []
-    normal_vec = Vec3.from_xyz(cap_a.normal)
+    normal_vec = cap_a.normal
     side_faces: list[StepFace] = []
     for face in faces:
         if face is cap_a or face is cap_b:
@@ -911,7 +917,7 @@ def _side_faces_for_end_caps(
             side_faces.append(face)
             continue
         if face.surface_type == "plane" and face.normal is not None:
-            dot = Vec3.from_xyz(face.normal).dot(normal_vec)
+            dot = dot3(face.normal, normal_vec)
             if abs(dot) < 0.01:
                 side_faces.append(face)
     return side_faces
@@ -929,7 +935,7 @@ def _collect_colinear_cylinder_group(
     seed = cylinders[seed_index]
     if seed.cylinder_axis is None or seed.cylinder_radius is None:
         return []
-    axis = Vec3.from_xyz(seed.cylinder_axis)
+    axis = seed.cylinder_axis
     radius = float(seed.cylinder_radius)
 
     group: list[StepFace] = [seed]
@@ -940,7 +946,7 @@ def _collect_colinear_cylinder_group(
             continue
         if abs(other.cylinder_radius - radius) > radius_tol:
             continue
-        if axis.is_parallel(Vec3.from_xyz(other.cylinder_axis), tol=axis_tol):
+        if is_parallel3(axis, other.cylinder_axis, tolerance=axis_tol):
             group.append(other)
             assigned.add(index)
 
@@ -953,10 +959,10 @@ def _cylinder_group_endpoints(
     """Estimate tubular member endpoints from grouped cylinder centroids."""
     if not group or group[0].cylinder_axis is None:
         return None
-    axis = Vec3.from_xyz(group[0].cylinder_axis)
-    axis_point = Vec3.from_xyz(group[0].centroid)
+    axis = group[0].cylinder_axis
+    axis_point = group[0].centroid
     projections = [
-        Vec3.from_xyz(face.centroid).project_onto_line(axis_point, axis)
+        project_onto_line3(face.centroid, axis_point, axis)
         for face in group
     ]
     if not projections:
@@ -969,8 +975,8 @@ def _cylinder_group_endpoints(
         t_max += 1.0
 
     return (
-        (axis_point + axis * t_min).tuple(),
-        (axis_point + axis * t_max).tuple(),
+        add3(axis_point, scale3(axis, t_min)),
+        add3(axis_point, scale3(axis, t_max)),
     )
 
 
@@ -1008,7 +1014,7 @@ def render(target: object, *, tolerance: float = 1e-3) -> str:
         next_id += 1
         vertex_ids.append(vertex_id)
         lines.append(
-            f"#{vertex_id}=CARTESIAN_POINT('',({vertex.x:.12g},{vertex.y:.12g},{vertex.z:.12g}));"
+            f"#{vertex_id}=CARTESIAN_POINT('',({vertex[0]:.12g},{vertex[1]:.12g},{vertex[2]:.12g}));"
         )
     for a, b, c in mesh.faces:
         face_id = next_id

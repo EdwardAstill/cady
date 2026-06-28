@@ -8,7 +8,7 @@ from types import ModuleType
 
 import pytest
 
-from cady import Vec3, Wireframe3
+from cady import Wireframe3
 from cady.view import prepare_scene
 
 
@@ -79,7 +79,7 @@ def test_visualise_mesh_boundary_scene_overlays_boundary_loops() -> None:
         "boundary_loop_4",
     ]
     assert len(loops) == 4
-    assert [len(loop.vertices) - 1 for loop in loops] == [112, 26, 22, 22]
+    assert [len(loop) - 1 for loop in loops] == [112, 26, 22, 22]
     assert prepared.meshes[0].name == "mesh"
     assert len(prepared.meshes[0].edges) == 2089
     assert [mesh.name for mesh in prepared.meshes[1:]] == [
@@ -183,9 +183,9 @@ def test_linesplan_wireframe_scene_draws_only_wireframe() -> None:
     module = _load_linesplan_script("wireframe")
     wireframe = Wireframe3(
         (
-            Vec3(0.0, 0.0, 0.0),
-            Vec3(1.0, 0.0, 0.0),
-            Vec3(1.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
         ),
         ((0, 1), (1, 2)),
     )

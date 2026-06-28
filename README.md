@@ -8,10 +8,10 @@ Start with [docs/index.md](docs/index.md) for the full documentation.
 
 ## What cady provides
 
-- immutable 2D geometry values such as `Line2`, `Circle2`, `Polyline2`,
-  `ClosedPolyline2`, `Spline2`, `Ellipse2`, `Profile2`, and `Mesh2`;
-- meshable 3D geometry through `Body3`, `Face3`, `Frame3`, `Mesh3`, and
-  closed 3D polylines;
+- immutable 2D geometry values such as `Line2`, `Circle2`, open or closed
+  `Polyline2`, `Spline2`, `Ellipse2`, `Region2`, and `Mesh2`;
+- meshable 3D geometry through `Body3`, `Region3`, `Surface3`, `Plane3`,
+  `Mesh3`, and closed 3D polylines;
 - product structure with `Part`, `Assembly`, placed part instances, materials,
   and metadata;
 - 2D drafting documents with layers, text, hatches, blocks, inserts, and
@@ -48,28 +48,28 @@ Run scripts from the repository root with `PYTHONPATH=src`.
 
 ## Quickstart
 
-Build a plate profile, put the 2D curves into a drawing, extrude the profile
+Build a plate region, put the 2D curves into a drawing, extrude the region
 into a part, and write DXF/STL files:
 
 ```python
-from cady import Body3, Drawing2, Part, Profile2, circle2, line2, profile_rectangle
+from cady import Body3, Drawing2, Part, Region2, circle2, line2, region_rectangle
 from cady.files import dxf, stl
 
-outline = profile_rectangle(1.0, 0.6)
+outline = region_rectangle(1.0, 0.6)
 hole = circle2((0.5, 0.3), 0.12)
-profile = Profile2(outline.outer, holes=(hole,))
+region = Region2(outline.outer, holes=(hole,))
 
 drawing = (
     Drawing2("front")
     .add_layer("PLATE", color=7)
     .add_layer("CENTER", color=3, linetype="CENTER")
-    .add(profile.outer, layer="PLATE")
+    .add(region.outer, layer="PLATE")
     .add(hole, layer="PLATE")
     .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
     .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
 )
 
-body = Body3.from_profile(profile).extrude(0.04)
+body = Body3.from_region(region).extrude(0.04)
 part = Part("plate").with_body(body)
 
 dxf.write(drawing, "plate.dxf", tolerance=1e-3)
@@ -126,7 +126,7 @@ members = step.read_members("member.step")
 Current file support is deliberately small:
 
 - DXF writes `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, and `TEXT` entities from a
-  `Drawing2`; profile-like objects are sampled to closed polylines when no
+  `Drawing2`; region-like objects are sampled to closed polylines when no
   direct DXF entity exists.
 - DXF reads basic 2D drawing entities, `3DFACE` triangles/quads, and 3D
   polyline wires. ACIS-backed solids are reported as skipped records.
@@ -151,8 +151,8 @@ Most scripts write to `examples/gallery` and accept `--out <dir>`.
 ## Package layout
 
 ```text
-cady.geometry   2D curves, closed curves, profiles, and meshes
-cady.geometry   bodies, faces, frames, meshes, features, and primitives
+cady.geometry   2D curves, closed curves, regions, and meshes
+cady.geometry   bodies, regions, surfaces, planes, meshes, features, and primitives
 cady.drawing      drawing documents, layers, text, hatches, blocks, dimensions
 cady.product      parts, assemblies, materials, and assembly flattening
 cady.view         scenes, cameras, lights, display styles, and optional viewers

@@ -761,10 +761,7 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
                 meshes.append(
                     SceneMesh(
                         scene_object.object_name,
-                        np.asarray(
-                            [vertex.tuple() for vertex in point_cloud.vertices],
-                            dtype=np.float32,
-                        ),
+                        np.asarray(point_cloud.vertices, dtype=np.float32),
                         np.empty((0, 3), dtype=np.uint32),
                         np.empty((0, 2), dtype=np.uint32),
                         _style_color(target, style),
@@ -801,7 +798,7 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
             meshes.append(
                 SceneMesh(
                     scene_object.object_name,
-                    np.asarray([vertex.tuple() for vertex in mesh.vertices], dtype=np.float32),
+                    np.asarray(mesh.vertices, dtype=np.float32),
                     faces,
                     edges,
                     _style_color(target, style),

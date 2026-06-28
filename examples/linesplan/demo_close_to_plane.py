@@ -10,7 +10,7 @@ Usage:
 
 from __future__ import annotations
 
-from cady import DisplayStyle, Mesh3, Vec3, Wireframe3
+from cady import DisplayStyle, Mesh3, Wireframe3
 
 SQUARE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 CLOSED_STYLE = DisplayStyle(color=(0.72, 0.25, 0.12))
@@ -20,10 +20,10 @@ HIGHLIGHT_STYLE = DisplayStyle(color=(0.12, 0.72, 0.25))
 def build_upright_square() -> Wireframe3:
     """Build a square standing on the XY plane, 2x2, offset 1 unit above Z=0."""
     vertices = (
-        Vec3(0, 0, 1),
-        Vec3(2, 0, 1),
-        Vec3(2, 2, 1),
-        Vec3(0, 2, 1),
+        (0.0, 0.0, 1.0),
+        (2.0, 0.0, 1.0),
+        (2.0, 2.0, 1.0),
+        (0.0, 2.0, 1.0),
     )
     edges = ((0, 1), (1, 2), (2, 3), (3, 0))
     return Wireframe3(vertices, edges)
@@ -32,14 +32,14 @@ def build_upright_square() -> Wireframe3:
 def build_cube_wireframe() -> Wireframe3:
     """Build a wireframe cube 2x2x2 with bottom at Z=0."""
     vertices = (
-        Vec3(0, 0, 0),
-        Vec3(2, 0, 0),
-        Vec3(2, 2, 0),
-        Vec3(0, 2, 0),  # bottom
-        Vec3(0, 0, 2),
-        Vec3(2, 0, 2),
-        Vec3(2, 2, 2),
-        Vec3(0, 2, 2),  # top
+        (0.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (2.0, 2.0, 0.0),
+        (0.0, 2.0, 0.0),  # bottom
+        (0.0, 0.0, 2.0),
+        (2.0, 0.0, 2.0),
+        (2.0, 2.0, 2.0),
+        (0.0, 2.0, 2.0),  # top
     )
     edges = (
         (0, 1),

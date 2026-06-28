@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady import Assembly, Body3, DisplayStyle, Mesh3, Part, Vec3, box
+from cady import Assembly, Body3, DisplayStyle, Mesh3, Part, box
 
 
 def test_mesh_view_builds_centred_wire_scene_and_returns_none(
@@ -11,7 +11,7 @@ def test_mesh_view_builds_centred_wire_scene_and_returns_none(
     view = pytest.importorskip("cady.view")
     opened: list[tuple[object, float, str | None]] = []
     mesh = Mesh3(
-        (Vec3(10.0, 0.0, 0.0), Vec3(12.0, 0.0, 0.0)),
+        ((10.0, 0.0, 0.0), (12.0, 0.0, 0.0)),
         (),
         ((0, 1),),
     )

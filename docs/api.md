@@ -9,11 +9,10 @@
 | `Line2D` | Line segment between two points. |
 | `Arc2D` | Circular arc (centre, radius, start/end angle). |
 | `Spline2D` | Bezier spline curve. |
-| `Polyline2D` | Open polyline. |
+| `Polyline2D` | Open or closed polyline. |
 | `Circle2D` | Full circle. |
 | `Ellipse2D` | Ellipse. |
-| `ClosedPolyline2D` | Closed polyline loop. |
-| `Profile2D` | Filled region (outer boundary + holes). |
+| `Region2D` | Filled region (outer boundary + holes). |
 | `Mesh2D` | 2D triangle mesh. |
 | `Curve2D` | Protocol for open curves. |
 | `ClosedCurve2D` | Protocol for closed boundaries. |
@@ -22,8 +21,9 @@
 
 | Name | Description |
 |------|-------------|
-| `Frame3D` | Coordinate frame in 3D space. |
-| `Face3D` | Profile placed in a 3D frame. |
+| `Plane3D` | Coordinate plane in 3D space. |
+| `Surface3D` | Parametric surface defined by `x(u,v)`, `y(u,v)`, and `z(u,v)`. |
+| `Region3D` | Bounded 2D region in a surface parameter domain. |
 | `Body3D` | Editable solid with feature history. |
 | `Polyline3D` | Open 3D polyline. |
 | `ClosedPolyline3D` | Closed planar 3D polyline loop. |
@@ -45,7 +45,7 @@
 | Name | Description |
 |------|-------------|
 | `Drawing2D` | 2D drafting document. |
-| `DrawingEntity` | Curve/profile with layer assignment. |
+| `DrawingEntity` | Curve/region with layer assignment. |
 | `Layer` | Named layer with color and linetype. |
 | `Text2D` | Text entity. |
 | `Hatch2D` | Hatch fill entity. |
@@ -76,8 +76,7 @@
 | Name | Description |
 |------|-------------|
 | `Document` | Optional project registry. |
-| `Vec2`, `Vec3` | 2D and 3D vector/point values. |
-| `Pose3D` | 3D position and orientation. |
+| `Pose3` | 3D position and orientation. |
 
 ## Factory functions
 
@@ -86,11 +85,11 @@
 | `line2d(start, end)` | `Line2D` | Two points. |
 | `arc2d(centre, radius, start_angle, end_angle)` | `Arc2D` | Angles in radians. |
 | `circle2d(centre, radius)` | `Circle2D` | Centre point and radius. |
-| `polyline2d(points, *, closed=False)` | `Polyline2D` or `ClosedPolyline2D` | Sequence of points. |
-| `profile_rectangle(width, height, *, origin=(0,0))` | `Profile2D` | Width and height. |
-| `profile_circle(radius, *, centre=(0,0))` | `Profile2D` | Radius. |
-| `box(*, width, depth, height, frame=None)` | `Body3D` | Dimensions in 3D. |
-| `cylinder(*, radius, height, frame=None)` | `Body3D` | Radius and height. |
+| `polyline2d(points, *, closed=False)` | `Polyline2D` | Sequence of points. |
+| `region_rectangle(width, height, *, origin=(0,0))` | `Region2D` | Width and height. |
+| `region_circle(radius, *, centre=(0,0))` | `Region2D` | Radius. |
+| `box(*, width, depth, height, plane=None)` | `Body3D` | Dimensions in 3D. |
+| `cylinder(*, radius, height, plane=None)` | `Body3D` | Radius and height. |
 | `sphere(*, radius, centre=(0,0,0))` | `Body3D` | Radius. |
 
 ## Errors
@@ -98,7 +97,7 @@
 | Exception | Use |
 |-----------|-----|
 | `CadError` | Base package error. |
-| `GeometryError` | Invalid curve, profile, or body construction. |
+| `GeometryError` | Invalid curve, region, or body construction. |
 | `DrawingError` | Invalid drawing composition or layers. |
 | `ProductError` | Invalid part/assembly structure or cycles. |
 | `ViewError` | Invalid camera, light, or scene reference. |

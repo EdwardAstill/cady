@@ -1,98 +1,119 @@
-"""Edge-only 3D wireframes and conversion helpers for triangulated meshes."""
+"""Edge-only 3D wireframes stored as collections of polylines."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 import numpy as np
 
-from cady.geometry.mesh3 import EdgeIndex, Mesh3
-from cady.operations.mesh_topology import prune_dangling_edges
-from cady.operations.section_loft import LoftMesh, loft_section_polylines
+from cady.geometry.mesh import EdgeIndex, Mesh3
+from cady.geometry.polyline import ClosedPolyline3, Polyline3
+from cady.operations.meshes import LoftMesh, loft_section_polylines, prune_dangling_edges
 from cady.operations.transforms import Transform3
-from cady.vec import Vec3, promote3
+
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
-    from cady.geometry.polyline3 import ClosedPolyline3, Polyline3
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
 
+WirePolyline = Polyline3 | ClosedPolyline3
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, init=False)
 class Wireframe3:
-    """Edge-only 3D geometry — vertices connected by edges, no faces."""
+    """Edge-only 3D geometry stored as open or closed polylines."""
 
-    vertices: tuple[Vec3, ...]
-    edges: tuple[EdgeIndex, ...]
+    polylines: tuple[WirePolyline, ...]
+    _vertices: tuple[Point3, ...] = field(repr=False, compare=False)
+    _edges: tuple[EdgeIndex, ...] = field(repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        vertices = tuple(promote3(vertex) for vertex in self.vertices)
-        edges = tuple(_edge(edge) for edge in self.edges)
-        for edge in edges:
-            if min(edge) < 0:
-                raise ValueError("edges must not contain negative indices")
-            if vertices and max(edge) >= len(vertices):
-                raise ValueError("edges reference vertices outside the vertex array")
-            if not vertices:
-                raise ValueError("empty wireframes cannot contain edges")
-        object.__setattr__(self, "vertices", vertices)
-        object.__setattr__(self, "edges", edges)
+    def __init__(
+        self,
+        polylines: Iterable[WirePolyline] | Iterable[Point3] = (),
+        edges: Iterable[EdgeIndex] | None = None,
+    ) -> None:
+        if edges is None:
+            polylines = tuple(_coerce_polyline(item) for item in polylines)
+            vertices, edge_values = _indexed_geometry(polylines)
+            object.__setattr__(
+                self,
+                "polylines",
+                polylines,
+            )
+            object.__setattr__(self, "_vertices", vertices)
+            object.__setattr__(self, "_edges", edge_values)
+            return
+        vertices = cast(Iterable[Point3], polylines)
+        vertex_values = tuple(vertices)
+        edge_values = tuple(_validate_edge(vertex_values, edge) for edge in edges)
+        object.__setattr__(
+            self,
+            "polylines",
+            _edge_polylines(vertex_values, edge_values),
+        )
+        object.__setattr__(self, "_vertices", vertex_values)
+        object.__setattr__(self, "_edges", edge_values)
 
     @classmethod
     def from_polylines(
         cls,
-        polylines: Iterable[Polyline3 | ClosedPolyline3],
+        polylines: Iterable[WirePolyline],
     ) -> Wireframe3:
         """Build a wireframe from open or closed 3D polylines."""
-        vertices: list[Vec3] = []
-        vertex_indices: dict[tuple[float, float, float], int] = {}
-        edges: list[EdgeIndex] = []
-        edge_keys: set[EdgeIndex] = set()
+        return cls(polylines)
 
-        for polyline in polylines:
-            previous_index: int | None = None
-            for point in polyline.points():
-                current_index = _find_or_add_exact_vertex(
-                    vertices,
-                    vertex_indices,
-                    point,
-                )
-                if previous_index is not None:
-                    _append_unique_edge(edges, edge_keys, previous_index, current_index)
-                previous_index = current_index
+    @classmethod
+    def from_edges(
+        cls,
+        vertices: Iterable[Point3],
+        edges: Iterable[EdgeIndex],
+    ) -> Wireframe3:
+        """Build a polyline-backed wireframe from indexed edges."""
+        return cls(vertices, edges)
 
-        return cls(tuple(vertices), tuple(edges))
+    @property
+    def vertices(self) -> tuple[Point3, ...]:
+        return self._vertices
+
+    @property
+    def edges(self) -> tuple[EdgeIndex, ...]:
+        return self._edges
 
     def transformed(self, transform: Transform3) -> Wireframe3:
-        array = transform.apply_points([vertex.tuple() for vertex in self.vertices])
-        vertices = tuple(Vec3(float(x), float(y), float(z)) for x, y, z in array)
-        return Wireframe3(vertices, self.edges)
+        array = transform.apply_points(self.vertices)
+        vertices = tuple((float(x), float(y), float(z)) for x, y, z in array)
+        return Wireframe3.from_edges(vertices, self.edges)
 
     def mirror(self, plane_origin: object, plane_normal: object) -> Wireframe3:
         return self.transformed(Transform3.mirror(plane_origin, plane_normal))
 
-    def bounds(self) -> tuple[Vec3, Vec3]:
+    def bounds(self) -> tuple[Point3, Point3]:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty wireframe")
         return (
-            Vec3(
-                min(vertex.x for vertex in self.vertices),
-                min(vertex.y for vertex in self.vertices),
-                min(vertex.z for vertex in self.vertices),
+            (
+                min(vertex[0] for vertex in self.vertices),
+                min(vertex[1] for vertex in self.vertices),
+                min(vertex[2] for vertex in self.vertices),
             ),
-            Vec3(
-                max(vertex.x for vertex in self.vertices),
-                max(vertex.y for vertex in self.vertices),
-                max(vertex.z for vertex in self.vertices),
+            (
+                max(vertex[0] for vertex in self.vertices),
+                max(vertex[1] for vertex in self.vertices),
+                max(vertex[2] for vertex in self.vertices),
             ),
         )
 
+    @property
+    def boundary(self) -> tuple[Point3, Point3]:
+        return self.bounds()
+
     def to_array(self, *, tolerance: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         _validate_tolerance(tolerance)
-        vertices = np.array([vertex.tuple() for vertex in self.vertices], dtype=np.float64)
+        vertices = np.array(self.vertices, dtype=np.float64)
         edges = np.array(self.edges, dtype=np.int64)
         if len(vertices) == 0:
             vertices = np.empty((0, 3), dtype=np.float64)
@@ -115,7 +136,7 @@ class Wireframe3:
         """Return a wireframe with edges split at segment crossings."""
         _validate_tolerance(tolerance)
         if not self.edges:
-            return Wireframe3(self.vertices, self.edges)
+            return Wireframe3.from_edges(self.vertices, self.edges)
 
         vertices = list(self.vertices)
         split_points: list[list[tuple[float, int]]] = [
@@ -153,7 +174,7 @@ class Wireframe3:
                 if start != end:
                     edges.append((start, end))
 
-        return Wireframe3(tuple(vertices), tuple(edges))
+        return Wireframe3.from_edges(tuple(vertices), tuple(edges))
 
     # -- Loop triangulation -------------------------------------------------
 
@@ -222,20 +243,67 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
     return (int(value[0]), int(value[1]))
 
 
+def _validate_edge(vertices: tuple[Point3, ...], value: tuple[int, int]) -> EdgeIndex:
+    start, end = _edge(value)
+    if start < 0 or end < 0:
+        raise ValueError("edges must not contain negative indices")
+    if vertices and max(start, end) >= len(vertices):
+        raise ValueError("edges reference vertices outside the vertex array")
+    if not vertices:
+        raise ValueError("empty wireframes cannot contain edges")
+    return start, end
+
+
+def _coerce_polyline(value: object) -> WirePolyline:
+    if isinstance(value, (Polyline3, ClosedPolyline3)):
+        return value
+    raise TypeError("wireframe polylines must be Polyline3 or ClosedPolyline3")
+
+
+def _edge_polylines(
+    vertices: tuple[Point3, ...],
+    edges: tuple[EdgeIndex, ...],
+) -> tuple[Polyline3, ...]:
+    polylines: list[Polyline3] = []
+    for edge in edges:
+        start, end = edge
+        if start != end:
+            polylines.append(Polyline3((vertices[start], vertices[end])))
+    return tuple(polylines)
+
+
+def _indexed_geometry(
+    polylines: tuple[WirePolyline, ...],
+) -> tuple[tuple[Point3, ...], tuple[EdgeIndex, ...]]:
+    vertices: list[Point3] = []
+    vertex_indices: dict[tuple[float, float, float], int] = {}
+    edges: list[EdgeIndex] = []
+    edge_keys: set[EdgeIndex] = set()
+
+    for polyline in polylines:
+        previous_index: int | None = None
+        for point in polyline.points():
+            current_index = _find_or_add_exact_vertex(vertices, vertex_indices, point)
+            if previous_index is not None:
+                _append_unique_edge(edges, edge_keys, previous_index, current_index)
+            previous_index = current_index
+
+    return tuple(vertices), tuple(edges)
+
+
 def _find_or_add_exact_vertex(
-    vertices: list[Vec3],
+    vertices: list[Point3],
     vertex_indices: dict[tuple[float, float, float], int],
-    point: Vec3 | tuple[float, float, float],
+    point: Point3,
 ) -> int:
-    vertex = promote3(point)
-    key = vertex.tuple()
+    key = point
     existing_index = vertex_indices.get(key)
     if existing_index is not None:
         return existing_index
 
     new_index = len(vertices)
     vertex_indices[key] = new_index
-    vertices.append(vertex)
+    vertices.append(point)
     return new_index
 
 
@@ -257,7 +325,7 @@ def _append_unique_edge(
 
 @dataclass(frozen=True, slots=True)
 class _WireframeTriangulation:
-    vertices: tuple[Vec3, ...]
+    vertices: tuple[Point3, ...]
     faces: tuple[tuple[int, int, int], ...]
 
 
@@ -284,45 +352,45 @@ def _remove_dangling_edges(edges: tuple[EdgeIndex, ...]) -> tuple[EdgeIndex, ...
 
 
 def _wireframe_from_edges(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     edges: tuple[EdgeIndex, ...],
 ) -> Wireframe3:
     if not edges:
-        return Wireframe3((), ())
+        return Wireframe3.from_edges((), ())
 
     ordered_vertices = tuple(sorted({index for edge in edges for index in edge}))
     remap = {old: new for new, old in enumerate(ordered_vertices)}
     compact_vertices = tuple(vertices[index] for index in ordered_vertices)
     compact_edges = tuple((remap[a], remap[b]) for a, b in edges)
-    return Wireframe3(compact_vertices, compact_edges)
+    return Wireframe3.from_edges(compact_vertices, compact_edges)
 
 
 def _edge_bounds(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     edge: EdgeIndex,
-) -> tuple[Vec3, Vec3]:
+) -> tuple[Point3, Point3]:
     start = vertices[edge[0]]
     end = vertices[edge[1]]
     return (
-        Vec3(min(start.x, end.x), min(start.y, end.y), min(start.z, end.z)),
-        Vec3(max(start.x, end.x), max(start.y, end.y), max(start.z, end.z)),
+        (min(start[0], end[0]), min(start[1], end[1]), min(start[2], end[2])),
+        (max(start[0], end[0]), max(start[1], end[1]), max(start[2], end[2])),
     )
 
 
 def _bounds_overlap(
-    left: tuple[Vec3, Vec3],
-    right: tuple[Vec3, Vec3],
+    left: tuple[Point3, Point3],
+    right: tuple[Point3, Point3],
     tolerance: float,
 ) -> bool:
     left_lower, left_upper = left
     right_lower, right_upper = right
     return not (
-        left_upper.x + tolerance < right_lower.x
-        or right_upper.x + tolerance < left_lower.x
-        or left_upper.y + tolerance < right_lower.y
-        or right_upper.y + tolerance < left_lower.y
-        or left_upper.z + tolerance < right_lower.z
-        or right_upper.z + tolerance < left_lower.z
+        left_upper[0] + tolerance < right_lower[0]
+        or right_upper[0] + tolerance < left_lower[0]
+        or left_upper[1] + tolerance < right_lower[1]
+        or right_upper[1] + tolerance < left_lower[1]
+        or left_upper[2] + tolerance < right_lower[2]
+        or right_upper[2] + tolerance < left_lower[2]
     )
 
 
@@ -333,8 +401,7 @@ def _loft_section_wireframe_to_triangulation(
 ) -> _WireframeTriangulation | None:
     loft_mesh = loft_section_polylines(
         (
-            tuple(point.tuple() for point in vertices)
-            for vertices in _wireframe_polylines(wireframe)
+            vertices for vertices in _wireframe_polylines(wireframe)
         ),
         tolerance=tolerance,
     )
@@ -343,14 +410,14 @@ def _loft_section_wireframe_to_triangulation(
     return _triangulation_from_loft_mesh(loft_mesh)
 
 
-def _wireframe_polylines(wireframe: Wireframe3) -> tuple[tuple[Vec3, ...], ...]:
+def _wireframe_polylines(wireframe: Wireframe3) -> tuple[tuple[Point3, ...], ...]:
     adjacency: dict[int, list[int]] = {}
     for a, b in wireframe.edges:
         adjacency.setdefault(a, []).append(b)
         adjacency.setdefault(b, []).append(a)
 
     visited_vertices: set[int] = set()
-    polylines: list[tuple[Vec3, ...]] = []
+    polylines: list[tuple[Point3, ...]] = []
     for vertex in sorted(adjacency):
         if vertex in visited_vertices:
             continue
@@ -403,7 +470,7 @@ def _edges_from_faces(faces: tuple[tuple[int, int, int], ...]) -> tuple[EdgeInde
 
 
 def _wireframe_from_triangulation(triangulation: _WireframeTriangulation) -> Wireframe3:
-    return Wireframe3(
+    return Wireframe3.from_edges(
         triangulation.vertices,
         _edges_from_faces(triangulation.faces),
     )
@@ -419,7 +486,7 @@ def _mesh_from_triangulation(triangulation: _WireframeTriangulation) -> Mesh3:
 
 def _triangulation_from_loft_mesh(loft_mesh: LoftMesh) -> _WireframeTriangulation:
     return _WireframeTriangulation(
-        tuple(Vec3(x, y, z) for x, y, z in loft_mesh.vertices),
+        tuple((float(x), float(y), float(z)) for x, y, z in loft_mesh.vertices),
         loft_mesh.faces,
     )
 
@@ -430,8 +497,8 @@ def _triangulate_loops_to_triangulation(
     tolerance: float,
 ) -> _WireframeTriangulation:
     from cady.errors import GeometryError
-    from cady.operations.mesh_caps import triangulate_loop
-    from cady.operations.planes import fit_plane_svd, max_plane_deviation, project_loop
+    from cady.operations.meshes import triangulate_loop
+    from cady.operations.projections import fit_plane_svd, max_plane_deviation, project_loop
 
     neighbours: dict[int, set[int]] = {}
     for a, b in wireframe.edges:
@@ -473,7 +540,7 @@ def _triangulate_loops_to_triangulation(
     if not cycles:
         raise GeometryError("no closed edge loops of length >= 3 found")
 
-    vertices_list = [np.array(vertex.tuple(), dtype=np.float64) for vertex in wireframe.vertices]
+    vertices_list = [np.array(vertex, dtype=np.float64) for vertex in wireframe.vertices]
 
     faces: list[tuple[int, int, int]] = []
     for loop in cycles:
@@ -497,11 +564,11 @@ def _triangulate_loops_to_triangulation(
 
 
 def _edge_crossing_points(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     left_edge: EdgeIndex,
     right_edge: EdgeIndex,
     tolerance: float,
-) -> tuple[tuple[float, float, Vec3], ...]:
+) -> tuple[tuple[float, float, Point3], ...]:
     left_start = _array3(vertices[left_edge[0]])
     left_end = _array3(vertices[left_edge[1]])
     right_start = _array3(vertices[right_edge[0]])
@@ -548,7 +615,7 @@ def _collinear_crossing_points(
     right_start: np.ndarray,
     right_end: np.ndarray,
     tolerance: float,
-) -> tuple[tuple[float, float, Vec3], ...]:
+) -> tuple[tuple[float, float, Point3], ...]:
     left_direction = left_end - left_start
     right_direction = right_end - right_start
     if (
@@ -557,7 +624,7 @@ def _collinear_crossing_points(
     ):
         return ()
 
-    points: list[tuple[float, float, Vec3]] = []
+    points: list[tuple[float, float, Point3]] = []
     for point in (left_start, left_end, right_start, right_end):
         left_param = _point_parameter(point, left_start, left_end)
         right_param = _point_parameter(point, right_start, right_end)
@@ -575,10 +642,10 @@ def _collinear_crossing_points(
 
 
 def _append_crossing_point(
-    points: list[tuple[float, float, Vec3]],
+    points: list[tuple[float, float, Point3]],
     left_param: float,
     right_param: float,
-    point: Vec3,
+    point: Point3,
     tolerance: float,
 ) -> None:
     for _, _, existing in points:
@@ -600,7 +667,7 @@ def _unique_split_points(
     return tuple(unique)
 
 
-def _find_or_add_vertex(vertices: list[Vec3], point: Vec3, tolerance: float) -> int:
+def _find_or_add_vertex(vertices: list[Point3], point: Point3, tolerance: float) -> int:
     for index, vertex in enumerate(vertices):
         if _distance(vertex, point) <= tolerance:
             return index
@@ -625,20 +692,20 @@ def _clamp_unit(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
-def _array3(vertex: Vec3) -> np.ndarray:
-    return np.array(vertex.tuple(), dtype=np.float64)
+def _array3(vertex: Point3) -> np.ndarray:
+    return np.array(vertex, dtype=np.float64)
 
 
-def _vec3_from_array(value: np.ndarray) -> Vec3:
-    return Vec3(float(value[0]), float(value[1]), float(value[2]))
+def _vec3_from_array(value: np.ndarray) -> Point3:
+    return (float(value[0]), float(value[1]), float(value[2]))
 
 
-def _distance(left: Vec3, right: Vec3) -> float:
+def _distance(left: Point3, right: Point3) -> float:
     return float(np.linalg.norm(_array3(left) - _array3(right)))
 
 
 def _triangulation_without_dangling_source_edges(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     faces: tuple[tuple[int, int, int], ...],
     edges: tuple[EdgeIndex, ...],
 ) -> _WireframeTriangulation:

@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 from math import cos, sin
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Vec3, Wireframe3
-from cady.operations import ArrayPolyline3
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Wireframe3
+from cady.operations.arrays import PointArray3
 
 MESH_STYLE = DisplayStyle(color=(0.46, 0.52, 0.50), opacity=0.9)
 BOUNDARY_STYLES = (
@@ -21,6 +21,7 @@ BOUNDARY_STYLES = (
     DisplayStyle(color=(0.95, 0.78, 0.08), render_mode="wireframe", line_width=2.0),
 )
 LIGHT = DirectionalLight(direction=(0.35, -0.65, -0.55), intensity=1.0)
+Point3 = tuple[float, float, float]
 
 
 def main() -> None:
@@ -60,13 +61,13 @@ def main() -> None:
 def build_complicated_mesh() -> Mesh3:
     x_cells = 32
     y_cells = 24
-    vertices: list[Vec3] = []
+    vertices: list[Point3] = []
     for y_index in range(y_cells + 1):
         y = float(y_index)
         for x_index in range(x_cells + 1):
             x = float(x_index)
             z = _surface_height(x, y)
-            vertices.append(Vec3(x, y, z))
+            vertices.append((x, y, z))
 
     faces: list[tuple[int, int, int]] = []
     for y_index in range(y_cells):
@@ -128,16 +129,13 @@ def _display_edges(faces: list[tuple[int, int, int]]) -> tuple[tuple[int, int], 
 
 
 def _wireframes_from_boundary_loops(
-    loops: tuple[ArrayPolyline3, ...],
+    loops: tuple[PointArray3, ...],
 ) -> tuple[Wireframe3, ...]:
     return tuple(_wireframe_from_boundary_loop(loop) for loop in loops)
 
 
-def _wireframe_from_boundary_loop(loop: ArrayPolyline3) -> Wireframe3:
-    points = [
-        Vec3(float(point[0]), float(point[1]), float(point[2]))
-        for point in loop.vertices
-    ]
+def _wireframe_from_boundary_loop(loop: PointArray3) -> Wireframe3:
+    points = [(float(point[0]), float(point[1]), float(point[2])) for point in loop]
     if len(points) >= 2 and points[0] == points[-1]:
         points = points[:-1]
     edges = tuple((index, (index + 1) % len(points)) for index in range(len(points)))
@@ -156,32 +154,32 @@ def print_mesh_summary(label: str, mesh: Mesh3) -> None:
     )
 
 
-def _fit_camera(lower: Vec3, upper: Vec3) -> Camera:
+def _fit_camera(lower: Point3, upper: Point3) -> Camera:
     centre = _bounds_centre(lower, upper)
-    span = (upper.x - lower.x, upper.y - lower.y, upper.z - lower.z)
+    span = (upper[0] - lower[0], upper[1] - lower[1], upper[2] - lower[2])
     scale = max(span[0], span[1], span[2] * 5.0, 1.0) * 1.12
     distance = max(span) * 1.8 or 1.0
     return Camera.orthographic(
-        position=(centre.x + distance, centre.y - distance, centre.z + distance * 0.7),
-        target=centre.tuple(),
+        position=(centre[0] + distance, centre[1] - distance, centre[2] + distance * 0.7),
+        target=centre,
         scale=scale,
     )
 
 
-def _bounds_centre(lower: Vec3, upper: Vec3) -> Vec3:
-    return Vec3(
-        (lower.x + upper.x) / 2.0,
-        (lower.y + upper.y) / 2.0,
-        (lower.z + upper.z) / 2.0,
+def _bounds_centre(lower: Point3, upper: Point3) -> Point3:
+    return (
+        (lower[0] + upper[0]) / 2.0,
+        (lower[1] + upper[1]) / 2.0,
+        (lower[2] + upper[2]) / 2.0,
     )
 
 
-def _format_point(point: Vec3) -> str:
-    return f"({point.x:g}, {point.y:g}, {point.z:g})"
+def _format_point(point: Point3) -> str:
+    return f"({point[0]:g}, {point[1]:g}, {point[2]:g})"
 
 
-def _format_loop_edge_counts(loops: tuple[ArrayPolyline3, ...]) -> str:
-    counts = [max(len(loop.vertices) - 1, 0) for loop in loops]
+def _format_loop_edge_counts(loops: tuple[PointArray3, ...]) -> str:
+    counts = [max(len(loop) - 1, 0) for loop in loops]
     return ", ".join(f"{count} edges" for count in counts)
 
 

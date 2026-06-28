@@ -4,29 +4,28 @@ import pytest
 
 from cady import ClosedPolyline3, GeometryError, Polyline3, Wireframe3
 from cady.operations.transforms import Transform3
-from cady.vec import Vec3
 
 # -- Construction ----------------------------------------------------------
 
 
 def test_wireframe_construction() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)),
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
     assert len(wf.vertices) == 4
     assert len(wf.edges) == 4
-    assert tuple(wf.vertices[0].tuple()) == (0.0, 0.0, 0.0)
+    assert tuple(wf.vertices[0]) == (0.0, 0.0, 0.0)
 
 
 def test_wireframe_construction_rejects_negative_indices() -> None:
     with pytest.raises(ValueError, match="negative"):
-        Wireframe3((Vec3(0, 0, 0),), ((-1, 0),))
+        Wireframe3(((0, 0, 0),), ((-1, 0),))
 
 
 def test_wireframe_construction_rejects_out_of_range_edges() -> None:
     with pytest.raises(ValueError, match="outside"):
-        Wireframe3((Vec3(0, 0, 0),), ((0, 1),))
+        Wireframe3(((0, 0, 0),), ((0, 1),))
 
 
 def test_wireframe_empty() -> None:
@@ -50,10 +49,10 @@ def test_wireframe_from_polylines_dedupes_shared_vertices_and_edges() -> None:
     )
 
     assert wf.vertices == (
-        Vec3(0, 0, 0),
-        Vec3(1, 0, 0),
-        Vec3(1, 1, 0),
-        Vec3(0, 1, 0),
+        (0, 0, 0),
+        (1, 0, 0),
+        (1, 1, 0),
+        (0, 1, 0),
     )
     assert wf.edges == ((0, 1), (1, 2), (2, 3))
 
@@ -72,9 +71,9 @@ def test_wireframe_from_polylines_closes_closed_polylines() -> None:
     )
 
     assert wf.vertices == (
-        Vec3(0, 0, 0),
-        Vec3(1, 0, 0),
-        Vec3(0, 1, 0),
+        (0, 0, 0),
+        (1, 0, 0),
+        (0, 1, 0),
     )
     assert wf.edges == ((0, 1), (1, 2), (2, 0))
 
@@ -84,34 +83,34 @@ def test_wireframe_from_polylines_closes_closed_polylines() -> None:
 
 def test_wireframe_transformed() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0)),
+        ((0, 0, 0), (1, 0, 0)),
         ((0, 1),),
     )
     moved = wf.transformed(Transform3.translation(0, 0, 5))
-    assert tuple(moved.vertices[0].tuple()) == (0.0, 0.0, 5.0)
-    assert tuple(moved.vertices[1].tuple()) == (1.0, 0.0, 5.0)
+    assert tuple(moved.vertices[0]) == (0.0, 0.0, 5.0)
+    assert tuple(moved.vertices[1]) == (1.0, 0.0, 5.0)
     assert moved.edges == ((0, 1),)
 
 
 def test_wireframe_mirror() -> None:
     wf = Wireframe3(
-        (Vec3(0, 1, 0), Vec3(1, 1, 0)),
+        ((0, 1, 0), (1, 1, 0)),
         ((0, 1),),
     )
     mirrored = wf.mirror((0, 0, 0), (0, 1, 0))
-    assert tuple(mirrored.vertices[0].tuple()) == (0.0, -1.0, 0.0)
-    assert tuple(mirrored.vertices[1].tuple()) == (1.0, -1.0, 0.0)
+    assert tuple(mirrored.vertices[0]) == (0.0, -1.0, 0.0)
+    assert tuple(mirrored.vertices[1]) == (1.0, -1.0, 0.0)
     assert mirrored.edges == ((0, 1),)
 
 
 def test_wireframe_bounds() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, -1), Vec3(2, 3, 5)),
+        ((0, 0, -1), (2, 3, 5)),
         ((0, 1),),
     )
     lower, upper = wf.bounds()
-    assert tuple(lower.tuple()) == (0.0, 0.0, -1.0)
-    assert tuple(upper.tuple()) == (2.0, 3.0, 5.0)
+    assert tuple(lower) == (0.0, 0.0, -1.0)
+    assert tuple(upper) == (2.0, 3.0, 5.0)
 
     with pytest.raises(ValueError, match="empty"):
         Wireframe3((), ()).bounds()
@@ -119,7 +118,7 @@ def test_wireframe_bounds() -> None:
 
 def test_wireframe_to_array() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0)),
+        ((0, 0, 0), (1, 0, 0)),
         ((0, 1),),
     )
     arr = wf.to_array(tolerance=1e-3)
@@ -132,10 +131,10 @@ def test_wireframe_to_array() -> None:
 def test_wireframe_to_mesh_splits_crossings_and_uses_triangles_as_faces() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(2, 2, 0),
-            Vec3(0, 2, 0),
-            Vec3(2, 0, 0),
+            (0, 0, 0),
+            (2, 2, 0),
+            (0, 2, 0),
+            (2, 0, 0),
         ),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
@@ -155,14 +154,14 @@ def test_wireframe_to_mesh_splits_crossings_and_uses_triangles_as_faces() -> Non
 def test_wireframe_to_mesh_lofts_open_section_curves() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(0, 1, 1),
-            Vec3(0, 2, 2),
-            Vec3(0, 3, 3),
-            Vec3(2, 0, 0),
-            Vec3(2, 1, 1),
-            Vec3(2, 2, 2),
-            Vec3(2, 3, 3),
+            (0, 0, 0),
+            (0, 1, 1),
+            (0, 2, 2),
+            (0, 3, 3),
+            (2, 0, 0),
+            (2, 1, 1),
+            (2, 2, 2),
+            (2, 3, 3),
         ),
         ((0, 1), (1, 2), (2, 3), (4, 5), (5, 6), (6, 7)),
     )
@@ -183,15 +182,15 @@ def test_wireframe_to_mesh_lofts_open_section_curves() -> None:
 def test_wireframe_remove_dangling_edges_prunes_branches_and_compacts() -> None:
     wf = Wireframe3(
         (
-            Vec3(10, 0, 0),
-            Vec3(10, 1, 0),
-            Vec3(0, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(1, 1, 0),
-            Vec3(0, 1, 0),
-            Vec3(2, 1, 0),
-            Vec3(3, 1, 0),
-            Vec3(99, 99, 99),
+            (10, 0, 0),
+            (10, 1, 0),
+            (0, 0, 0),
+            (1, 0, 0),
+            (1, 1, 0),
+            (0, 1, 0),
+            (2, 1, 0),
+            (3, 1, 0),
+            (99, 99, 99),
         ),
         ((2, 3), (3, 4), (4, 5), (5, 2), (4, 6), (6, 7), (0, 1)),
     )
@@ -205,7 +204,7 @@ def test_wireframe_remove_dangling_edges_prunes_branches_and_compacts() -> None:
 
 def test_wireframe_remove_dangling_edges_returns_empty_for_open_chain() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(2, 0, 0)),
+        ((0, 0, 0), (1, 0, 0), (2, 0, 0)),
         ((0, 1), (1, 2)),
     )
 
@@ -215,10 +214,10 @@ def test_wireframe_remove_dangling_edges_returns_empty_for_open_chain() -> None:
 def test_wireframe_split_crossing_edges_adds_shared_crossing_vertex() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(2, 2, 0),
-            Vec3(0, 2, 0),
-            Vec3(2, 0, 0),
+            (0, 0, 0),
+            (2, 2, 0),
+            (0, 2, 0),
+            (2, 0, 0),
         ),
         ((0, 1), (2, 3)),
     )
@@ -226,17 +225,17 @@ def test_wireframe_split_crossing_edges_adds_shared_crossing_vertex() -> None:
     split = wf.split_crossing_edges(tolerance=1e-6)
 
     assert split.vertices[:4] == wf.vertices
-    assert split.vertices[4].tuple() == pytest.approx((1.0, 1.0, 0.0))
+    assert split.vertices[4] == pytest.approx((1.0, 1.0, 0.0))
     assert split.edges == ((0, 4), (4, 1), (2, 4), (4, 3))
 
 
 def test_wireframe_split_crossing_edges_splits_t_junction() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(2, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(1, 1, 0),
+            (0, 0, 0),
+            (2, 0, 0),
+            (1, 0, 0),
+            (1, 1, 0),
         ),
         ((0, 1), (2, 3)),
     )
@@ -250,10 +249,10 @@ def test_wireframe_split_crossing_edges_splits_t_junction() -> None:
 def test_wireframe_split_crossing_edges_ignores_skew_edges() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(2, 0, 0),
-            Vec3(1, -1, 1),
-            Vec3(1, 1, 1),
+            (0, 0, 0),
+            (2, 0, 0),
+            (1, -1, 1),
+            (1, 1, 1),
         ),
         ((0, 1), (2, 3)),
     )
@@ -264,10 +263,10 @@ def test_wireframe_split_crossing_edges_ignores_skew_edges() -> None:
 def test_wireframe_split_crossing_edges_splits_collinear_overlap_endpoints() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(3, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(2, 0, 0),
+            (0, 0, 0),
+            (3, 0, 0),
+            (1, 0, 0),
+            (2, 0, 0),
         ),
         ((0, 1), (2, 3)),
     )
@@ -288,7 +287,7 @@ def test_wireframe_does_not_expose_mesh_closing_methods() -> None:
 
 def test_wireframe_triangulate_returns_loop_triangulation() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)),
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
 
@@ -301,7 +300,7 @@ def test_wireframe_triangulate_returns_loop_triangulation() -> None:
 
 def test_wireframe_triangulate_loops_square() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)),
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
     triangulated = wf.triangulate_loops(tolerance=1e-3)
@@ -314,12 +313,12 @@ def test_wireframe_triangulate_loops_square() -> None:
 def test_wireframe_triangulate_loops_prunes_dangling_branches() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(1, 1, 0),
-            Vec3(0, 1, 0),
-            Vec3(2, 1, 0),
-            Vec3(3, 1, 0),
+            (0, 0, 0),
+            (1, 0, 0),
+            (1, 1, 0),
+            (0, 1, 0),
+            (2, 1, 0),
+            (3, 1, 0),
         ),
         ((0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)),
     )
@@ -334,7 +333,7 @@ def test_wireframe_triangulate_loops_prunes_dangling_branches() -> None:
 
 def test_wireframe_triangulate_loops_no_cycles() -> None:
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0)),
+        ((0, 0, 0), (1, 0, 0)),
         ((0, 1),),
     )
     with pytest.raises(GeometryError, match="no closed edge loops"):
@@ -344,7 +343,7 @@ def test_wireframe_triangulate_loops_no_cycles() -> None:
 def test_wireframe_triangulate_loops_non_planar() -> None:
     # Non-planar quad (one vertex displaced)
     wf = Wireframe3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 1), Vec3(0, 1, 0)),
+        ((0, 0, 0), (1, 0, 0), (1, 1, 1), (0, 1, 0)),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
     )
     with pytest.raises(GeometryError, match="non-planar"):
@@ -354,14 +353,14 @@ def test_wireframe_triangulate_loops_non_planar() -> None:
 def test_triangulate_loops_multiple_disjoint_cycles() -> None:
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),
-            Vec3(1, 0, 0),
-            Vec3(1, 1, 0),
-            Vec3(0, 1, 0),
-            Vec3(2, 0, 0),
-            Vec3(3, 0, 0),
-            Vec3(3, 1, 0),
-            Vec3(2, 1, 0),
+            (0, 0, 0),
+            (1, 0, 0),
+            (1, 1, 0),
+            (0, 1, 0),
+            (2, 0, 0),
+            (3, 0, 0),
+            (3, 1, 0),
+            (2, 1, 0),
         ),
         ((0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4)),
     )
@@ -376,14 +375,14 @@ def test_triangulate_loops_two_connected_squares() -> None:
     # Square A: 0-1-6-5, Square B: 2-3-4-7, bridge: 6-2
     wf = Wireframe3(
         (
-            Vec3(0, 0, 0),  # 0
-            Vec3(1, 0, 0),  # 1
-            Vec3(2, 0, 0),  # 2
-            Vec3(3, 0, 0),  # 3
-            Vec3(3, 1, 0),  # 4
-            Vec3(0, 1, 0),  # 5
-            Vec3(1, 1, 0),  # 6
-            Vec3(2, 1, 0),  # 7
+            (0, 0, 0),  # 0
+            (1, 0, 0),  # 1
+            (2, 0, 0),  # 2
+            (3, 0, 0),  # 3
+            (3, 1, 0),  # 4
+            (0, 1, 0),  # 5
+            (1, 1, 0),  # 6
+            (2, 1, 0),  # 7
         ),
         (
             (0, 1),

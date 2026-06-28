@@ -61,7 +61,7 @@ def test_quarter_sphere_slice_planes_add_intersection_nodes() -> None:
     assert len(nodes) == len(wireframe.edges)
     assert all(isinstance(edge_nodes, list) for edge_nodes in nodes)
     assert len(node_cloud.vertices) == 2 + len(module.ARC_ANGLES) * (module.SLICES - 2)
-    assert Counter(round(vertex.y, 6) for vertex in node_cloud.vertices) == Counter({
+    assert Counter(round(vertex[1], 6) for vertex in node_cloud.vertices) == Counter({
         round(y, 6): 1 if index in (0, len(y_values) - 1) else len(module.ARC_ANGLES)
         for index, y in enumerate(y_values)
     })
@@ -117,26 +117,26 @@ def test_intersection_nodes_to_edge_mesh_connects_matrix_neighbours() -> None:
     module = _load_testing_example()
     node_groups = [
         [
-            module.Vec3(0.0, 0.0, 0.0),
-            module.Vec3(1.0, 0.0, 0.0),
-            module.Vec3(2.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
         ],
         [
-            module.Vec3(0.0, 1.0, 0.0),
-            module.Vec3(1.0, 1.0, 0.0),
-            module.Vec3(2.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (2.0, 1.0, 0.0),
         ],
     ]
 
     mesh = module.intersection_nodes_to_edge_mesh(node_groups)
 
     assert mesh.vertices == (
-        module.Vec3(0.0, 0.0, 0.0),
-        module.Vec3(1.0, 0.0, 0.0),
-        module.Vec3(2.0, 0.0, 0.0),
-        module.Vec3(0.0, 1.0, 0.0),
-        module.Vec3(1.0, 1.0, 0.0),
-        module.Vec3(2.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (2.0, 1.0, 0.0),
     )
     assert mesh.faces == (
         (0, 3, 1),

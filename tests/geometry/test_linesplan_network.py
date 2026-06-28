@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cady.geometry import Wireframe3
-from cady.operations.linesplan import classify_linesplan_curves
-from cady.vec import Vec3
+from cady.operations.meshes import classify_linesplan_curves
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,17 +74,17 @@ def test_classify_linesplan_curves_falls_back_for_layer_zero_geometry() -> None:
 
 def test_classify_linesplan_curves_falls_back_to_wireframe_orientation() -> None:
     vertices = (
-        Vec3(0.0, 0.0, 0.0),
-        Vec3(0.0, 1.0, 1.0),
-        Vec3(0.0, 2.0, 2.0),
-        Vec3(0.0, 3.0, 0.0),
-        Vec3(1.0, 3.0, 1.0),
-        Vec3(2.0, 3.0, 2.0),
-        Vec3(0.0, 0.0, 7.0),
-        Vec3(1.0, 1.0, 7.0),
-        Vec3(2.0, 2.0, 7.0),
-        Vec3(0.0, 5.0, 5.0),
-        Vec3(1.0, 5.0, 5.0),
+        (0.0, 0.0, 0.0),
+        (0.0, 1.0, 1.0),
+        (0.0, 2.0, 2.0),
+        (0.0, 3.0, 0.0),
+        (1.0, 3.0, 1.0),
+        (2.0, 3.0, 2.0),
+        (0.0, 0.0, 7.0),
+        (1.0, 1.0, 7.0),
+        (2.0, 2.0, 7.0),
+        (0.0, 5.0, 5.0),
+        (1.0, 5.0, 5.0),
     )
     wireframe = Wireframe3(
         vertices,

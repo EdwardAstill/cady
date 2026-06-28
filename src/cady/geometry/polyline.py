@@ -1,100 +1,119 @@
-"""Primitive 3D curve types and composite polyline paths."""
+"""Open and closed 2D and 3D polyline geometry."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
-from math import atan2, ceil, cos, pi, sin
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from cady.errors import GeometryError
-from cady.operations.sampling2 import segments_for_circle
-from cady.utils import finite, loop_edges, positive, positive_tolerance
-from cady.vec import Vec3, promote3
+from cady.geometry.line import Line3
+from cady.utils import loop_edges, positive_tolerance
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
-    from cady.geometry.mesh3 import Mesh3
-    from cady.operations.arrays3 import ArrayPolyline3
+    from cady.geometry.mesh import Mesh2, Mesh3
+    from cady.operations.arrays import PointArray2, PointArray3
 
 
-Point3Like = Vec3 | tuple[float, float, float]
 FaceIndex = tuple[int, int, int]
 EdgeIndex = tuple[int, int]
+
+
+class Curve2(Protocol):
+    """Common protocol for 2D curves that can be discretised on demand."""
+
+    def bounds(self) -> tuple[Point2, Point2]: ...
+
+    def points(self) -> tuple[Point2, ...]: ...
+
+    def to_array(self, *, tolerance: float) -> PointArray2: ...
+
+
+class ClosedCurve2(Curve2, Protocol):
+    """Protocol for closed 2D curves that produce closed polyline data."""
+
+    def to_array(self, *, tolerance: float) -> PointArray2: ...
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class Polyline2:
+    """2D path made from straight segments, optionally closed."""
+
+    vertices: tuple[Point2, ...]
+    closed: bool = False
+
+    def __init__(self, vertices: tuple[Point2, ...], closed: bool = False) -> None:
+        vertices = tuple(vertices)
+        closed = bool(closed)
+        if closed and len(vertices) > 1 and vertices[0] == vertices[-1]:
+            vertices = vertices[:-1]
+        object.__setattr__(self, "vertices", vertices)
+        object.__setattr__(self, "closed", closed)
+        if closed:
+            if len(vertices) < 3:
+                raise ValueError("closed Polyline2 requires at least three vertices")
+        elif len(vertices) < 2:
+            raise ValueError("Polyline2 requires at least two vertices")
+
+    def bounds(self) -> tuple[Point2, Point2]:
+        return (
+            (
+                min(point[0] for point in self.vertices),
+                min(point[1] for point in self.vertices),
+            ),
+            (
+                max(point[0] for point in self.vertices),
+                max(point[1] for point in self.vertices),
+            ),
+        )
+
+    @property
+    def boundary(self) -> tuple[Point2, Point2]:
+        return self.bounds()
+
+    def points(self) -> tuple[Point2, ...]:
+        if self.closed:
+            return self.vertices + (self.vertices[0],)
+        return self.vertices
+
+    def to_array(self, *, tolerance: float) -> PointArray2:
+        positive_tolerance(tolerance)
+        from cady.operations.arrays import as_points2
+
+        return as_points2(self.vertices, name="vertices")
+
+    def to_mesh(self, *, tolerance: float) -> Mesh2:
+        if not self.closed:
+            raise GeometryError("Polyline2 must be closed to create a mesh")
+        tolerance = positive_tolerance(tolerance)
+        from cady.geometry.mesh import Mesh2
+        from cady.operations.triangulation import triangulate_polygon
+
+        point_to_index = {point: index for index, point in enumerate(self.vertices)}
+        triangles = triangulate_polygon(self.vertices, tolerance=tolerance)
+        faces = tuple(
+            (
+                point_to_index[a],
+                point_to_index[b],
+                point_to_index[c],
+            )
+            for a, b, c in triangles
+        )
+        return Mesh2(self.vertices, faces, loop_edges(len(self.vertices)))
 
 
 class Curve3(Protocol):
     """Common protocol for 3D curves that can be sampled to polylines."""
 
-    def bounds(self) -> tuple[Vec3, Vec3]: ...
+    def bounds(self) -> tuple[Point3, Point3]: ...
 
-    def points(self) -> tuple[Vec3, ...]: ...
+    def points(self) -> tuple[Point3, ...]: ...
 
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3: ...
-
-
-def _bounds(points: tuple[Vec3, ...]) -> tuple[Vec3, Vec3]:
-    if not points:
-        raise ValueError("bounds require at least one point")
-    return (
-        Vec3(
-            min(point.x for point in points),
-            min(point.y for point in points),
-            min(point.z for point in points),
-        ),
-        Vec3(
-            max(point.x for point in points),
-            max(point.y for point in points),
-            max(point.z for point in points),
-        ),
-    )
-
-
-def _dedupe_closed(vertices: tuple[Vec3, ...]) -> tuple[Vec3, ...]:
-    if len(vertices) > 1 and vertices[0] == vertices[-1]:
-        return vertices[:-1]
-    return vertices
-
-
-def _unique_vertex_count(vertices: tuple[Vec3, ...]) -> int:
-    return len({vertex.tuple() for vertex in vertices})
-
-
-def _polyline3(points: tuple[Vec3, ...]) -> ArrayPolyline3:
-    import numpy as np
-
-    from cady.operations.arrays3 import ArrayPolyline3
-
-    return ArrayPolyline3(
-        np.array([point.tuple() for point in points], dtype=np.float64)
-    )
-
-
-def _append_unique_point(points: list[Vec3], point: Vec3) -> None:
-    if not points or points[-1] != point:
-        points.append(point)
-
-
-def _path_points(curves: tuple[Curve3, ...]) -> tuple[Vec3, ...]:
-    points: list[Vec3] = []
-    for curve in curves:
-        for point in curve.points():
-            _append_unique_point(points, point)
-    return tuple(points)
-
-
-def _discretised_points(
-    curves: tuple[Curve3, ...],
-    *,
-    tolerance: float,
-) -> tuple[Vec3, ...]:
-    tolerance = positive_tolerance(tolerance)
-    points: list[Vec3] = []
-    for curve in curves:
-        array = curve.to_array(tolerance=tolerance)
-        for x, y, z in array.vertices:
-            _append_unique_point(points, Vec3(float(x), float(y), float(z)))
-    return tuple(points)
+    def to_array(self, *, tolerance: float) -> PointArray3: ...
 
 
 def _is_curve3(value: object) -> bool:
@@ -105,258 +124,18 @@ def _is_curve3(value: object) -> bool:
     )
 
 
-def _line_curves_from_vertices(vertices: tuple[Vec3, ...]) -> tuple[Curve3, ...]:
-    curves = tuple(Line3(start, end) for start, end in pairwise(vertices) if start != end)
-    if not curves:
-        raise ValueError("Polyline3 requires at least two distinct vertices")
-    return curves
-
-
-def _unit_axis(axis: Point3Like, name: str) -> Vec3:
-    vector = promote3(axis)
-    length = vector.length()
-    if length == 0.0:
-        raise ValueError(f"{name} must not be zero length")
-    return vector * (1.0 / length)
-
-
-def _angle_in_sweep(angle: float, start_rad: float, end_rad: float) -> bool:
-    sweep = end_rad - start_rad
-    if abs(sweep) >= 2.0 * pi:
-        return True
-    if sweep > 0.0:
-        return (angle - start_rad) % (2.0 * pi) <= sweep
-    return (start_rad - angle) % (2.0 * pi) <= -sweep
-
-
-@dataclass(frozen=True, slots=True, init=False)
-class Line3:
-    """Straight 3D curve segment."""
-
-    start: Vec3
-    end: Vec3
-
-    def __init__(self, start: Point3Like, end: Point3Like) -> None:
-        start = promote3(start)
-        end = promote3(end)
-        object.__setattr__(self, "start", start)
-        object.__setattr__(self, "end", end)
-        if start == end:
-            raise ValueError("Line3 endpoints must differ")
-
-    def bounds(self) -> tuple[Vec3, Vec3]:
-        return _bounds((self.start, self.end))
-
-    def points(self) -> tuple[Vec3, Vec3]:
-        return (self.start, self.end)
-
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3:
-        positive_tolerance(tolerance)
-        return _polyline3(self.points())
-
-
-@dataclass(frozen=True, slots=True, init=False)
-class Arc3:
-    """Circular 3D arc in the plane spanned by two perpendicular axes."""
-
-    centre: Vec3
-    radius: float
-    start_rad: float
-    end_rad: float
-    x_axis: Vec3
-    y_axis: Vec3
-
-    def __init__(
-        self,
-        centre: Point3Like,
-        radius: float,
-        start_rad: float,
-        end_rad: float,
-        *,
-        x_axis: Point3Like = (1.0, 0.0, 0.0),
-        y_axis: Point3Like = (0.0, 1.0, 0.0),
-    ) -> None:
-        radius = positive(radius, "radius")
-        start_rad = finite(start_rad, "start_rad")
-        end_rad = finite(end_rad, "end_rad")
-        if start_rad == end_rad:
-            raise ValueError("Arc3 start and end angles must differ")
-
-        x = _unit_axis(x_axis, "x_axis")
-        y = _unit_axis(y_axis, "y_axis")
-        if abs(x.dot(y)) > 1e-9:
-            raise ValueError("Arc3 x_axis and y_axis must be perpendicular")
-
-        object.__setattr__(self, "centre", promote3(centre))
-        object.__setattr__(self, "radius", radius)
-        object.__setattr__(self, "start_rad", start_rad)
-        object.__setattr__(self, "end_rad", end_rad)
-        object.__setattr__(self, "x_axis", x)
-        object.__setattr__(self, "y_axis", y)
-
-    def _point(self, angle: float) -> Vec3:
-        return (
-            self.centre
-            + self.x_axis * (self.radius * cos(angle))
-            + self.y_axis * (self.radius * sin(angle))
-        )
-
-    def bounds(self) -> tuple[Vec3, Vec3]:
-        candidate_angles = [self.start_rad, self.end_rad]
-        axis_pairs = (
-            (self.x_axis.x, self.y_axis.x),
-            (self.x_axis.y, self.y_axis.y),
-            (self.x_axis.z, self.y_axis.z),
-        )
-        for x_component, y_component in axis_pairs:
-            angle = atan2(y_component, x_component)
-            for candidate in (angle, angle + pi):
-                if _angle_in_sweep(candidate, self.start_rad, self.end_rad):
-                    candidate_angles.append(candidate)
-        return _bounds(tuple(self._point(angle) for angle in candidate_angles))
-
-    def points(self) -> tuple[Vec3, Vec3]:
-        return (self._point(self.start_rad), self._point(self.end_rad))
-
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3:
-        tolerance = positive_tolerance(tolerance)
-        import numpy as np
-
-        from cady.operations.arrays3 import ArrayPolyline3
-
-        sweep = self.end_rad - self.start_rad
-        segment_count = max(
-            2,
-            ceil(
-                abs(sweep)
-                / (2.0 * pi)
-                * segments_for_circle(self.radius, tolerance)
-            ),
-        )
-        points = [
-            self._point(self.start_rad + sweep * index / segment_count)
-            for index in range(segment_count + 1)
-        ]
-        return ArrayPolyline3(
-            np.array([point.tuple() for point in points], dtype=np.float64)
-        )
-
-
-@dataclass(frozen=True, slots=True, init=False)
-class Spline3:
-    """Cubic Bezier spline made from 3n+1 3D control points."""
-
-    control_points: tuple[Vec3, ...]
-
-    def __init__(self, control_points: Iterable[Point3Like]) -> None:
-        points = tuple(promote3(point) for point in control_points)
-        object.__setattr__(self, "control_points", points)
-        if len(points) < 4 or (len(points) - 1) % 3 != 0:
-            raise ValueError("Spline3 requires 3n+1 cubic Bezier control points")
-
-    def bounds(self) -> tuple[Vec3, Vec3]:
-        return _bounds(self.control_points)
-
-    def points(self) -> tuple[Vec3, ...]:
-        return self.control_points
-
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3:
-        tolerance = positive_tolerance(tolerance)
-        points: list[Vec3] = []
-        for index in range(0, len(self.control_points) - 1, 3):
-            segment = self.control_points[index : index + 4]
-            _append_cubic_points(
-                points,
-                segment[0],
-                segment[1],
-                segment[2],
-                segment[3],
-                tolerance=tolerance,
-                depth=0,
-            )
-        return _polyline3(tuple(points))
-
-
-def _append_cubic_points(
-    points: list[Vec3],
-    p0: Vec3,
-    p1: Vec3,
-    p2: Vec3,
-    p3: Vec3,
-    *,
-    tolerance: float,
-    depth: int,
-) -> None:
-    if depth >= 16 or _cubic_is_flat_enough(p0, p1, p2, p3, tolerance=tolerance):
-        _append_unique_point(points, p0)
-        _append_unique_point(points, p3)
-        return
-
-    p01 = _midpoint(p0, p1)
-    p12 = _midpoint(p1, p2)
-    p23 = _midpoint(p2, p3)
-    p012 = _midpoint(p01, p12)
-    p123 = _midpoint(p12, p23)
-    p0123 = _midpoint(p012, p123)
-
-    _append_cubic_points(
-        points,
-        p0,
-        p01,
-        p012,
-        p0123,
-        tolerance=tolerance,
-        depth=depth + 1,
-    )
-    _append_cubic_points(
-        points,
-        p0123,
-        p123,
-        p23,
-        p3,
-        tolerance=tolerance,
-        depth=depth + 1,
-    )
-
-
-def _midpoint(left: Vec3, right: Vec3) -> Vec3:
-    return (left + right) * 0.5
-
-
-def _cubic_is_flat_enough(
-    p0: Vec3,
-    p1: Vec3,
-    p2: Vec3,
-    p3: Vec3,
-    *,
-    tolerance: float,
-) -> bool:
-    return (
-        _distance_to_chord(p1, p0, p3) <= tolerance
-        and _distance_to_chord(p2, p0, p3) <= tolerance
-    )
-
-
-def _distance_to_chord(point: Vec3, start: Vec3, end: Vec3) -> float:
-    direction = end - start
-    length = direction.length()
-    if length == 0.0:
-        return (point - start).length()
-    return (point - start).cross(direction).length() / length
-
-
 @dataclass(frozen=True, slots=True, init=False)
 class Polyline3:
     """Open 3D curve path.
 
     Passing vertices keeps the older straight-segment construction path.
-    Passing curves stores the path as `Line3`, `Arc3`, `Spline3`, or other
+    Passing curves stores the path as `Line3`, arc, spline, or other
     objects implementing `Curve3`.
     """
 
     curves: tuple[Curve3, ...]
 
-    def __init__(self, items: Iterable[Curve3 | Point3Like]) -> None:
+    def __init__(self, items: Iterable[Curve3 | Point3]) -> None:
         items = tuple(items)
         if not items:
             raise ValueError("Polyline3 requires at least one curve or two vertices")
@@ -369,10 +148,12 @@ class Polyline3:
                 "Polyline3 requires all items to be curves or all items to be vertices"
             )
         else:
-            vertices = tuple(promote3(cast(Point3Like, item)) for item in items)
+            vertices = tuple(cast(Point3, item) for item in items)
             if len(vertices) < 2:
                 raise ValueError("Polyline3 requires at least two vertices")
-            curves = _line_curves_from_vertices(vertices)
+            curves = tuple(Line3(start, end) for start, end in pairwise(vertices) if start != end)
+            if not curves:
+                raise ValueError("Polyline3 requires at least two distinct vertices")
 
         object.__setattr__(self, "curves", curves)
 
@@ -389,14 +170,34 @@ class Polyline3:
         return polyline.discretise(tolerance=tolerance)
 
     @property
-    def vertices(self) -> tuple[Vec3, ...]:
-        return _path_points(self.curves)
+    def vertices(self) -> tuple[Point3, ...]:
+        points: list[Point3] = []
+        for curve in self.curves:
+            for point in curve.points():
+                if not points or points[-1] != point:
+                    points.append(point)
+        return tuple(points)
 
-    def bounds(self) -> tuple[Vec3, Vec3]:
-        curve_bounds = tuple(bound for curve in self.curves for bound in curve.bounds())
-        return _bounds(curve_bounds)
+    def bounds(self) -> tuple[Point3, Point3]:
+        points = tuple(bound for curve in self.curves for bound in curve.bounds())
+        return (
+            (
+                min(point[0] for point in points),
+                min(point[1] for point in points),
+                min(point[2] for point in points),
+            ),
+            (
+                max(point[0] for point in points),
+                max(point[1] for point in points),
+                max(point[2] for point in points),
+            ),
+        )
 
-    def points(self) -> tuple[Vec3, ...]:
+    @property
+    def boundary(self) -> tuple[Point3, Point3]:
+        return self.bounds()
+
+    def points(self) -> tuple[Point3, ...]:
         return self.vertices
 
     def add(self, curve: Curve3) -> Polyline3:
@@ -405,53 +206,86 @@ class Polyline3:
         return Polyline3((*self.curves, curve))
 
     def discretise(self, *, tolerance: float) -> Polyline3:
-        return Polyline3(_discretised_points(self.curves, tolerance=tolerance))
+        tolerance = positive_tolerance(tolerance)
+        points: list[Point3] = []
+        for curve in self.curves:
+            array = curve.to_array(tolerance=tolerance)
+            for x, y, z in array:
+                point = (float(x), float(y), float(z))
+                if not points or points[-1] != point:
+                    points.append(point)
+        return Polyline3(tuple(points))
 
     def discretize(self, *, tolerance: float) -> Polyline3:
         return self.discretise(tolerance=tolerance)
 
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3:
-        return _polyline3(_discretised_points(self.curves, tolerance=tolerance))
+    def to_array(self, *, tolerance: float) -> PointArray3:
+        tolerance = positive_tolerance(tolerance)
+        points: list[Point3] = []
+        for curve in self.curves:
+            array = curve.to_array(tolerance=tolerance)
+            for x, y, z in array:
+                point = (float(x), float(y), float(z))
+                if not points or points[-1] != point:
+                    points.append(point)
+
+        from cady.operations.arrays import as_points3
+
+        return as_points3(points, name="vertices")
 
 
 @dataclass(frozen=True, slots=True, init=False)
 class ClosedPolyline3:
     """Planar closed 3D boundary loop."""
 
-    vertices: tuple[Vec3, ...]
+    vertices: tuple[Point3, ...]
 
-    def __init__(self, vertices: Iterable[Point3Like]) -> None:
-        vertices = _dedupe_closed(tuple(promote3(point) for point in vertices))
+    def __init__(self, vertices: Iterable[Point3]) -> None:
+        vertices = tuple(vertices)
+        if len(vertices) > 1 and vertices[0] == vertices[-1]:
+            vertices = vertices[:-1]
         object.__setattr__(self, "vertices", vertices)
-        if _unique_vertex_count(vertices) < 3:
+        if len(set(vertices)) < 3:
             raise ValueError("ClosedPolyline3 requires at least three unique vertices")
 
-    def bounds(self) -> tuple[Vec3, Vec3]:
-        return _bounds(self.vertices)
+    def bounds(self) -> tuple[Point3, Point3]:
+        return (
+            (
+                min(point[0] for point in self.vertices),
+                min(point[1] for point in self.vertices),
+                min(point[2] for point in self.vertices),
+            ),
+            (
+                max(point[0] for point in self.vertices),
+                max(point[1] for point in self.vertices),
+                max(point[2] for point in self.vertices),
+            ),
+        )
 
-    def points(self) -> tuple[Vec3, ...]:
+    @property
+    def boundary(self) -> tuple[Point3, Point3]:
+        return self.bounds()
+
+    def points(self) -> tuple[Point3, ...]:
         return self.vertices + (self.vertices[0],)
 
-    def to_array(self, *, tolerance: float) -> ArrayPolyline3:
+    def to_array(self, *, tolerance: float) -> PointArray3:
         positive_tolerance(tolerance)
-        import numpy as np
 
-        from cady.operations.arrays3 import ArrayPolyline3
+        from cady.operations.arrays import as_points3
 
-        return ArrayPolyline3(
-            np.array([vertex.tuple() for vertex in self.points()], dtype=np.float64)
-        )
+        return as_points3(self.points(), name="vertices")
 
     def to_mesh(self, *, tolerance: float) -> Mesh3:
         tolerance = positive_tolerance(tolerance)
 
         import numpy as np
 
-        from cady.geometry.mesh3 import Mesh3
-        from cady.operations.mesh_caps import triangulate_loop
-        from cady.operations.planes import fit_plane_svd, max_plane_deviation, project_loop
+        from cady.geometry.mesh import Mesh3
+        from cady.operations.meshes import triangulate_loop
+        from cady.operations.projections import fit_plane_svd, max_plane_deviation, project_loop
 
-        vertex_arrays = [np.array(vertex.tuple(), dtype=np.float64) for vertex in self.vertices]
+        vertex_arrays = [np.array(vertex, dtype=np.float64) for vertex in self.vertices]
         loop_points = np.array(vertex_arrays, dtype=np.float64)
         origin, normal = fit_plane_svd(loop_points)
         deviation = max_plane_deviation(loop_points, origin, normal)
@@ -468,11 +302,11 @@ class ClosedPolyline3:
 
 
 __all__ = [
-    "Arc3",
+    "ClosedCurve2",
     "ClosedPolyline3",
+    "Curve2",
     "Curve3",
     "Line3",
-    "Point3Like",
+    "Polyline2",
     "Polyline3",
-    "Spline3",
 ]

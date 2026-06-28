@@ -13,7 +13,6 @@ def test_smoke_import() -> None:
         "Body3",
         "Camera",
         "Circle2",
-        "ClosedPolyline2",
         "ClosedPolyline3",
         "Curve2",
         "Curve3",
@@ -22,8 +21,8 @@ def test_smoke_import() -> None:
         "Document",
         "Drawing2",
         "Ellipse2",
-        "Face3",
-        "Frame3",
+        "Region3",
+        "Plane3",
         "Layer",
         "Light",
         "Line2",
@@ -32,21 +31,22 @@ def test_smoke_import() -> None:
         "Mesh2",
         "Part",
         "PointLight",
+        "PointCloud2",
         "PointCloud3",
         "Polyline3",
         "Pose3",
-        "Profile2",
+        "Region2",
         "Scene",
         "Spline2",
         "Spline3",
-        "Vec2",
-        "Vec3",
+        "Surface2",
+        "Surface3",
         "Wireframe3",
         "arc3",
         "line3",
         "line2",
         "polyline3",
-        "profile_rectangle",
+        "region_rectangle",
         "spline3",
         "box",
         "sphere",
@@ -56,33 +56,44 @@ def test_smoke_import() -> None:
     for name in expected:
         assert hasattr(cady, name), name
 
+    removed = (
+        "ClosedPolyline2",
+        "Face3",
+        "Frame3",
+        "Profile2",
+        "profile_circle",
+        "profile_rectangle",
+    )
+    for name in removed:
+        assert not hasattr(cady, name), name
+
 
 def test_preferred_package_imports() -> None:
     from cady import files
     from cady.drawing import Drawing2
     from cady.files import dxf, step, stl
-    from cady.geometry import Body3, Line2, Mesh3, Profile2
-    from cady.operations import box, cut_mesh_by_plane, profile_rectangle
+    from cady.geometry import Body3, Line2, Mesh3, Region2, Surface2, Surface3
+    from cady.operations import box, cut_mesh_by_plane, region_rectangle
     from cady.product import Assembly, Part
     from cady.view import Camera, Scene
 
-    assert all((Drawing2, Line2, Profile2, Body3, Mesh3, Part, Assembly))
-    assert all((Camera, Scene, profile_rectangle, box, files))
+    assert all((Drawing2, Line2, Region2, Surface2, Surface3, Body3, Mesh3, Part, Assembly))
+    assert all((Camera, Scene, region_rectangle, box, files))
     assert cut_mesh_by_plane
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
     assert all((stl.write, step.render, step.write, step.read_faces))
 
 
 def test_removed_compatibility_package_replacements() -> None:
-    from cady.geometry import Body3, Line2, Mesh3, Profile2
+    from cady.geometry import Body3, Line2, Mesh3, Region2
     from cady.geometry import Body3 as NewBody3
     from cady.geometry import Line2 as NewLine2
-    from cady.operations import box, cut_mesh_by_plane, profile_rectangle
+    from cady.operations import box, cut_mesh_by_plane, region_rectangle
     from cady.operations import cut_mesh_by_plane as new_cut_mesh_by_plane
 
     assert Line2 is NewLine2
     assert Body3 is NewBody3
-    assert all((Profile2, Mesh3, profile_rectangle, box))
+    assert all((Region2, Mesh3, region_rectangle, box))
     assert cut_mesh_by_plane is new_cut_mesh_by_plane
 
 

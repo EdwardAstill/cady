@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cady.drawing._geometry import Bounds2, Point2, geometry_bounds, point2
+from cady.drawing._geometry import Bounds2, Point2, geometry_bounds
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +45,6 @@ class Text2:
             raise ValueError("text layer must be non-empty")
         if self.height <= 0:
             raise ValueError("text height must be positive")
-        object.__setattr__(self, "at", point2(self.at, name="text anchor"))
         object.__setattr__(self, "height", float(self.height))
         object.__setattr__(self, "rotation", float(self.rotation))
 
@@ -98,7 +97,6 @@ class Insert2:
             raise ValueError("insert layer must be non-empty")
         if self.scale <= 0:
             raise ValueError("insert scale must be positive")
-        object.__setattr__(self, "at", point2(self.at, name="insert point"))
         object.__setattr__(self, "scale", float(self.scale))
         object.__setattr__(self, "rotation", float(self.rotation))
 
@@ -121,7 +119,6 @@ class BlockDefinition:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("block name must be non-empty")
-        object.__setattr__(self, "base", point2(self.base, name="block base"))
         object.__setattr__(self, "layers", tuple(self.layers))
         object.__setattr__(self, "entities", tuple(self.entities))
 
@@ -142,13 +139,12 @@ class BlockDefinition:
         self,
         text: str,
         *,
-        at: object,
+        at: Point2,
         height: float,
         layer: str = "0",
         rotation: float = 0.0,
     ) -> BlockDefinition:
-        anchor = point2(at, name="text anchor")
-        return self.add_entity(Text2(text, anchor, height, layer, rotation))
+        return self.add_entity(Text2(text, at, height, layer, rotation))
 
     def hatch(
         self,

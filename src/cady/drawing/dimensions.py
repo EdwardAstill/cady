@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from cady.drawing._geometry import Bounds2, Point2, point2, points_bounds
+from cady.drawing._geometry import Bounds2, Point2, points_bounds
 
 
 def format_measurement(value: float) -> str:
@@ -59,8 +59,8 @@ class LinearDimension2:
     dim_style: str = "Standard"
 
     def __post_init__(self) -> None:
-        p1 = point2(self.p1, name="dimension p1")
-        p2 = point2(self.p2, name="dimension p2")
+        p1 = self.p1
+        p2 = self.p2
         if p1 == p2:
             raise ValueError("dimension points must differ")
         if p1[0] != p2[0] and p1[1] != p2[1]:
@@ -103,8 +103,8 @@ class AlignedDimension2:
     dim_style: str = "Standard"
 
     def __post_init__(self) -> None:
-        p1 = point2(self.p1, name="dimension p1")
-        p2 = point2(self.p2, name="dimension p2")
+        p1 = self.p1
+        p2 = self.p2
         if p1 == p2:
             raise ValueError("dimension points must differ")
         _validate_common(self.layer, self.text_height, self.dim_style)
@@ -144,7 +144,7 @@ class RadiusDimension2:
         if self.radius <= 0:
             raise ValueError("dimension radius must be positive")
         _validate_common(self.layer, self.text_height, self.dim_style)
-        center = point2(self.center, name="dimension center")
+        center = self.center
         object.__setattr__(self, "center", center)
         object.__setattr__(self, "radius", float(self.radius))
         object.__setattr__(self, "angle", float(self.angle))
@@ -180,7 +180,7 @@ class DiameterDimension2:
         if self.radius <= 0:
             raise ValueError("dimension radius must be positive")
         _validate_common(self.layer, self.text_height, self.dim_style)
-        center = point2(self.center, name="dimension center")
+        center = self.center
         object.__setattr__(self, "center", center)
         object.__setattr__(self, "radius", float(self.radius))
         object.__setattr__(self, "angle", float(self.angle))
@@ -222,9 +222,9 @@ class AngularDimension2:
     dim_style: str = "Standard"
 
     def __post_init__(self) -> None:
-        center = point2(self.center, name="angular dimension center")
-        p1 = point2(self.p1, name="angular dimension p1")
-        p2 = point2(self.p2, name="angular dimension p2")
+        center = self.center
+        p1 = self.p1
+        p2 = self.p2
         if self.distance <= 0:
             raise ValueError("angular dimension distance must be positive")
         if center in (p1, p2):

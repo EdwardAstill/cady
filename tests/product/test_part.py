@@ -6,15 +6,14 @@ import pytest
 
 from cady.geometry import Mesh3
 from cady.product import Material, Part, ProductError
-from cady.vec import Vec3
 
 
 def _triangle(offset: float = 0.0) -> Mesh3:
     return Mesh3(
         (
-            Vec3(offset, 0.0, 0.0),
-            Vec3(offset + 1.0, 0.0, 0.0),
-            Vec3(offset, 1.0, 0.0),
+            (offset, 0.0, 0.0),
+            (offset + 1.0, 0.0, 0.0),
+            (offset, 1.0, 0.0),
         ),
         ((0, 1, 2),),
     )

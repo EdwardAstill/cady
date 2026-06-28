@@ -4,19 +4,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import cos, sin
+from typing import TypeAlias
 
 import numpy as np
 
-from cady.operations.types import (
+from cady.operations.arrays import (
     FloatArray,
     Matrix3,
     Matrix4,
-    Point2,
-    Point3,
     PointArray2,
     PointArray3,
+    as_matrix3,
+    as_matrix4,
+    as_points2,
+    as_points3,
 )
-from cady.operations.validation import as_matrix3, as_matrix4, as_points2, as_points3
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 
 def translate_point2(point: Point2, dx: float, dy: float) -> Point2:
@@ -77,6 +82,48 @@ def mirror_point3(point: Point3, plane_origin: Point3, plane_normal: Point3) -> 
         point[0] - normal[0] * distance,
         point[1] - normal[1] * distance,
         point[2] - normal[2] * distance,
+    )
+
+
+def rotation_matrix2(angle: float) -> FloatArray:
+    """Return a 2D rotation matrix for ``angle`` radians."""
+    cosine = cos(angle)
+    sine = sin(angle)
+    return np.array(
+        [
+            [cosine, -sine],
+            [sine, cosine],
+        ],
+        dtype=np.float64,
+    )
+
+
+def rotation_matrix3(axis_dir: object, angle: float) -> Matrix3:
+    """Return a 3D rotation matrix around ``axis_dir`` for ``angle`` radians."""
+    direction = _unit3(axis_dir, name="axis_dir")
+    x_axis, y_axis, z_axis = direction
+    cosine = cos(angle)
+    sine = sin(angle)
+    one_minus_cosine = 1.0 - cosine
+    return np.array(
+        [
+            [
+                cosine + x_axis * x_axis * one_minus_cosine,
+                x_axis * y_axis * one_minus_cosine - z_axis * sine,
+                x_axis * z_axis * one_minus_cosine + y_axis * sine,
+            ],
+            [
+                y_axis * x_axis * one_minus_cosine + z_axis * sine,
+                cosine + y_axis * y_axis * one_minus_cosine,
+                y_axis * z_axis * one_minus_cosine - x_axis * sine,
+            ],
+            [
+                z_axis * x_axis * one_minus_cosine - y_axis * sine,
+                z_axis * y_axis * one_minus_cosine + x_axis * sine,
+                cosine + z_axis * z_axis * one_minus_cosine,
+            ],
+        ],
+        dtype=np.float64,
     )
 
 
@@ -162,16 +209,8 @@ class Transform2:
     @classmethod
     def rotation(cls, angle: float, centre: object = (0.0, 0.0)) -> Transform2:
         centre_array = _vector2(centre, name="centre")
-        cosine = cos(angle)
-        sine = sin(angle)
-        matrix = np.array(
-            [
-                [cosine, -sine, 0.0],
-                [sine, cosine, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
-            dtype=np.float64,
-        )
+        matrix = np.eye(3, dtype=np.float64)
+        matrix[:2, :2] = rotation_matrix2(angle)
         return cls.translation(float(centre_array[0]), float(centre_array[1])).compose(
             cls(matrix)
         ).compose(cls.translation(float(-centre_array[0]), float(-centre_array[1])))
@@ -244,33 +283,8 @@ class Transform3:
     @classmethod
     def rotation(cls, axis_origin: object, axis_dir: object, angle: float) -> Transform3:
         origin = _vector3(axis_origin, name="axis_origin")
-        direction = _unit3(axis_dir, name="axis_dir")
-        x_axis, y_axis, z_axis = direction
-        cosine = cos(angle)
-        sine = sin(angle)
-        one_minus_cosine = 1.0 - cosine
-        rotation = np.array(
-            [
-                [
-                    cosine + x_axis * x_axis * one_minus_cosine,
-                    x_axis * y_axis * one_minus_cosine - z_axis * sine,
-                    x_axis * z_axis * one_minus_cosine + y_axis * sine,
-                ],
-                [
-                    y_axis * x_axis * one_minus_cosine + z_axis * sine,
-                    cosine + y_axis * y_axis * one_minus_cosine,
-                    y_axis * z_axis * one_minus_cosine - x_axis * sine,
-                ],
-                [
-                    z_axis * x_axis * one_minus_cosine - y_axis * sine,
-                    z_axis * y_axis * one_minus_cosine + x_axis * sine,
-                    cosine + z_axis * z_axis * one_minus_cosine,
-                ],
-            ],
-            dtype=np.float64,
-        )
         matrix = np.eye(4, dtype=np.float64)
-        matrix[:3, :3] = rotation
+        matrix[:3, :3] = rotation_matrix3(axis_dir, angle)
         return cls.translation(float(origin[0]), float(origin[1]), float(origin[2])).compose(
             cls(matrix)
         ).compose(cls.translation(float(-origin[0]), float(-origin[1]), float(-origin[2])))

@@ -8,32 +8,31 @@ import pytest
 from cady.errors import ReadError
 from cady.geometry import Mesh3
 from cady.operations.transforms import Transform3
-from cady.vec import Vec3
 
 
 def test_mesh_triangles_bounds_and_transform() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
         ((0, 1, 2),),
     )
 
-    assert mesh.triangles == ((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0)),)
-    assert mesh.bounds() == (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 0.0))
+    assert mesh.triangles == (((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),)
+    assert mesh.bounds() == ((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
 
     moved = mesh.transformed(Transform3.translation(0.0, 0.0, 2.0))
-    assert moved.bounds() == (Vec3(0.0, 0.0, 2.0), Vec3(1.0, 1.0, 2.0))
+    assert moved.bounds() == ((0.0, 0.0, 2.0), (1.0, 1.0, 2.0))
 
 
 def test_mesh_mirror_reflects_about_plane_and_reverses_face_winding() -> None:
     mesh = Mesh3(
-        (Vec3(1.0, 0.0, 0.0), Vec3(1.0, 1.0, 0.0), Vec3(1.0, 0.0, 1.0)),
+        ((1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (1.0, 0.0, 1.0)),
         ((0, 1, 2),),
         ((0, 1),),
     )
 
     mirrored = mesh.mirror((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
 
-    assert [point.tuple() for point in mirrored.vertices] == [
+    assert [point for point in mirrored.vertices] == [
         (-1.0, 0.0, 0.0),
         (-1.0, 1.0, 0.0),
         (-1.0, 0.0, 1.0),
@@ -43,7 +42,7 @@ def test_mesh_mirror_reflects_about_plane_and_reverses_face_winding() -> None:
 
 
 def test_mesh_to_array_requires_explicit_positive_tolerance() -> None:
-    mesh = Mesh3((Vec3(0.0, 0.0, 0.0),), ())
+    mesh = Mesh3(((0.0, 0.0, 0.0),), ())
 
     with pytest.raises(ValueError, match="tolerance"):
         mesh.to_array(tolerance=0.0)
@@ -51,11 +50,11 @@ def test_mesh_to_array_requires_explicit_positive_tolerance() -> None:
 
 def test_mesh_to_array_and_merged_offsets_faces() -> None:
     first = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
         ((0, 1, 2),),
     )
     second = Mesh3(
-        (Vec3(0.0, 0.0, 1.0), Vec3(1.0, 0.0, 1.0), Vec3(0.0, 1.0, 1.0)),
+        ((0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (0.0, 1.0, 1.0)),
         ((0, 1, 2),),
     )
 
@@ -68,7 +67,7 @@ def test_mesh_to_array_and_merged_offsets_faces() -> None:
 
 def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
         (),
         ((0, 1),),
     )
@@ -137,7 +136,7 @@ def test_dxf_read_wireframe_converts_polyline_wires_to_wireframe(tmp_path: Path)
 
     wf = dxf.read_wireframe(path)
 
-    assert [point.tuple() for point in wf.vertices] == [
+    assert [point for point in wf.vertices] == [
         (0.0, 0.0, 1.0),
         (2.0, 0.0, 3.0),
         (4.0, 1.0, 5.0),
@@ -338,19 +337,19 @@ def _guide_polyline_dxf() -> list[str]:
 
 def test_mesh_rejects_out_of_range_faces() -> None:
     with pytest.raises(ValueError, match="outside"):
-        Mesh3((Vec3(0.0, 0.0, 0.0),), ((0, 1, 2),))
+        Mesh3(((0.0, 0.0, 0.0),), ((0, 1, 2),))
 
 
 def test_mesh_rejects_out_of_range_edges() -> None:
     with pytest.raises(ValueError, match="outside"):
-        Mesh3((Vec3(0.0, 0.0, 0.0),), (), ((0, 1),))
+        Mesh3(((0.0, 0.0, 0.0),), (), ((0, 1),))
 
 
 def test_mesh_to_wireframe() -> None:
     from cady.geometry import Wireframe3
 
     mesh = Mesh3(
-        (Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)),
+        ((0, 0, 0), (1, 0, 0), (0, 1, 0)),
         ((0, 1, 2),),
     )
     wf = mesh.to_wireframe()
@@ -365,7 +364,7 @@ def test_mesh_to_wireframe() -> None:
 def test_mesh_to_wireframe_empty_faces() -> None:
     from cady.geometry import Wireframe3
 
-    mesh = Mesh3((Vec3(0, 0, 0), Vec3(1, 0, 0)), ())
+    mesh = Mesh3(((0, 0, 0), (1, 0, 0)), ())
     wf = mesh.to_wireframe()
     assert isinstance(wf, Wireframe3)
     assert len(wf.vertices) == 2

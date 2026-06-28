@@ -5,7 +5,35 @@ from math import pi
 import numpy as np
 import pytest
 
-from cady.operations.transforms import Pose3, Transform2, Transform3, coerce_transform3
+from cady.operations.transforms import (
+    Pose3,
+    Transform2,
+    Transform3,
+    coerce_transform3,
+    rotation_matrix2,
+    rotation_matrix3,
+)
+
+
+def test_rotation_matrix2_returns_planar_rotation() -> None:
+    matrix = rotation_matrix2(pi / 2)
+
+    assert matrix.shape == (2, 2)
+    assert matrix.dtype == np.float64
+    np.testing.assert_allclose(matrix @ np.array([1.0, 0.0]), [0.0, 1.0], atol=1e-12)
+
+
+def test_rotation_matrix3_returns_axis_rotation() -> None:
+    matrix = rotation_matrix3((0.0, 0.0, 2.0), pi / 2)
+
+    assert matrix.shape == (3, 3)
+    assert matrix.dtype == np.float64
+    np.testing.assert_allclose(matrix @ np.array([1.0, 0.0, 0.0]), [0.0, 1.0, 0.0], atol=1e-12)
+
+
+def test_rotation_matrix3_rejects_zero_axis() -> None:
+    with pytest.raises(ValueError, match="axis_dir must be non-zero"):
+        rotation_matrix3((0.0, 0.0, 0.0), pi / 2)
 
 
 def test_transform2_rotation_origin_and_centre() -> None:

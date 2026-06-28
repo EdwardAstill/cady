@@ -1,0 +1,55 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from cady.geometry import (
+    Circle2,
+    Polyline2,
+    Region2,
+)
+from cady.operations import region_circle, region_rectangle
+
+
+def test_region_rectangle_returns_closed_polyline_with_expected_bounds() -> None:
+    region = region_rectangle(4, 2, origin=(1, 2))
+
+    assert region.bounds() == ((1, 2), (5, 4))
+    assert region.boundary == ((1, 2), (5, 4))
+
+    array = region.to_array(tolerance=0.01)
+    assert isinstance(array, np.ndarray)
+    np.testing.assert_allclose(array, [[1, 2], [5, 2], [5, 4], [1, 4]])
+
+
+def test_region_circle_wraps_circle_boundary() -> None:
+    region = region_circle(2, centre=(3, 4))
+
+    assert isinstance(region.outer, Circle2)
+    assert region.bounds() == ((1, 2), (5, 6))
+    array = region.to_array(tolerance=0.05)
+    assert isinstance(array, np.ndarray)
+    assert len(array) >= 12
+
+
+def test_region2_carries_holes_as_closed_polyline_loops() -> None:
+    region = Region2(
+        Polyline2(((0, 0), (5, 0), (5, 5), (0, 5)), closed=True),
+        holes=(Polyline2(((1, 1), (2, 1), (2, 2), (1, 2)), closed=True),),
+    )
+
+    outer, hole = region.loops(tolerance=0.01)
+
+    assert isinstance(outer, np.ndarray)
+    assert isinstance(hole, np.ndarray)
+    np.testing.assert_allclose(outer, [[0, 0], [5, 0], [5, 5], [0, 5]])
+    np.testing.assert_allclose(hole, [[1, 1], [2, 1], [2, 2], [1, 2]])
+
+
+def test_region_constructors_reject_invalid_dimensions() -> None:
+    with pytest.raises(ValueError, match="width must be positive"):
+        region_rectangle(0, 1)
+    with pytest.raises(ValueError, match="height must be positive"):
+        region_rectangle(1, -1)
+    with pytest.raises(ValueError, match="radius must be positive"):
+        region_circle(0)

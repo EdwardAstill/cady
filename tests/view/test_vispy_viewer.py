@@ -14,15 +14,14 @@ from cady import (
     Part,
     PointCloud3,
     Scene,
-    Vec3,
     box,
 )
 from cady.view.vispy_viewer import (
     _camera_orientation,
     _mesh_edge_color,
     _orientation_edges,
-    _select_vispy_shader_backend,
     _require_vispy,
+    _select_vispy_shader_backend,
     _shaded_face_buffers,
     _transform_from_pose,
     _view_relative_orthographic_axis_length,
@@ -103,7 +102,7 @@ def test_transform_from_pose_preserves_viewer_message() -> None:
 
 
 def test_prepare_scene_accepts_wire_polyline_targets() -> None:
-    wire = (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5))
+    wire = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.5), (1.0, 1.0, 0.5))
     scene = Scene("wires").add(
         wire,
         name="station",
@@ -125,7 +124,7 @@ def test_prepare_scene_accepts_wire_polyline_targets() -> None:
 
 def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5), Vec3(1.0, 1.0, 0.5)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.5), (1.0, 1.0, 0.5)),
         (),
         ((0, 1), (1, 2)),
     )
@@ -150,7 +149,7 @@ def test_prepare_scene_accepts_document_targets() -> None:
 
 
 def test_prepare_scene_accepts_point_cloud_targets() -> None:
-    cloud = PointCloud3((Vec3(0.0, 0.0, 0.0), Vec3(1.0, 2.0, 3.0)))
+    cloud = PointCloud3(((0.0, 0.0, 0.0), (1.0, 2.0, 3.0)))
     scene = Scene("points").add(
         cloud,
         name="samples",
@@ -181,7 +180,7 @@ def test_prepare_scene_accepts_point_cloud_targets() -> None:
 
 def test_wireframe_mesh_edges_use_style_color() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.5)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.5)),
         (),
         ((0, 1),),
     )

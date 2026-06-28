@@ -9,19 +9,18 @@ import pytest
 from cady import GeometryError
 from cady.geometry import Mesh3
 from cady.operations import close_planar_cap
-from cady.vec import Vec3
 
 
-def _cube_vertices() -> tuple[Vec3, ...]:
+def _cube_vertices() -> tuple[tuple[float, float, float], ...]:
     return (
-        Vec3(0.0, 0.0, 0.0),
-        Vec3(1.0, 0.0, 0.0),
-        Vec3(1.0, 1.0, 0.0),
-        Vec3(0.0, 1.0, 0.0),
-        Vec3(0.0, 0.0, 1.0),
-        Vec3(1.0, 0.0, 1.0),
-        Vec3(1.0, 1.0, 1.0),
-        Vec3(0.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (1.0, 1.0, 1.0),
+        (0.0, 1.0, 1.0),
     )
 
 
@@ -49,7 +48,7 @@ def _cube_mesh() -> Mesh3:
 def _cube_minus_top() -> Mesh3:
     """Cube with the top (+Z) face removed: faces containing all-z=1 vertices."""
     vertices = _cube_vertices()
-    faces = tuple(f for f in _cube_faces() if not all(isclose(vertices[i].z, 1.0) for i in f))
+    faces = tuple(f for f in _cube_faces() if not all(isclose(vertices[i][2], 1.0) for i in f))
     return Mesh3(vertices, faces)
 
 
@@ -139,14 +138,14 @@ def test_close_boundary_raises_for_non_planar_boundary() -> None:
     # A cube missing the top face, but with one top vertex displaced
     # so the 4-vertex boundary loop is non-planar
     vertices = (
-        Vec3(0.0, 0.0, 0.0),
-        Vec3(1.0, 0.0, 0.0),
-        Vec3(1.0, 1.0, 0.0),
-        Vec3(0.0, 1.0, 0.0),
-        Vec3(0.0, 0.0, 1.0),
-        Vec3(1.0, 0.0, 1.0),
-        Vec3(1.0, 1.0, 0.7),  # displaced downward — breaks planarity
-        Vec3(0.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (1.0, 1.0, 0.7),  # displaced downward — breaks planarity
+        (0.0, 1.0, 1.0),
     )
     faces: tuple[tuple[int, int, int], ...] = (
         (0, 2, 1),
@@ -173,8 +172,8 @@ def test_close_boundary_fills_multiple_holes() -> None:
         f
         for f in _cube_faces()
         if not (
-            all(isclose(vertices[i].z, 1.0) for i in f)
-            or all(isclose(vertices[i].z, 0.0) for i in f)
+            all(isclose(vertices[i][2], 1.0) for i in f)
+            or all(isclose(vertices[i][2], 0.0) for i in f)
         )
     )
     mesh = Mesh3(vertices, faces)
@@ -185,14 +184,16 @@ def test_close_boundary_fills_multiple_holes() -> None:
     assert _all_edges_manifold(result)
 
 
-def test_mesh_boundary_returns_single_closed_polyline3() -> None:
+def test_mesh_boundary_is_bounds_and_boundary_loops_returns_topology() -> None:
     mesh = _cube_minus_top()
 
-    boundary = mesh.boundary
+    assert mesh.boundary == ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
 
-    assert boundary.vertices.shape == (5, 3)
-    np.testing.assert_allclose(boundary.vertices[0], boundary.vertices[-1])
-    assert {tuple(point) for point in boundary.vertices[:-1]} == {
+    boundary = mesh.boundary_loops[0]
+
+    assert boundary.shape == (5, 3)
+    np.testing.assert_allclose(boundary[0], boundary[-1])
+    assert {tuple(point) for point in boundary[:-1]} == {
         (0.0, 0.0, 1.0),
         (1.0, 0.0, 1.0),
         (1.0, 1.0, 1.0),
@@ -200,25 +201,23 @@ def test_mesh_boundary_returns_single_closed_polyline3() -> None:
     }
 
 
-def test_mesh_boundary_raises_when_mesh_is_closed() -> None:
-    with pytest.raises(GeometryError, match="closed"):
-        _ = _cube_mesh().boundary
+def test_closed_mesh_boundary_is_bounds() -> None:
+    assert _cube_mesh().boundary == ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
 
 
-def test_mesh_boundary_raises_for_multiple_boundary_loops() -> None:
+def test_mesh_boundary_is_bounds_for_multiple_boundary_loops() -> None:
     vertices = _cube_vertices()
     faces = tuple(
         f
         for f in _cube_faces()
         if not (
-            all(isclose(vertices[i].z, 1.0) for i in f)
-            or all(isclose(vertices[i].z, 0.0) for i in f)
+            all(isclose(vertices[i][2], 1.0) for i in f)
+            or all(isclose(vertices[i][2], 0.0) for i in f)
         )
     )
     mesh = Mesh3(vertices, faces)
 
-    with pytest.raises(GeometryError, match="2 boundary loops"):
-        _ = mesh.boundary
+    assert mesh.boundary == ((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
 
 
 def test_mesh_boundary_loops_returns_multiple_closed_polyline3_values() -> None:
@@ -227,8 +226,8 @@ def test_mesh_boundary_loops_returns_multiple_closed_polyline3_values() -> None:
         f
         for f in _cube_faces()
         if not (
-            all(isclose(vertices[i].z, 1.0) for i in f)
-            or all(isclose(vertices[i].z, 0.0) for i in f)
+            all(isclose(vertices[i][2], 1.0) for i in f)
+            or all(isclose(vertices[i][2], 0.0) for i in f)
         )
     )
     mesh = Mesh3(vertices, faces)
@@ -236,19 +235,19 @@ def test_mesh_boundary_loops_returns_multiple_closed_polyline3_values() -> None:
     loops = mesh.boundary_loops
 
     assert len(loops) == 2
-    assert [loop.vertices.shape for loop in loops] == [(5, 3), (5, 3)]
+    assert [loop.shape for loop in loops] == [(5, 3), (5, 3)]
     for loop in loops:
-        np.testing.assert_allclose(loop.vertices[0], loop.vertices[-1])
+        np.testing.assert_allclose(loop[0], loop[-1])
 
 
 def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
     mesh = Mesh3(
         (
-            Vec3(0.0, 0.0, 0.0),
-            Vec3(1.0, 0.0, 0.0),
-            Vec3(0.0, 1.0, 0.0),
-            Vec3(0.0, -1.0, 0.0),
-            Vec3(0.0, 0.0, 1.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
         ),
         ((0, 1, 2), (1, 0, 3), (0, 1, 4)),
     )
@@ -280,7 +279,7 @@ def test_ops_close_planar_cap_on_cut_mesh() -> None:
     from cady.operations import cut_mesh_by_plane
 
     cube_vertices = np.array(
-        [[float(v.x), float(v.y), float(v.z)] for v in _cube_vertices()],
+        [[float(v[0]), float(v[1]), float(v[2])] for v in _cube_vertices()],
         dtype=np.float64,
     )
     cube_faces = np.array(_cube_faces(), dtype=np.int64)
@@ -319,17 +318,17 @@ def test_ops_close_planar_cap_on_cut_mesh() -> None:
 def _cube_minus_top_displaced() -> Mesh3:
     """Cube missing top face, with top vertices slightly off Z=1."""
     vertices = (
-        Vec3(0.0, 0.0, 0.0),
-        Vec3(1.0, 0.0, 0.0),
-        Vec3(1.0, 1.0, 0.0),
-        Vec3(0.0, 1.0, 0.0),
-        Vec3(0.0, 0.0, 0.98),  # displaced
-        Vec3(1.0, 0.0, 0.99),
-        Vec3(1.0, 1.0, 0.97),
-        Vec3(0.0, 1.0, 1.02),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 0.98),  # displaced
+        (1.0, 0.0, 0.99),
+        (1.0, 1.0, 0.97),
+        (0.0, 1.0, 1.02),
     )
     faces = tuple(
-        f for f in _cube_faces() if not all(isclose(vertices[i].z, 1.0, abs_tol=0.05) for i in f)
+        f for f in _cube_faces() if not all(isclose(vertices[i][2], 1.0, abs_tol=0.05) for i in f)
     )
     return Mesh3(vertices, faces)
 
@@ -398,10 +397,10 @@ def test_close_planar_snap_rejects_negative() -> None:
 def test_close_to_plane_creates_wall_faces_from_display_edges() -> None:
     mesh = Mesh3(
         (
-            Vec3(0.0, 1.0, 0.0),
-            Vec3(1.0, 1.0, 0.0),
-            Vec3(1.0, 2.0, 0.0),
-            Vec3(0.0, 2.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (1.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
         ),
         (),
         ((0, 1), (1, 2), (2, 3), (3, 0)),
@@ -418,12 +417,12 @@ def test_close_to_plane_creates_wall_faces_from_display_edges() -> None:
 def test_close_to_plane_prunes_dangling_display_edges() -> None:
     mesh = Mesh3(
         (
-            Vec3(0.0, 1.0, 0.0),
-            Vec3(1.0, 1.0, 0.0),
-            Vec3(1.0, 2.0, 0.0),
-            Vec3(0.0, 2.0, 0.0),
-            Vec3(2.0, 2.0, 0.0),
-            Vec3(3.0, 2.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (1.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (3.0, 2.0, 0.0),
         ),
         (),
         ((0, 1), (1, 2), (2, 3), (3, 0), (2, 4), (4, 5)),
@@ -451,7 +450,7 @@ def test_close_to_plane_uses_boundary_edges_when_no_display_edges() -> None:
 
 def test_close_to_plane_rejects_negative_params() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0)),
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
         (),
         ((0, 1),),
     )
@@ -464,7 +463,7 @@ def test_close_to_plane_rejects_negative_params() -> None:
 
 def test_close_to_plane_without_closed_edges_raises() -> None:
     mesh = Mesh3(
-        (Vec3(0.0, 10.0, 0.0), Vec3(1.0, 10.0, 0.0)),
+        ((0.0, 10.0, 0.0), (1.0, 10.0, 0.0)),
         (),
         ((0, 1),),
     )

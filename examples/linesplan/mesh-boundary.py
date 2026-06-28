@@ -11,9 +11,9 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Vec3, Wireframe3
+from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Wireframe3
 from cady.files import dxf
-from cady.operations import ArrayPolyline3
+from cady.operations.arrays import PointArray3
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -135,16 +135,13 @@ def print_wireframe_summary(label: str, wireframe: Wireframe3) -> None:
 
 
 def _meshes_from_boundary_loops(
-    loops: tuple[ArrayPolyline3, ...],
+    loops: tuple[PointArray3, ...],
 ) -> tuple[Mesh3, ...]:
     return tuple(_mesh_from_boundary_loop(loop) for loop in loops)
 
 
-def _mesh_from_boundary_loop(loop: ArrayPolyline3) -> Mesh3:
-    points = [
-        Vec3(float(point[0]), float(point[1]), float(point[2]))
-        for point in loop.vertices
-    ]
+def _mesh_from_boundary_loop(loop: PointArray3) -> Mesh3:
+    points = [(float(point[0]), float(point[1]), float(point[2])) for point in loop]
     if len(points) >= 2 and points[0] == points[-1]:
         points = points[:-1]
     edges = tuple((index, (index + 1) % len(points)) for index in range(len(points)))
@@ -182,9 +179,7 @@ def _point3(value: Sequence[float]) -> Point3:
     return (float(x), float(y), float(z))
 
 
-def _point_tuple(value: Vec3 | Point3) -> Point3:
-    if isinstance(value, Vec3):
-        return value.tuple()
+def _point_tuple(value: Point3) -> Point3:
     return value
 
 
@@ -192,8 +187,8 @@ def _format_point(point: Point3) -> str:
     return f"({point[0]:g}, {point[1]:g}, {point[2]:g})"
 
 
-def _format_loop_edge_counts(loops: tuple[ArrayPolyline3, ...]) -> str:
-    counts = [max(len(loop.vertices) - 1, 0) for loop in loops]
+def _format_loop_edge_counts(loops: tuple[PointArray3, ...]) -> str:
+    counts = [max(len(loop) - 1, 0) for loop in loops]
     return ", ".join(f"{count} edges" for count in counts)
 
 

@@ -1,233 +1,279 @@
-# cady — Agent Context
+# cady Agent Guide
 
-cady is a small native CAD geometry package for building format-blind geometry,
-emitting DXF R2018, binary/ASCII STL, or AP214 STEP, and extracting elementary
-surface data from STEP files.
+cady is a small native CAD package for immutable geometry values, meshable
+3D bodies, product assemblies, 2D drawings, view scenes, and DXF/STL/STEP file
+facades. It is intentionally lightweight: no CAD kernel, no eager viewer imports,
+and no runtime dependencies beyond the declared allowlist.
 
-## Principles
+This repository is in the middle of a naming and layout cleanup. Treat the source
+tree and tests as authoritative when docs disagree. Current public names are
+suffixless (`Line2`, `Body3`, `Drawing2`, `Text2`, `Pose3`), not the older
+`Line2D`/`Body3D`/`Drawing2D` style.
 
-1. **Semantic > numeric.** Keep authoring geometry as domain objects (`Line2`,
-   `Circle2`, `Profile2`, `Body3`). Convert with `.to_array(tolerance=1e-3)`
-   or `.to_mesh(tolerance=1e-3)` only at calculation boundaries.
-2. **Domain is import-light.** Authoring packages (`geometry2`, `geometry3`,
-   `drawing`, `product`) must not import `numpy`, `matplotlib`, `pyvista`,
-   `vispy`, or viewer backend modules at module scope. Validate with
-   `tests/conventions/test_import_boundaries.py` and
-   `tests/conventions/test_stdlib_only.py`.
-3. **Immutable domain objects.** All shapes, vectors, and metadata are frozen
-   dataclasses (`frozen=True`). Transforms return new instances; never mutate.
-4. **Tolerance is explicit.** Every `to_array(...)`, `.to_mesh(...)`, and export
-   function accepts `tolerance` as a keyword argument. No hidden defaults.
-5. **No external deps at runtime.** Runtime imports are limited to `cady`,
-   `numpy`, and `steputils`. `matplotlib`, `vispy`, and `pyvista` are optional
-   extras gated behind `[view]` and `[all]`. Enforced by
-   `tests/conventions/test_stdlib_only.py`.
-6. **Layers are named, not numbered.** Drawings assign entities to named layers
-   with color and linetype. DXF writers map these to DXF layer tables.
+## Non-Negotiables
 
-## Architecture
+- Preserve immutable value semantics. Public geometry, drawing, product, view,
+  vector, transform, and metadata objects should return new values rather than
+  mutate existing instances.
+- Keep authoring objects semantic until an explicit boundary: `to_array(...)`,
+  `to_mesh(...)`, file write/render functions, or view preparation.
+- Every sampling, meshing, and export path must take `tolerance` explicitly as a
+  keyword argument. Do not hide new discretisation constants in implementation
+  code.
+- Keep module imports light. Optional GUI or plotting dependencies must be
+  imported only inside functions that actually launch or prepare those paths.
+- Do not reintroduce removed packages or aliases: `domain`, `build`, `numeric`,
+  `factories`, `visualisation`, `geometry2`, `geometry3`, `ops`, or old public
+  names such as `Model`, `Shape2`, `Shape3`, `Rectangle`, `Prism`, `Extrusion`,
+  `Revolution`, `Sphere`, `DxfDrawing`, `StlMesh`, and `SceneError`.
+- Prefer current local patterns over new abstractions. This codebase uses frozen
+  dataclasses, tuple-backed immutable fields, local validation helpers, and late
+  imports to maintain boundaries.
 
-```text
-cady.geometry2   2D curves, closed curves, profiles, and factories
-cady.geometry3   bodies, faces, frames, meshes, wireframes, features, and primitives
-cady.drawing      drawing documents, layers, text, hatches, blocks, dimensions
-cady.product      parts, assemblies, materials, and assembly flattening
-cady.view         scenes, cameras, lights, display styles, optional viewers
-cady.document     optional top-level registry
-cady.numeric      NumPy-backed evaluated arrays and transforms
-cady.ops          object-agnostic geometry algorithms
-cady.files        DXF, STL, and STEP facades
-cady.errors       shared exception hierarchy
-cady.vec          Vec2, Vec3 immutable vector types
-```
-
-### Dependency rules (enforced by CI)
-
-| Rule | Test |
-|------|------|
-| `cady.domain` and `cady.build` packages must not exist | `test_import_boundaries.py::test_legacy_domain_and_build_packages_are_removed` |
-| `geometry2`, `geometry3`, `drawing`, `product`, `view` must not import `cady.domain` | `test_import_boundaries.py::test_new_value_packages_do_not_import_legacy_domain` |
-| `cady.numeric` must not import `cady.domain` or any authoring package | `test_import_boundaries.py::test_numeric_does_not_import_domain_or_authoring_packages` |
-| `cady.ops` must not import `cady.domain` or any authoring package | `test_import_boundaries.py::test_ops_do_not_import_domain_or_authoring_packages` |
-| `cady.files` must not import `numpy` or viewer backend modules at module scope | `test_import_boundaries.py::test_files_do_not_import_viewer_or_numpy_at_module_scope` |
-| Runtime imports limited to `cady`, `numpy`, `steputils` | `test_stdlib_only.py` |
-| Old names (`DxfDrawing`, `Model`, `Prism`, `Extrusion`, `Revolution`, `Sphere`, `Rectangle`, `Shape2`, `Shape3`, `StlMesh`, `SceneError`) must not be exported | `test_public_api_removed.py` |
-
-The intended conversion boundary:
+## Current Package Layout
 
 ```text
-domain object  →  .to_array(tolerance=1e-3)   →  numeric arrays
-domain object  →  .to_mesh(tolerance=1e-3)    →  Mesh3 / ArrayMesh3
-domain object  →  dxf/stl/step.write(...)     →  files
+src/cady/
+  geometry/      semantic 2D/3D values: curves, regions, surfaces, meshes, bodies
+  operations/    NumPy-backed arrays, transforms, validation, sampling, meshing
+  drawing/       Drawing2 documents, layers, text, hatches, inserts, dimensions
+  product/       Part, Assembly, Material, flattening
+  view/          backend-independent Scene API and optional Vispy viewer
+  files/         flat DXF/STL/STEP facades
+  document.py    optional project registry
+  vec.py         Vec2 and Vec3
+  errors.py      shared exception hierarchy
 ```
 
-### Key files
+There is one geometry package, `cady.geometry`, and one numeric/algorithm package,
+`cady.operations`. Do not add split packages like `geometry2`, `geometry3`,
+`numeric`, or `ops`.
 
-| File | Purpose |
-|------|---------|
-| `src/cady/__init__.py` | Public API re-exports |
-| `src/cady/vec.py` | `Vec2`, `Vec3` frozen dataclasses |
-| `src/cady/errors.py` | Exception hierarchy (`CadError`, `GeometryError`, `DrawingError`, `ProductError`, `ViewError`, `ReadError`, `WriteError`) |
-| `src/cady/geometry2/curves.py` | `Line2`, `Arc2`, `Spline2`, `Polyline2`, `ClosedPolyline2`, `Circle2`, `Ellipse2`, protocol ABCs |
-| `src/cady/geometry2/factories.py` | `line2()`, `arc2()`, `circle2()`, `polyline2()`, `profile_rectangle()`, `profile_circle()` |
-| `src/cady/geometry2/profile.py` | `Profile2` filled region (outer boundary + holes) |
-| `src/cady/geometry3/body.py` | `Body3` — editable solid with feature history |
-| `src/cady/geometry3/frame.py` | `Frame3` — 3D coordinate frame |
-| `src/cady/geometry3/face.py` | `Face3` — `Profile2` placed in a `Frame3` |
-| `src/cady/geometry3/mesh.py` | `Mesh3` — semantic triangle mesh |
-| `src/cady/geometry3/wireframe.py` | `Wireframe3` — edge-only wireframe (vertices + edges, no faces) |
-| `src/cady/geometry3/features.py` | Feature records (`ExtrudeFeature`, `RevolveFeature`, `BooleanFeature`, `FilletFeature`, `ChamferFeature`, `PrimitiveFeature`) |
-| `src/cady/geometry3/factories.py` | `box()`, `cylinder()`, `sphere()` convenience constructors |
-| `src/cady/operations/_mesh_builders.py` | Feature-to-triangles evaluators |
-| `src/cady/drawing/document.py` | `Drawing2` — 2D drafting document |
-| `src/cady/drawing/layers.py` | `Layer`, `DrawingEntity` |
-| `src/cady/drawing/entities.py` | `Text2`, `Hatch2`, `Insert2`, `BlockDefinition` |
-| `src/cady/drawing/dimensions.py` | `DimStyle`, `LinearDimension2`, `AlignedDimension2`, `RadiusDimension2`, `DiameterDimension2`, `AngularDimension2` |
-| `src/cady/drawing/_geometry.py` | Drawing geometry helpers |
-| `src/cady/product/part.py` | `Part` — named manufacturable item |
-| `src/cady/product/assembly.py` | `Assembly` — tree of placed parts and subassemblies |
-| `src/cady/product/flatten.py` | Assembly flattening to `FlattenedPart` records |
-| `src/cady/product/material.py` | `Material` |
-| `src/cady/view/scene.py` | `Scene` — backend-independent view description |
-| `src/cady/view/camera.py` | `Camera` — perspective/orthographic camera |
-| `src/cady/view/light.py` | `Light` protocol, `AmbientLight`, `DirectionalLight`, `PointLight` |
-| `src/cady/view/style.py` | `DisplayStyle` |
-| `src/cady/view/open_view.py` | `SceneObject` — target reference with pose and visibility |
-| `src/cady/view/mesh_buffers.py` | Mesh-to-GPU-buffer conversion |
-| `src/cady/view/vispy_viewer.py` | Vispy-based 3D viewer (`view_scene`, `view_target`, `view_mesh`, `view_meshes`, `view_lines`, `prepare_scene`) |
-| `src/cady/document.py` | `Document` — optional registry of named drawings, parts, assemblies, scenes |
-| `src/cady/numeric/mesh3.py` | `ArrayMesh3`, `ArrayPolyline3` |
-| `src/cady/numeric/paths2.py` | `ArrayPolyline2`, `ArrayPolygon2` |
-| `src/cady/numeric/curves2.py` | `ArrayBezierSpline2` |
-| `src/cady/numeric/transform.py` | `Transform2`, `Transform3`, `Pose3` |
-| `src/cady/numeric/validation.py` | `as_points2`, `as_points3`, `as_faces`, `as_matrix3`, `as_matrix4` |
-| `src/cady/numeric/bounds.py` | `bounds2`, `bounds3` |
-| `src/cady/numeric/types.py` | NumPy type aliases |
-| `src/cady/ops/curves2.py` | Curve discretisation algorithms |
-| `src/cady/ops/polygons2.py` | Polygon operations (offset, boolean hints) |
-| `src/cady/ops/mesh_cut.py` | `cut_mesh_by_plane`, `close_planar_cap`, `close_boundary` |
-| `src/cady/ops/meshes3.py` | Mesh-level operations |
-| `src/cady/ops/linesplan.py` | Linesplan wireframe meshing |
-| `src/cady/ops/point_transforms.py` | Point-level transforms |
-| `src/cady/ops/profiles.py` | Profile geometry helpers |
-| `src/cady/ops/triangulation.py` | Polygon triangulation |
-| `src/cady/files/dxf/__init__.py` | DXF write (`write`, `render`) and read (`read`, `read_drawing`, `read_mesh`, `read_wireframe`) |
-| `src/cady/files/stl/ascii.py` | ASCII STL writer |
-| `src/cady/files/stl/binary.py` | Binary STL writer |
-| `src/cady/files/step/__init__.py` | STEP write (`write`, `render`) and read (`read_faces`, `read_members`, `read_step`) |
-| `src/cady/files/step/faces.py` | STEP face parser |
-| `src/cady/files/step/members.py` | `extract_members_from_faces` — structural member extraction |
-| `src/cady/files/step/ids.py` | `IdAllocator` — STEP entity ID management |
+## Boundary Model
 
-## Module boundaries when editing
+Authoring layer:
 
-### Adding a 2D shape
+- `Vec2`, `Vec3`
+- 2D geometry: `Line2`, `Arc2`, `Spline2`, `Polyline2`, `Circle2`, `Ellipse2`,
+  `Region2`, `Mesh2`, `PointCloud2`
+- 3D geometry: `Line3`, `Arc3`, `Spline3`, `Polyline3`, `ClosedPolyline3`,
+  `Plane3`, `Surface2`, `Surface3`, `Region3`, `Mesh3`, `Wireframe3`,
+  `PointCloud3`, `Body3`
+- documents and products: `Drawing2`, `Part`, `Assembly`, `Document`, `Scene`
 
-1. Subclass `Curve2` or `ClosedCurve2` in `cady.geometry2.curves` (frozen dataclass)
-2. Implement `bounds()`, `points()`, `close()`, `_transform2()`, `to_array()`
-3. Add factory to `cady.geometry2.factories`
-4. Re-export from `cady.geometry2.__init__` and `cady.__init__`
-5. Add tests under `tests/geometry2/`
-6. Run import boundary tests
+Evaluation layer:
 
-### Adding a 3D shape / feature
+- `ArrayBezierSpline2`, point arrays, and plain mesh array tuples
+- `Transform2`, `Transform3`, `Pose3`
+- validation helpers in `operations.validation`
+- array/mesh algorithms in `operations.*`
 
-1. Add feature record to `cady.geometry3.features`
-2. Add evaluation path to `cady.operations._mesh_builders`
-3. Wire into `Body3` in `cady.geometry3.body`
-4. Re-export from `cady.geometry3.__init__` and `cady.__init__`
-5. If STEP export is desired, add BREP builder in `cady.files.step`
-6. Add tests under `tests/geometry3/`
-7. Run import boundary tests
+Allowed flow:
 
-### Adding an ops function
+```text
+semantic value -> to_array(tolerance=...) -> array value
+semantic value -> to_mesh(tolerance=...)  -> Mesh3
+semantic value -> files.*.write/render(...) or view.prepare_scene(...)
+```
 
-- Accept NumPy arrays, array-like tuples, and scalars
-- **Do not** import or accept domain objects (no `Body3`, `Mesh3`, `Profile2`, `Vec2`, `Vec3` as parameters)
-- If a domain method needs it, that method unpacks fields and passes primitives
+Avoid the reverse dependency. `operations` should not import `drawing`,
+`product`, `view`, or `files`; domain methods unpack their fields and pass
+primitive data into operations helpers.
 
-### Adding a numeric type
+## Import Rules Enforced By Tests
 
-- Frozen dataclass with NumPy array fields
-- Validate in `__post_init__` using `as_points2`, `as_points3`, `as_faces`, etc.
-- Provide `.transformed(transform)` method accepting `Transform2`/`Transform3`
-- Provide `.bounds()` returning `(min_array, max_array)` tuple
+The convention tests are part of the architecture:
 
-## Testing
+- `tests/conventions/test_import_boundaries.py`
+  - removed legacy packages must not exist
+  - `geometry`, `drawing`, `product`, and `view` must not import `cady.domain`
+  - `operations` must not import domain/application packages
+  - `files` must not import `numpy` or viewer backend modules at module scope
+  - export code must not hide discretisation constants
+- `tests/conventions/test_stdlib_only.py`
+  - runtime imports are limited to stdlib, `cady`, `numpy`, and `steputils`
+  - optional extras are only allowed in their intended package paths
+- `tests/conventions/test_public_api_removed.py`
+  - old top-level names and `write_model(...)` must stay absent
 
-### Run gates
+Run these tests after edits that touch imports, facades, exports, package layout,
+or public names.
+
+## Public API Shape
+
+Top-level `cady` re-exports currently include:
+
+- constructors: `line2`, `arc2`, `line3`, `arc3`, `spline3`, `polyline2`,
+  `polyline3`, `circle2`, `region_rectangle`, `region_circle`, `box`,
+  `cylinder`, `sphere`
+- geometry: `Line2`, `Line3`, `Arc2`, `Arc3`, `Spline2`, `Spline3`,
+  `Polyline2`, `Polyline3`, `ClosedPolyline3`, `Circle2`, `Ellipse2`,
+  `Region2`, `Region3`, `Surface2`, `Surface3`, `Plane3`, `Mesh2`, `Mesh3`,
+  `Wireframe3`, `PointCloud2`, `PointCloud3`, `Body3`
+- geometry protocols: `Curve2`, `ClosedCurve2`, `Curve3`
+- drawing: `Drawing2`, `DrawingEntity`, `Layer`, `Text2`, `Hatch2`, `Insert2`,
+  `BlockDefinition`, `DimStyle`, dimension classes
+- product: `Part`, `PartInstance`, `Assembly`, `AssemblyInstance`, `Material`
+- view: `Scene`, `SceneObject`, `Camera`, `Light`, `AmbientLight`,
+  `DirectionalLight`, `PointLight`, `DisplayStyle`
+- other: `Document`, `Vec2`, `Vec3`, `Pose3`, shared error classes
+
+When adding a public value, update the local package `__init__.py`, then
+`src/cady/__init__.py`, then tests. Do not add backwards-compatible aliases for
+removed names unless the tests and project direction change first.
+
+## Geometry Notes
+
+- `Line2`, `Arc2`, `Circle2`, `Ellipse2`, `Spline2`, and `Polyline2` live in
+  separate focused modules under `geometry/`.
+- `Polyline2` can be open or closed. Only closed `Polyline2` values can produce
+  `Mesh2`.
+- `Region2` is a filled planar region with one closed outer loop and optional
+  holes.
+- `Plane3` is the placement frame for planar 3D work. It owns origin, x-axis,
+  y-axis, and normal handling.
+- `Surface3` supports parametric surfaces; `Region3` places a 2D parameter
+  region on a `Surface3`.
+- `Polyline3` can be built from points or from curve objects implementing the
+  `Curve3` protocol. `ClosedPolyline3` validates planarity before meshing.
+- `Mesh3` is the semantic triangle mesh type and carries optional display edges.
+- `Wireframe3` is edge-only topology. It has helpers for edge splitting,
+  triangulation, loft-style conversion, and close-to-plane workflows.
+- `PointCloud2` and `PointCloud3` are unconnected point collections. They are
+  not curves, meshes, or wireframes.
+- `Body3` is a feature-history body. Currently meshable paths are region
+  extrusion and box/cylinder/sphere primitives. Revolve, boolean, fillet, and
+  chamfer features are records only until their evaluators are implemented.
+
+## Operations Notes
+
+Use `cady.operations` for array and primitive algorithms:
+
+- `constructors.py` contains import-light factory wrappers used by the public
+  API.
+- `validation.py`, `bounds.py`, `types.py`, `arrays2.py`, and `arrays3.py` own
+  NumPy-backed value validation and containers.
+- `transforms.py` owns `Transform2`, `Transform3`, `Pose3`, and point-level
+  transform functions.
+- `sampling2.py`, `polygons2.py`, `triangulation.py`, and `profiles.py` own
+  curve/region sampling and 2D polygon helpers.
+- `_mesh_builders.py`, `_mesh_arrays.py`, `mesh_primitives.py`,
+  `mesh_clipping.py`, `mesh_caps.py`, `mesh_boundaries.py`, `mesh_topology.py`,
+  and `planes.py` own mesh construction and topology algorithms.
+- `linesplan.py` and `section_loft.py` handle imported section/wire geometry
+  workflows.
+
+Operations code may import `numpy` and standard library modules. Keep it free of
+application-level package imports so it remains reusable and testable.
+
+## Files And I/O
+
+File facades are flat modules:
+
+- `cady.files.dxf`
+  - reads basic 2D drawing entities, `3DFACE` meshes, and 3D polyline-style
+    wire curves
+  - writes `Drawing2` as ASCII DXF R2018
+  - `read_mesh` no longer converts line geometry into mesh faces
+- `cady.files.stl`
+  - writes ASCII or binary STL from meshable targets
+- `cady.files.step`
+  - writes mesh-oriented STEP output from meshable targets
+  - reads elementary STEP faces and extracts simple member data
+- `cady.files.utils.mesh_from_target`
+  - shared conversion boundary for `Mesh3`, `Body3`, `Part`, `Assembly`, and
+    meshable `Document` contents
+
+`files` modules should convert at the boundary and keep imports local when a
+dependency would violate convention tests.
+
+## View Layer
+
+`cady.view` is backend-independent until viewer helpers are requested. Its
+`__getattr__` lazily exposes Vispy helpers such as `view_scene`, `view_target`,
+`view_mesh`, `view_meshes`, `view_lines`, and `prepare_scene`.
+
+Do not import PyQt, Vispy, or OpenGL modules from core geometry/product/drawing
+code. User-facing `.view(...)` methods should late-import `open_target_view`.
+
+## Editing Recipes
+
+### Add or change a geometry value
+
+1. Edit the focused module under `src/cady/geometry/`.
+2. Keep the dataclass frozen and store tuple-backed immutable fields.
+3. Validate construction inputs immediately.
+4. Add `bounds()`, `points()`, `to_array(tolerance=...)`, `to_mesh(tolerance=...)`,
+   or transform/mirror helpers only where they make sense for that type.
+5. Put numeric work in `operations`, not in large inline domain methods.
+6. Update exports and focused tests.
+
+### Add or change a meshable body feature
+
+1. Add the feature record in `geometry/body3.py` only if it belongs to `Body3`
+   history.
+2. Add evaluation in `operations/_mesh_builders.py` or a focused mesh helper.
+3. Wire `_feature_to_mesh` and transform behavior.
+4. Add tests for successful meshing and unsupported paths.
+
+### Add an operation
+
+1. Place it in `src/cady/operations/`.
+2. Accept arrays, tuples, scalars, and operation-local types.
+3. Return arrays, tuples, operation-local containers, or semantic values only at
+   existing conversion points.
+4. Do not import authoring/application packages.
+
+### Add or change file output
+
+1. Keep public entry points in `src/cady/files/dxf.py`, `stl.py`, or `step.py`.
+2. Require or preserve explicit `tolerance` on public render/write functions.
+3. Add file-level regression tests under `tests/files/`.
+4. Check import boundary tests after changing module-scope imports.
+
+### Update docs or examples
+
+Use current suffixless names. Do not add new examples using `Line2D`, `Body3D`,
+`Drawing2D`, `line2d`, or similar old spelling unless the API itself changes.
+
+## Tests
+
+Run from the repository root:
 
 ```bash
-.venv/bin/pytest -q                         # all tests
-.venv/bin/pyright src/cady                   # type checking (strict mode)
-.venv/bin/ruff check src/cady tests          # linting
+.venv/bin/pytest -q
+.venv/bin/pyright src/cady
+.venv/bin/ruff check src/cady tests
 ```
 
-### Test layout
+Use `PYTHONPATH=src` for scripts:
 
-- `tests/geometry2/` — curve/profile construction, bounds, to_array
-- `tests/geometry3/` — body, face, frame, mesh, wireframe tests
-- `tests/drawing/` — Drawing2, dimensions, layers
-- `tests/product/` — Part, Assembly, flattening
-- `tests/view/` — Camera, lights, Scene, object view methods, viewer smoke tests
-- `tests/document/` — Document registry
-- `tests/numeric/` — numeric types, validation, mesh operations, transforms
-- `tests/files/` — DXF/STL/STEP I/O tests
-- `tests/examples/` — end-to-end example script regression tests
-- `tests/conventions/` — import boundary, stdlib-only, and removed-API enforcement tests
-- `tests/errors/` — error class behavior tests
+```bash
+PYTHONPATH=src .venv/bin/python examples/scripts/plate_with_hole.py
+```
 
-### Key conventions
+Test areas:
 
-- `PYTHONPATH=src` is required for running scripts
-- Conftest provides `run_pyright(path)` helper and `import_env` fixture
-- Golden files live in `tests/write/goldens/`
-- Temporary output uses `.dxf.tmp` / `.stl.tmp` patterns (gitignored)
+- `tests/geometry/`: geometry values, regions, body meshing, point clouds,
+  wireframes, linesplan behavior
+- `tests/operations/`: validation, transforms, mesh clipping/capping, sampling,
+  numeric mesh helpers
+- `tests/drawing/`: drawings, layers, dimensions, entities
+- `tests/product/`: parts, assemblies, flattening
+- `tests/view/`: scene model and viewer smoke coverage
+- `tests/files/`: DXF/STL/STEP facades
+- `tests/examples/`: example script regressions
+- `tests/conventions/`: import boundaries, runtime dependency allowlist,
+  removed API checks
 
-## File format support
+## Development Hygiene
 
-| Format | Write | Read | Notes |
-|--------|-------|------|-------|
-| DXF R2018 | `LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `TEXT` from `Drawing2` | 2D entities, `3DFACE` meshes, 3D polyline wires | Hatches, blocks, inserts, and dimensions modeled but not yet emitted |
-| STL binary | Full | No | From `Mesh3`, `ArrayMesh3`, `Body3`, `Part`, `Assembly`, or `Document` |
-| STL ASCII | Full | No | Same data, human-readable |
-| STEP AP214 | Mesh-oriented (points + `POLY_LOOP` faces) | Elementary surfaces and extruded member extraction | True B-rep solid export not yet implemented |
-
-## Public API
-
-Top-level re-exports from `cady`:
-
-- Factories: `line2`, `arc2`, `circle2`, `polyline2`, `profile_rectangle`, `profile_circle`, `box`, `cylinder`, `sphere`
-- 2D geometry: `Line2`, `Arc2`, `Spline2`, `Polyline2`, `ClosedPolyline2`, `Circle2`, `Ellipse2`, `Curve2`, `ClosedCurve2`, `Profile2`
-- 3D geometry: `Body3`, `Face3`, `Frame3`, `Mesh3`, `Wireframe3`
-- Drawing: `Drawing2`, `DrawingEntity`, `Layer`, `Text2`, `Hatch2`, `Insert2`, `BlockDefinition`, `DimStyle`, `LinearDimension2`, `AlignedDimension2`, `RadiusDimension2`, `DiameterDimension2`, `AngularDimension2`
-- Product: `Part`, `PartInstance`, `Assembly`, `AssemblyInstance`, `Material`
-- View: `Scene`, `SceneObject`, `Camera`, `Light`, `AmbientLight`, `DirectionalLight`, `PointLight`, `DisplayStyle`
-- Document: `Document`
-- Vectors: `Vec2`, `Vec3`, `Pose3`
-- Errors: `CadError`, `GeometryError`, `DrawingError`, `ProductError`, `ViewError`, `ReadError`, `WriteError`
-- Modules: `cady.files.dxf`, `cady.files.stl`, `cady.files.step`
-
-## Plans
-
-Design documents live in `.plans/`:
-
-- `.plans/polyline-to-mesh/` — closed polyline to mesh conversion
-
-## Viewing (optional)
-
-Install: `[project.optional-dependencies] view` brings in pyqt6 and vispy.
-`[project.optional-dependencies] all` includes plotting and view extras.
-
-Key functions in `cady.view`:
-
-- `view_target(target, *, tolerance, backend)` — view a `Body3`, `Part`, `Assembly`, `Mesh3`, `Wireframe3`, or `Drawing2`
-- `view_scene(scene, *, backend)` — view a `Scene` with its cameras, lights, and display styles
-- `view_mesh(mesh, *, backend)` — view an `ArrayMesh3`
-- `view_meshes(meshes, *, backend)` — view multiple `ArrayMesh3` values
-- `view_lines(vertices, edges, *, backend)` — view edge-only wireframe data
-- `prepare_scene(scene)` — prepare a `Scene` for rendering, returns `PreparedScene`
-- `scene_from_target(target, *, name)` — create a `Scene` from any viewable target
-
-The viewer helpers live in `cady.view`; backend GUI packages are imported only
-when a viewer function is launched.
+- Expect a dirty worktree during active refactors. Do not revert unrelated user
+  changes.
+- Prefer `rg` and targeted file reads over broad manual inspection.
+- Keep edits scoped. This project intentionally has small modules and explicit
+  boundaries.
+- If docs and code disagree, update docs toward source and tests rather than
+  bending code back toward stale docs.
+- Before finishing non-trivial code changes, run the narrow relevant tests plus
+  convention tests. For public API or architecture changes, run the full gates.

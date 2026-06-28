@@ -46,7 +46,7 @@ l = Line2D(Vec2(0.0, 0.0), Vec2(1.0, 0.0))
 l = line2d((0.0, 0.0), (1.0, 0.0))  # constructor helper
 l.bounds()      # (Vec2(0.0, 0.0), Vec2(1.0, 0.0))
 l.points()      # (Vec2(0.0, 0.0), Vec2(1.0, 0.0))
-l.to_array(tolerance=1e-3)  # ArrayPolyline2
+l.to_array(tolerance=1e-3)  # point array
 ```
 
 **`Arc2D(centre, radius, start_rad, end_rad)`** — circular arc. Angles in
@@ -71,7 +71,7 @@ from cady import Polyline2D, polyline2d
 
 p = polyline2d(((0.0, 0.0), (0.5, 0.3), (1.0, 0.0)))
 p.vertices     # tuple of 3 Vec2
-p.to_array(tolerance=1e-3)  # ArrayPolyline2(closed=False)
+p.to_array(tolerance=1e-3)  # point array
 ```
 
 **`Spline2D(control_points, closed=False)`** — cubic Bezier spline. Control
@@ -99,7 +99,7 @@ from cady import Circle2D, circle2d
 c = circle2d((0.5, 0.5), 1.0)
 c.centre       # Vec2(0.5, 0.5)
 c.radius       # 1.0
-c.to_array(tolerance=1e-3)  # ArrayPolygon2
+c.to_array(tolerance=1e-3)  # point array
 ```
 
 **`Ellipse2D(centre, radius_x, radius_y, rotation_rad=0.0)`** — ellipse with
@@ -111,55 +111,56 @@ from cady import Ellipse2D
 e = Ellipse2D((0.0, 0.0), 2.0, 1.0, rotation_rad=0.25)
 e.radius_x     # 2.0
 e.radius_y     # 1.0
-e.to_array(tolerance=1e-3)  # sampled polygon
+e.to_array(tolerance=1e-3)  # sampled closed polyline
 ```
 
-**`ClosedPolyline2D(vertices)`** — closed polygon boundary. At least three
-vertices. Duplicate start/end points are automatically deduplicated.
+**`Polyline2D(vertices, closed=True)`** — closed boundary path. At least three
+vertices are required when `closed=True`. Duplicate start/end points are
+automatically deduplicated.
 
 ```python
-from cady import ClosedPolyline2D, polyline2d
+from cady import Polyline2D, polyline2d
 
 p = polyline2d(((0.0, 0.0), (1.0, 0.0), (1.0, 0.6), (0.0, 0.6)), closed=True)
-# returns ClosedPolyline2D
+p.closed       # True
 p.vertices     # tuple of 4 Vec2 (deduplicated)
-p.to_array(tolerance=1e-3)  # ArrayPolygon2
+p.to_array(tolerance=1e-3)  # point array
 p.to_mesh(tolerance=1e-3)   # Mesh2D
 ```
 
 ### Mesh2D
 
 `Mesh2D(vertices, faces, edges=())` is a 2D triangle mesh. It is useful when a
-closed 2D boundary needs explicit triangle faces instead of an `ArrayPolygon2`.
+closed 2D boundary needs explicit triangle faces.
 
 ```python
-from cady import ClosedPolyline2D, Mesh2D
+from cady import Mesh2D, Polyline2D
 
-outline = ClosedPolyline2D(((0, 0), (1, 0), (1, 1), (0, 1)))
+outline = Polyline2D(((0, 0), (1, 0), (1, 1), (0, 1)), closed=True)
 mesh = outline.to_mesh(tolerance=1e-3)  # Mesh2D
 vertices, faces, edges = mesh.to_array(tolerance=1e-3)
 ```
 
-### Profiles
+### Regions
 
-`Profile2D(outer, holes=())` is a filled region. The outer boundary is a
+`Region2D(outer, holes=())` is a filled region. The outer boundary is a
 `ClosedCurve2D`; holes are a tuple of `ClosedCurve2D` values.
 
 ```python
-from cady import Profile2D, circle2d, profile_rectangle, profile_circle
+from cady import Region2D, circle2d, region_rectangle, region_circle
 
 # From an explicit boundary
-outline = profile_rectangle(1.0, 0.6)
+outline = region_rectangle(1.0, 0.6)
 hole = circle2d((0.5, 0.3), 0.12)
-profile = Profile2D(outline.outer, holes=(hole,))
+region = Region2D(outline.outer, holes=(hole,))
 
 # Convenience class methods
-rect = Profile2D.rectangle(width=1.0, height=0.6, origin=(0.0, 0.0))
-disc = Profile2D.circle(radius=0.5, centre=(0.0, 0.0))
+rect = Region2D.rectangle(width=1.0, height=0.6, origin=(0.0, 0.0))
+disc = Region2D.circle(radius=0.5, centre=(0.0, 0.0))
 
 # With multiple holes
-profile = Profile2D(
-    profile_rectangle(2.0, 1.0).outer,
+region = Region2D(
+    region_rectangle(2.0, 1.0).outer,
     holes=(
         circle2d((0.5, 0.5), 0.2),
         circle2d((1.5, 0.5), 0.15),
@@ -167,62 +168,96 @@ profile = Profile2D(
 )
 ```
 
-Profiles hold geometry that can be placed in 3D via `Face3D` or extruded via
-`Body3D.from_profile(profile).extrude(distance)`.
+Regions hold geometry that can be placed in 3D via `Region3D` or extruded via
+`Body3D.from_region(region).extrude(distance)`.
 
 ## 3D geometry
 
-### Frame3D
+### Plane3D
 
-`Frame3D(origin, x_axis, normal)` places local 2D coordinates in 3D space.
-Points in the frame are expressed as `origin + u * x_axis + v * y_axis` where
+`Plane3D(origin, x_axis, normal)` places local 2D coordinates in 3D space.
+Points in the plane are expressed as `origin + u * x_axis + v * y_axis` where
 `y_axis = normal × x_axis`. The x_axis is orthonormalised against normal on
 construction.
 
 ```python
-from cady import Frame3D, Vec3
+from cady import Plane3D, Vec3
 
 # Default: XY plane at origin
-frame = Frame3D.world_xy()
+plane = Plane3D.world_xy()
 
 # From a normal vector
-frame = Frame3D.from_normal(
+plane = Plane3D.from_normal(
     origin=Vec3(1.0, 0.0, 0.0),
     normal=Vec3(0.0, 1.0, 0.0),  # YZ plane
 )
-frame = Frame3D.from_normal(
+plane = Plane3D.from_normal(
     origin=(0.0, 0.0, 5.0),
     normal=(0.0, 0.0, 1.0),
     x_axis=(1.0, 0.0, 0.0),  # explicit x-axis hint
 )
 
 # Map 2D coordinates to 3D
-p3 = frame.point(u=0.5, v=0.3)  # Vec3 in world space
+p3 = plane.point(u=0.5, v=0.3)  # Vec3 in world space
 ```
 
-### Face3D
+### Surface3D
 
-`Face3D(profile, frame)` places a 2D profile into a 3D frame. The profile is
-any object with a `to_array(tolerance=...)` method (typically a `Profile2D`,
-`ClosedCurve2D`, or `ClosedPolyline2D`).
+`Surface3D` is a parametric surface defined by three scalar functions:
+`x(u, v)`, `y(u, v)`, and `z(u, v)`. It can evaluate points and normals.
 
 ```python
-from cady import Face3D, Profile2D
+from cady import Surface3D
 
-face = Face3D.from_profile(
-    Profile2D.rectangle(width=1.0, height=0.6),
+surface = Surface3D.parametric(
+    lambda u, v: u,
+    lambda u, v: v,
+    lambda u, v: u + v,
+)
+
+point = surface.point(0.5, 0.25)
+normal = surface.normal(0.5, 0.25)
+```
+
+Planes are still available as an analytic constructor:
+
+```python
+surface = Surface3D.plane(origin=(0.0, 0.0, 0.0), normal=(0.0, 0.0, 1.0))
+```
+
+### Region3D
+
+`Region3D(region, surface)` places a 2D region in the `(u, v)` parameter
+domain of a `Surface3D`. The region is any object with closed loops, typically
+a `Region2D`.
+
+```python
+from cady import Region3D, Region2D, Surface3D
+
+region3 = Region3D.from_region(
+    Region2D.rectangle(width=1.0, height=0.6),
+    surface=Surface3D.parametric(
+        lambda u, v: u,
+        lambda u, v: v,
+        lambda u, v: u + v,
+    ),
+)
+
+# Plane shortcut
+flat = Region3D.from_region(
+    Region2D.rectangle(width=1.0, height=0.6),
     origin=(0.0, 0.0, 0.0),
     normal=(0.0, 0.0, 1.0),
 )
 
 # From arbitrary 3D points
 pts = (Vec3(0,0,0), Vec3(1,0,0), Vec3(1,1,0), Vec3(0,1,0), Vec3(0.5,0.5,0.2))
-face3d = Face3D.from_points(pts)
+region3d = Region3D.from_points(pts)
 
 # Convex hull of 3D points
-hull = Face3D.convex_hull(pts)
+hull = Region3D.convex_hull(pts)
 
-mesh = face.to_mesh(tolerance=1e-3)  # Mesh3D
+mesh = region3.to_mesh(tolerance=1e-3)  # Mesh3D
 ```
 
 ### Body3D
@@ -235,8 +270,8 @@ evaluated lazily; call `to_mesh(tolerance=...)` to compute the triangle mesh.
 ```python
 from cady import Body3D
 
-# From a 2D profile with extrusion
-body = Body3D.from_profile(profile).extrude(0.04)
+# From a 2D region with extrusion
+body = Body3D.from_region(region).extrude(0.04)
 
 # Primitive constructors
 body = Body3D.box(width=1.0, depth=0.6, height=0.04)
@@ -252,15 +287,15 @@ body = box(width=1.0, depth=0.6, height=0.04)
 
 ```python
 body = Body3D(name="bracket")                       # empty body
-body = body.with_feature(ProfileFeature(profile, frame))  # add profile
-body = body.extrude(0.04)                           # extrude last profile
+body = body.with_feature(RegionFeature(region, plane))  # add region
+body = body.extrude(0.04)                           # extrude last region
 body = body.transformed(Transform3.translation(1, 0, 0))  # transform
 ```
 
-Feature types: `ProfileFeature`, `ExtrudeFeature`, `RevolveFeature`,
+Feature types: `RegionFeature`, `ExtrudeFeature`, `RevolveFeature`,
 `PrimitiveFeature`, `BooleanFeature`, `FilletFeature`, `ChamferFeature`.
 
-Currently evaluated features: profile extrusion, box/cylinder/sphere primitives.
+Currently evaluated features: region extrusion, box/cylinder/sphere primitives.
 Revolve, boolean, fillet, and chamfer record types exist but evaluation is not
 yet implemented (raises `NotImplementedError`).
 
@@ -292,8 +327,8 @@ mesh = Mesh3D(
 mesh.vertices          # tuple[Vec3, ...]
 mesh.faces             # tuple[tuple[int, int, int], ...]
 mesh.triangles         # tuple[tuple[Vec3, Vec3, Vec3], ...]
-mesh.boundary          # ArrayPolyline3 of boundary edges
-mesh.boundary_loops    # tuple of ArrayPolyline3, one per hole
+mesh.boundary          # (min point, max point)
+mesh.boundary_loops    # tuple of point arrays, one per hole
 
 # Bounds
 mesh.bounds()          # (Vec3 min, Vec3 max)
@@ -391,13 +426,13 @@ Layer colors are AutoCAD Color Index values (1–255). Supported linetypes:
 ### Geometry entities
 
 ```python
-from cady import line2d, circle2d, profile_rectangle
-profile = profile_rectangle(1.0, 0.6)
+from cady import line2d, circle2d, region_rectangle
+region = region_rectangle(1.0, 0.6)
 hole = circle2d((0.5, 0.3), 0.12)
 
 drawing = (
     drawing
-    .add(profile.outer, layer="PLATE")     # any curve
+    .add(region.outer, layer="PLATE")     # any curve
     .add(hole, layer="PLATE")
     .add(line2d((0.0, 0.0), (1.0, 0.0)), layer="PLATE")
 )
@@ -424,7 +459,7 @@ drawing = drawing.add_text(
 
 ```python
 drawing = drawing.hatch(
-    profile.outer,
+    region.outer,
     layer="PLATE",
     pattern="ANSI31",     # only pattern currently supported
     angle=45.0,

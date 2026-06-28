@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
-from cady.drawing._geometry import Bounds2, merge_bounds, point2, transformed_bounds
+from cady.drawing._geometry import Bounds2, Point2, merge_bounds, transformed_bounds
 from cady.drawing.dimensions import (
     AlignedDimension2,
     AngularDimension2,
@@ -113,13 +113,12 @@ class Drawing2:
         self,
         text: str,
         *,
-        at: object,
+        at: Point2,
         height: float,
         layer: str = "0",
         rotation: float = 0.0,
     ) -> Drawing2:
-        anchor = point2(at, name="text anchor")
-        return self.add_entity(Text2(text, anchor, height, layer, rotation))
+        return self.add_entity(Text2(text, at, height, layer, rotation))
 
     def hatch(
         self,
@@ -146,15 +145,14 @@ class Drawing2:
         self,
         name: str,
         *,
-        at: object,
+        at: Point2,
         layer: str = "0",
         scale: float = 1.0,
         rotation: float = 0.0,
     ) -> Drawing2:
         if self.block(name) is None:
             raise ValueError(f"unknown block: {name}")
-        insert_at = point2(at, name="insert point")
-        return self.add_entity(Insert2(name, insert_at, layer, scale, rotation))
+        return self.add_entity(Insert2(name, at, layer, scale, rotation))
 
     def with_dim_style(self, style: DimStyle) -> Drawing2:
         """Return a new drawing with an added dimension style."""
@@ -174,8 +172,8 @@ class Drawing2:
 
     def linear_dimension(
         self,
-        p1: object,
-        p2: object,
+        p1: Point2,
+        p2: Point2,
         *,
         offset: float,
         layer: str = "DIMENSIONS",
@@ -185,8 +183,8 @@ class Drawing2:
     ) -> Drawing2:
         return self.add_dimension(
             LinearDimension2(
-                point2(p1, name="dimension p1"),
-                point2(p2, name="dimension p2"),
+                p1,
+                p2,
                 offset,
                 layer,
                 text,
@@ -197,8 +195,8 @@ class Drawing2:
 
     def aligned_dimension(
         self,
-        p1: object,
-        p2: object,
+        p1: Point2,
+        p2: Point2,
         *,
         offset: float,
         layer: str = "DIMENSIONS",
@@ -208,8 +206,8 @@ class Drawing2:
     ) -> Drawing2:
         return self.add_dimension(
             AlignedDimension2(
-                point2(p1, name="dimension p1"),
-                point2(p2, name="dimension p2"),
+                p1,
+                p2,
                 offset,
                 layer,
                 text,
@@ -220,7 +218,7 @@ class Drawing2:
 
     def radius_dimension(
         self,
-        center: object,
+        center: Point2,
         radius: float,
         *,
         angle: float = 0.0,
@@ -231,7 +229,7 @@ class Drawing2:
     ) -> Drawing2:
         return self.add_dimension(
             RadiusDimension2(
-                point2(center, name="dimension center"),
+                center,
                 radius,
                 angle,
                 layer,
@@ -243,7 +241,7 @@ class Drawing2:
 
     def diameter_dimension(
         self,
-        center: object,
+        center: Point2,
         radius: float,
         *,
         angle: float = 0.0,
@@ -254,7 +252,7 @@ class Drawing2:
     ) -> Drawing2:
         return self.add_dimension(
             DiameterDimension2(
-                point2(center, name="dimension center"),
+                center,
                 radius,
                 angle,
                 layer,
@@ -266,9 +264,9 @@ class Drawing2:
 
     def angular_dimension(
         self,
-        center: object,
-        p1: object,
-        p2: object,
+        center: Point2,
+        p1: Point2,
+        p2: Point2,
         distance: float,
         *,
         layer: str = "DIMENSIONS",
@@ -278,9 +276,9 @@ class Drawing2:
     ) -> Drawing2:
         return self.add_dimension(
             AngularDimension2(
-                point2(center, name="angular dimension center"),
-                point2(p1, name="angular dimension p1"),
-                point2(p2, name="angular dimension p2"),
+                center,
+                p1,
+                p2,
                 distance,
                 layer,
                 text,

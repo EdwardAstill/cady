@@ -1,4 +1,6 @@
 import cady
+import cady.operations as operations
+import cady.operations.arrays as arrays
 from cady.files import dxf, step, stl
 
 
@@ -25,3 +27,9 @@ def test_removed_top_level_api_names_are_not_exported() -> None:
 def test_removed_file_facade_functions_are_absent() -> None:
     for module in (dxf, step, stl):
         assert not hasattr(module, "write_model")
+
+
+def test_array_mesh_wrapper_is_not_public_api() -> None:
+    assert not hasattr(arrays, "ArrayMesh3")
+    assert not hasattr(operations, "ArrayMesh3")
+    assert "ArrayMesh3" not in operations.__all__

@@ -71,3 +71,16 @@ def max_plane_deviation(
 ) -> float:
     """Return the maximum absolute distance of points from the plane."""
     return float(np.max(np.abs(np.dot(points - origin, normal))))
+
+
+def project_point_to_plane(
+    point: tuple[float, float, float],
+    distance: float,
+    normal: np.ndarray,
+) -> tuple[float, float, float]:
+    """Project a point along a plane normal by a signed distance."""
+    return (
+        point[0] - distance * float(normal[0]),
+        point[1] - distance * float(normal[1]),
+        point[2] - distance * float(normal[2]),
+    )

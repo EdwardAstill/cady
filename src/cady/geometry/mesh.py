@@ -1,28 +1,30 @@
-"""Semantic 3D triangle meshes and boundary extraction helpers."""
+"""Semantic 2D and 3D triangle meshes."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 import numpy as np
-from numpy.typing import NDArray
 
 from cady.errors import GeometryError
-from cady.operations.arrays3 import ArrayPolyline3
-from cady.operations.mesh_topology import (
+from cady.operations.meshes import (
     boundary_edges_from_faces,
     compact_mesh_data,
     project_point_to_plane,
     prune_dangling_edges,
 )
 from cady.operations.transforms import Transform3
-from cady.vec import Vec3, promote3
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
-    from cady.geometry.wireframe3 import Wireframe3
+    from cady.geometry.wireframe import Wireframe3
+    from cady.operations.arrays import PointArray2, PointArray3
+    from cady.operations.transforms import Transform2
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -32,15 +34,110 @@ EdgeIndex = tuple[int, int]
 
 
 @dataclass(frozen=True, slots=True)
-class Mesh3:
-    """Indexed 3D triangle mesh with optional explicit display edges."""
+class Mesh2:
+    """Indexed 2D triangle mesh used at numeric conversion boundaries."""
 
-    vertices: tuple[Vec3, ...]
+    vertices: tuple[Point2, ...]
     faces: tuple[FaceIndex, ...]
     edges: tuple[EdgeIndex, ...] = ()
 
     def __post_init__(self) -> None:
-        vertices = tuple(promote3(vertex) for vertex in self.vertices)
+        vertices = tuple(self.vertices)
+        faces = tuple(_face(face) for face in self.faces)
+        edges = tuple(_edge(edge) for edge in self.edges)
+        for face in faces:
+            if min(face) < 0:
+                raise ValueError("faces must not contain negative indices")
+            if vertices and max(face) >= len(vertices):
+                raise ValueError("faces reference vertices outside the vertex array")
+            if not vertices:
+                raise ValueError("empty meshes cannot contain faces")
+        for edge in edges:
+            if min(edge) < 0:
+                raise ValueError("edges must not contain negative indices")
+            if vertices and max(edge) >= len(vertices):
+                raise ValueError("edges reference vertices outside the vertex array")
+            if not vertices:
+                raise ValueError("empty meshes cannot contain edges")
+        object.__setattr__(self, "vertices", vertices)
+        object.__setattr__(self, "faces", faces)
+        object.__setattr__(self, "edges", edges)
+
+    @classmethod
+    def merged(cls, meshes: Iterable[Mesh2]) -> Mesh2:
+        vertices: list[Point2] = []
+        faces: list[FaceIndex] = []
+        edges: list[EdgeIndex] = []
+        offset = 0
+        for mesh in meshes:
+            vertices.extend(mesh.vertices)
+            faces.extend((a + offset, b + offset, c + offset) for a, b, c in mesh.faces)
+            edges.extend((a + offset, b + offset) for a, b in mesh.edges)
+            offset += len(mesh.vertices)
+        return cls(tuple(vertices), tuple(faces), tuple(edges))
+
+    @property
+    def triangles(self) -> tuple[tuple[Point2, Point2, Point2], ...]:
+        return tuple(
+            (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
+        )
+
+    @property
+    def boundary(self) -> tuple[Point2, Point2]:
+        return self.bounds()
+
+    @property
+    def boundary_loops(self) -> tuple[PointArray2, ...]:
+        if not self.faces:
+            raise GeometryError("mesh has no faces; boundary is undefined")
+        return tuple(
+            _polyline2_from_loop(self.vertices, loop)
+            for loop in _boundary_loops(_boundary_halfedges(self.faces))
+        )
+
+    def to_array(self, *, tolerance: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        _validate_tolerance(tolerance)
+        vertices = np.array(self.vertices, dtype=np.float64)
+        faces = np.array(self.faces, dtype=np.int64)
+        edges = np.array(self.edges, dtype=np.int64)
+        if len(vertices) == 0:
+            vertices = np.empty((0, 2), dtype=np.float64)
+        if len(faces) == 0:
+            faces = np.empty((0, 3), dtype=np.int64)
+        if len(edges) == 0:
+            edges = np.empty((0, 2), dtype=np.int64)
+        return vertices, faces, edges
+
+    def transformed(self, transform: Transform2) -> Mesh2:
+        array = transform.apply_points(self.vertices)
+        vertices = tuple((float(x), float(y)) for x, y in array)
+        return Mesh2(vertices, self.faces, self.edges)
+
+    def bounds(self) -> tuple[Point2, Point2]:
+        if not self.vertices:
+            raise ValueError("cannot calculate bounds for an empty mesh")
+        return (
+            (
+                min(vertex[0] for vertex in self.vertices),
+                min(vertex[1] for vertex in self.vertices),
+            ),
+            (
+                max(vertex[0] for vertex in self.vertices),
+                max(vertex[1] for vertex in self.vertices),
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Mesh3:
+    """Indexed 3D triangle mesh with optional explicit display edges."""
+
+    vertices: tuple[Point3, ...]
+    faces: tuple[FaceIndex, ...]
+    edges: tuple[EdgeIndex, ...] = ()
+
+    def __post_init__(self) -> None:
+        vertices = tuple(self.vertices)
         faces = tuple(_face(face) for face in self.faces)
         edges = tuple(_edge(edge) for edge in self.edges)
         for face in faces:
@@ -63,7 +160,7 @@ class Mesh3:
 
     @classmethod
     def merged(cls, meshes: Iterable[Mesh3]) -> Mesh3:
-        vertices: list[Vec3] = []
+        vertices: list[Point3] = []
         faces: list[FaceIndex] = []
         edges: list[EdgeIndex] = []
         offset = 0
@@ -75,26 +172,17 @@ class Mesh3:
         return cls(tuple(vertices), tuple(faces), tuple(edges))
 
     @property
-    def triangles(self) -> tuple[tuple[Vec3, Vec3, Vec3], ...]:
+    def triangles(self) -> tuple[tuple[Point3, Point3, Point3], ...]:
         return tuple(
             (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
         )
 
     @property
-    def boundary(self) -> ArrayPolyline3:
-        if not self.faces:
-            raise GeometryError("mesh has no faces; boundary is undefined")
-        loops = self.boundary_loops
-        if not loops:
-            raise GeometryError("mesh is closed; no boundary")
-        if len(loops) != 1:
-            raise GeometryError(
-                f"mesh has {len(loops)} boundary loops; boundary requires exactly one"
-            )
-        return loops[0]
+    def boundary(self) -> tuple[Point3, Point3]:
+        return self.bounds()
 
     @property
-    def boundary_loops(self) -> tuple[ArrayPolyline3, ...]:
+    def boundary_loops(self) -> tuple[PointArray3, ...]:
         if not self.faces:
             raise GeometryError("mesh has no faces; boundary is undefined")
         return tuple(
@@ -104,7 +192,7 @@ class Mesh3:
 
     def to_array(self, *, tolerance: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         _validate_tolerance(tolerance)
-        vertices = np.array([vertex.tuple() for vertex in self.vertices], dtype=np.float64)
+        vertices = np.array(self.vertices, dtype=np.float64)
         faces = np.array(self.faces, dtype=np.int64)
         edges = np.array(self.edges, dtype=np.int64)
         if len(vertices) == 0:
@@ -116,27 +204,27 @@ class Mesh3:
         return vertices, faces, edges
 
     def transformed(self, transform: Transform3) -> Mesh3:
-        array = transform.apply_points([vertex.tuple() for vertex in self.vertices])
-        vertices = tuple(Vec3(float(x), float(y), float(z)) for x, y, z in array)
+        array = transform.apply_points(self.vertices)
+        vertices = tuple((float(x), float(y), float(z)) for x, y, z in array)
         return Mesh3(vertices, self.faces, self.edges)
 
     def mirror(self, plane_origin: object, plane_normal: object) -> Mesh3:
         mirrored = self.transformed(Transform3.mirror(plane_origin, plane_normal))
         return Mesh3(mirrored.vertices, _reverse_face_winding(self.faces), self.edges)
 
-    def bounds(self) -> tuple[Vec3, Vec3]:
+    def bounds(self) -> tuple[Point3, Point3]:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty mesh")
         return (
-            Vec3(
-                min(vertex.x for vertex in self.vertices),
-                min(vertex.y for vertex in self.vertices),
-                min(vertex.z for vertex in self.vertices),
+            (
+                min(vertex[0] for vertex in self.vertices),
+                min(vertex[1] for vertex in self.vertices),
+                min(vertex[2] for vertex in self.vertices),
             ),
-            Vec3(
-                max(vertex.x for vertex in self.vertices),
-                max(vertex.y for vertex in self.vertices),
-                max(vertex.z for vertex in self.vertices),
+            (
+                max(vertex[0] for vertex in self.vertices),
+                max(vertex[1] for vertex in self.vertices),
+                max(vertex[2] for vertex in self.vertices),
             ),
         )
 
@@ -162,23 +250,20 @@ class Mesh3:
         originals stay connected, creating thin gaps that ``close_boundary``
         can fill.
         """
-        from cady.operations.mesh_caps import close_planar_cap
+        from cady.operations.meshes import close_planar_cap
 
         _validate_tolerance(tolerance)
         if snap_tolerance is not None and snap_tolerance <= 0.0:
             raise ValueError("snap_tolerance must be positive")
         vertices, faces, edges = self.to_array(tolerance=tolerance)
-        capped_vertices, capped_faces, capped_edges = cast(
-            tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.int64]],
-            close_planar_cap(
-                vertices,
-                faces,
-                edges,
-                plane_origin,
-                plane_normal,
-                tolerance=tolerance,
-                snap_tolerance=snap_tolerance,
-            ),
+        capped_vertices, capped_faces, capped_edges = close_planar_cap(
+            vertices,
+            faces,
+            edges,
+            plane_origin,
+            plane_normal,
+            tolerance=tolerance,
+            snap_tolerance=snap_tolerance,
         )
         return _mesh_from_arrays(capped_vertices, capped_faces, capped_edges)
 
@@ -197,7 +282,7 @@ class Mesh3:
         generated.
         """
         from cady.errors import GeometryError
-        from cady.operations.planes import unit3, vector3
+        from cady.operations.projections import unit3, vector3
 
         _validate_tolerance(tolerance)
         if max_distance <= 0.0:
@@ -210,8 +295,8 @@ class Mesh3:
 
         near_edges: list[tuple[int, int, float, float]] = []
         for a, b in live_edges:
-            va = np.array(self.vertices[a].tuple(), dtype=np.float64)
-            vb = np.array(self.vertices[b].tuple(), dtype=np.float64)
+            va = np.array(self.vertices[a], dtype=np.float64)
+            vb = np.array(self.vertices[b], dtype=np.float64)
             dist_a = float(np.dot(va - origin_np, normal_np))
             dist_b = float(np.dot(vb - origin_np, normal_np))
             if abs(dist_a) <= max_distance and abs(dist_b) <= max_distance:
@@ -225,17 +310,19 @@ class Mesh3:
 
         for a, b, dist_a, dist_b in near_edges:
             if a not in projected_index:
-                projected = Vec3(
-                    *project_point_to_plane(self.vertices[a].tuple(), dist_a, normal_np)
+                projected = tuple(
+                    float(value)
+                    for value in project_point_to_plane(self.vertices[a], dist_a, normal_np)
                 )
                 projected_index[a] = len(all_vertices)
-                all_vertices.append(projected)
+                all_vertices.append(cast(Point3, projected))
             if b not in projected_index:
-                projected = Vec3(
-                    *project_point_to_plane(self.vertices[b].tuple(), dist_b, normal_np)
+                projected = tuple(
+                    float(value)
+                    for value in project_point_to_plane(self.vertices[b], dist_b, normal_np)
                 )
                 projected_index[b] = len(all_vertices)
-                all_vertices.append(projected)
+                all_vertices.append(cast(Point3, projected))
 
         wall_faces: list[FaceIndex] = []
         for a, b, _, _ in near_edges:
@@ -246,12 +333,12 @@ class Mesh3:
 
         display_edges = live_edges if self.edges else ()
         compact_vertices, compact_faces, compact_edges = compact_mesh_data(
-            tuple(vertex.tuple() for vertex in all_vertices),
+            tuple(all_vertices),
             self.faces + tuple(wall_faces),
             display_edges,
         )
         return Mesh3(
-            tuple(Vec3(x, y, z) for x, y, z in compact_vertices),
+            tuple((float(x), float(y), float(z)) for x, y, z in compact_vertices),
             compact_faces,
             compact_edges,
         )
@@ -269,18 +356,15 @@ class Mesh3:
 
         Raises ``ValueError`` if any boundary loop is non-planar.
         """
-        from cady.operations.mesh_caps import close_boundary as _close_boundary_ops
+        from cady.operations.meshes import close_boundary as _close_boundary_ops
 
         _validate_tolerance(tolerance)
         vertices, faces, edges = self.to_array(tolerance=tolerance)
-        closed_vertices, closed_faces, closed_edges = cast(
-            tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.int64]],
-            _close_boundary_ops(
-                vertices,
-                faces,
-                edges,
-                tolerance=tolerance,
-            ),
+        closed_vertices, closed_faces, closed_edges = _close_boundary_ops(
+            vertices,
+            faces,
+            edges,
+            tolerance=tolerance,
         )
         return _mesh_from_arrays(closed_vertices, closed_faces, closed_edges)
 
@@ -300,13 +384,13 @@ class Mesh3:
 
     def to_wireframe(self) -> Wireframe3:
         """Extract all edges from faces as a Wireframe3."""
-        from cady.geometry.wireframe3 import Wireframe3 as WF
+        from cady.geometry.wireframe import Wireframe3 as WF
 
         edge_set: set[tuple[int, int]] = set()
         for a, b, c in self.faces:
             for start, end in ((a, b), (b, c), (c, a)):
                 edge_set.add((min(start, end), max(start, end)))
-        return WF(self.vertices, tuple(sorted(edge_set)))
+        return WF.from_edges(self.vertices, tuple(sorted(edge_set)))
 
     def view(
         self,
@@ -344,7 +428,7 @@ def _mesh_from_arrays(
     faces: np.ndarray,
     edges: np.ndarray | None = None,
 ) -> Mesh3:
-    vertex_values = tuple(Vec3(float(x), float(y), float(z)) for x, y, z in vertices)
+    vertex_values = tuple((float(x), float(y), float(z)) for x, y, z in vertices)
     face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
     edge_values: tuple[EdgeIndex, ...] = ()
     if edges is not None:
@@ -427,12 +511,16 @@ def _boundary_loops(halfedges: list[tuple[int, int]]) -> list[list[int]]:
     return sorted(loops, key=lambda loop: (-len(loop), loop))
 
 
-def _polyline_from_loop(vertices: tuple[Vec3, ...], loop: list[int]) -> ArrayPolyline3:
-    loop_vertices = np.array(
-        [vertices[index].tuple() for index in loop + [loop[0]]],
-        dtype=np.float64,
-    )
-    return ArrayPolyline3(loop_vertices)
+def _polyline_from_loop(vertices: tuple[Point3, ...], loop: list[int]) -> PointArray3:
+    from cady.operations.arrays import as_points3
+
+    return as_points3([vertices[index] for index in loop + [loop[0]]], name="vertices")
+
+
+def _polyline2_from_loop(vertices: tuple[Point2, ...], loop: list[int]) -> PointArray2:
+    from cady.operations.arrays import as_points2
+
+    return as_points2([vertices[index] for index in loop + [loop[0]]], name="vertices")
 
 
 def _validate_tolerance(tolerance: float) -> None:

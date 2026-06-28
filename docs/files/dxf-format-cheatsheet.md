@@ -164,7 +164,7 @@ The parser walks entity chunks in the `ENTITIES` section.
 Supported 2D entities:
 
 - `LINE` -> `Line2D`
-- `LWPOLYLINE` -> `Polyline2D` or `ClosedPolyline2D`
+- `LWPOLYLINE` -> `Polyline2D` with `closed` set from DXF flags
 - `CIRCLE` -> `Circle2D`
 - `ARC` -> `Arc2D`
 - `TEXT` / `MTEXT` -> `Text2D`
@@ -172,7 +172,7 @@ Supported 2D entities:
 Supported 3D imports:
 
 - `3DFACE` -> `Mesh3D`
-- 3D `POLYLINE` vertex sequences -> wire tuples of `Vec3`
+- 3D `POLYLINE` vertex sequences -> wire tuples of `(x, y, z)` coordinates
 
 Unsupported ACIS-backed entities such as `3DSOLID`, `BODY`, `REGION`, and
 `SURFACE` are returned as skipped records. The parser does not attempt to
@@ -235,7 +235,7 @@ z
 SEQEND
 ```
 
-The reader returns supported wires as `tuple[Vec3, ...]` values in
+The reader returns supported wires as `tuple[tuple[float, float, float], ...]` values in
 `DxfImportResult.wires`.
 
 ## Units and versions

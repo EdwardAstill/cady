@@ -7,9 +7,9 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, cast
 
-from cady.geometry.frame3 import Frame3, Point3Like
-from cady.geometry.mesh3 import Mesh3
-from cady.operations._mesh_builders import (
+from cady.geometry.mesh import Mesh3
+from cady.geometry.plane3 import Plane3
+from cady.operations.meshes import (
     box_mesh,
     cylinder_mesh,
     extrusion_mesh,
@@ -17,7 +17,8 @@ from cady.operations._mesh_builders import (
 )
 from cady.operations.transforms import Transform3
 from cady.utils import finite, positive
-from cady.vec import Vec3, promote3
+
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
     from cady.view import Camera, DisplayStyle, Light
@@ -35,19 +36,19 @@ class Feature(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class ProfileFeature:
-    """Stored source profile placed in a 3D frame."""
+class RegionFeature:
+    """Stored source region placed in a 3D plane."""
 
-    profile: object
-    frame: Frame3
+    region: object
+    plane: Plane3
 
 
 @dataclass(frozen=True, slots=True)
 class ExtrudeFeature:
-    """Linear sweep of a profile along its frame normal."""
+    """Linear sweep of a region along its plane normal."""
 
-    profile: object
-    frame: Frame3
+    region: object
+    plane: Plane3
     distance: float
 
     def __post_init__(self) -> None:
@@ -59,10 +60,10 @@ class ExtrudeFeature:
 
 @dataclass(frozen=True, slots=True)
 class RevolveFeature:
-    """Angular sweep of a profile around its local frame axis."""
+    """Angular sweep of a region around its local plane axis."""
 
-    profile: object
-    frame: Frame3
+    region: object
+    plane: Plane3
     angle: float
 
     def __post_init__(self) -> None:
@@ -78,7 +79,7 @@ class PrimitiveFeature:
 
     kind: PrimitiveKind
     parameters: Mapping[str, float]
-    frame: Frame3
+    plane: Plane3
 
     def __post_init__(self) -> None:
         if self.kind not in {"box", "cylinder", "sphere", "cone"}:
@@ -136,13 +137,13 @@ class Body3:
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     @classmethod
-    def from_profile(
+    def from_region(
         cls,
-        profile: object,
+        region: object,
         *,
-        frame: Frame3 | None = None,
+        plane: Plane3 | None = None,
     ) -> Body3:
-        return cls(features=(ProfileFeature(profile, frame or Frame3.world_xy()),))
+        return cls(features=(RegionFeature(region, plane or Plane3.world_xy()),))
 
     @classmethod
     def box(
@@ -151,14 +152,14 @@ class Body3:
         width: float,
         depth: float,
         height: float,
-        frame: Frame3 | None = None,
+        plane: Plane3 | None = None,
     ) -> Body3:
         return cls(
             features=(
                 PrimitiveFeature(
                     "box",
                     {"width": width, "depth": depth, "height": height},
-                    frame or Frame3.world_xy(),
+                    plane or Plane3.world_xy(),
                 ),
             )
         )
@@ -169,14 +170,14 @@ class Body3:
         *,
         radius: float,
         height: float,
-        frame: Frame3 | None = None,
+        plane: Plane3 | None = None,
     ) -> Body3:
         return cls(
             features=(
                 PrimitiveFeature(
                     "cylinder",
                     {"radius": radius, "height": height},
-                    frame or Frame3.world_xy(),
+                    plane or Plane3.world_xy(),
                 ),
             )
         )
@@ -186,14 +187,14 @@ class Body3:
         cls,
         *,
         radius: float,
-        centre: Point3Like = (0.0, 0.0, 0.0),
+        centre: Point3 = (0.0, 0.0, 0.0),
     ) -> Body3:
         return cls(
             features=(
                 PrimitiveFeature(
                     "sphere",
                     {"radius": radius},
-                    Frame3.from_normal(promote3(centre), Vec3(0.0, 0.0, 1.0)),
+                    Plane3.from_normal(centre, (0.0, 0.0, 1.0)),
                 ),
             )
         )
@@ -202,22 +203,22 @@ class Body3:
         self,
         distance: float,
         *,
-        profile: object | None = None,
-        frame: Frame3 | None = None,
+        region: object | None = None,
+        plane: Plane3 | None = None,
     ) -> Body3:
-        if profile is None:
-            profile_feature = self._last_profile_feature()
-            resolved_profile = profile_feature.profile
-            resolved_frame = frame or profile_feature.frame
+        if region is None:
+            region_feature = self._last_region_feature()
+            resolved_region = region_feature.region
+            resolved_plane = plane or region_feature.plane
         else:
-            resolved_profile = profile
-            resolved_frame = frame or Frame3.world_xy()
+            resolved_region = region
+            resolved_plane = plane or Plane3.world_xy()
         features = tuple(
-            feature for feature in self.features if not isinstance(feature, ProfileFeature)
+            feature for feature in self.features if not isinstance(feature, RegionFeature)
         )
         return replace(
             self,
-            features=(*features, ExtrudeFeature(resolved_profile, resolved_frame, distance)),
+            features=(*features, ExtrudeFeature(resolved_region, resolved_plane, distance)),
         )
 
     def with_feature(self, feature: Feature) -> Body3:
@@ -269,43 +270,43 @@ class Body3:
             tolerance=tolerance,
         )
 
-    def _last_profile_feature(self) -> ProfileFeature:
+    def _last_region_feature(self) -> RegionFeature:
         for feature in reversed(self.features):
-            if isinstance(feature, ProfileFeature):
+            if isinstance(feature, RegionFeature):
                 return feature
-        raise ValueError("profile is required when body has no stored profile")
+        raise ValueError("region is required when body has no stored region")
 
 
 def _primitive_to_mesh(feature: PrimitiveFeature, *, tolerance: float) -> Mesh3:
     parameters = feature.parameters
     if feature.kind == "box":
         return box_mesh(
-            feature.frame,
+            feature.plane,
             width=parameters["width"],
             depth=parameters["depth"],
             height=parameters["height"],
         )
     if feature.kind == "cylinder":
         return cylinder_mesh(
-            feature.frame,
+            feature.plane,
             radius=parameters["radius"],
             height=parameters["height"],
             tolerance=tolerance,
         )
     if feature.kind == "sphere":
-        return sphere_mesh(feature.frame, radius=parameters["radius"], tolerance=tolerance)
+        return sphere_mesh(feature.plane, radius=parameters["radius"], tolerance=tolerance)
     raise NotImplementedError(f"{feature.kind} primitive evaluation is not implemented")
 
 
-def _profile_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3 | None:
+def _region_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3 | None:
     return None
 
 
 def _extrude_feature_to_mesh(feature: Feature, tolerance: float) -> Mesh3:
     extrude = cast(ExtrudeFeature, feature)
     return extrusion_mesh(
-        extrude.profile,
-        extrude.frame,
+        extrude.region,
+        extrude.plane,
         distance=extrude.distance,
         tolerance=tolerance,
     )
@@ -330,12 +331,12 @@ def _feature_to_mesh(feature: Feature, *, tolerance: float) -> Mesh3 | None:
     return evaluator(feature, tolerance)
 
 
-def _transform_feature_frame(feature: Feature, transform: Transform3) -> Feature:
-    framed_feature = cast(
-        ProfileFeature | ExtrudeFeature | PrimitiveFeature | RevolveFeature,
+def _transform_feature_plane(feature: Feature, transform: Transform3) -> Feature:
+    plane_feature = cast(
+        RegionFeature | ExtrudeFeature | PrimitiveFeature | RevolveFeature,
         feature,
     )
-    return replace(framed_feature, frame=framed_feature.frame.transformed(transform))
+    return replace(plane_feature, plane=plane_feature.plane.transformed(transform))
 
 
 def _transform_feature(feature: Feature, transform: Transform3) -> Feature:
@@ -347,7 +348,7 @@ def _transform_feature(feature: Feature, transform: Transform3) -> Feature:
 
 _FEATURE_MESH_EVALUATORS: Mapping[type[object], MeshEvaluator] = MappingProxyType(
     {
-        ProfileFeature: _profile_feature_to_mesh,
+        RegionFeature: _region_feature_to_mesh,
         PrimitiveFeature: lambda feature, tolerance: _primitive_to_mesh(
             cast(PrimitiveFeature, feature),
             tolerance=tolerance,
@@ -363,9 +364,9 @@ _FEATURE_MESH_EVALUATORS: Mapping[type[object], MeshEvaluator] = MappingProxyTyp
 
 _FEATURE_TRANSFORMERS: Mapping[type[object], TransformEvaluator] = MappingProxyType(
     {
-        ProfileFeature: _transform_feature_frame,
-        ExtrudeFeature: _transform_feature_frame,
-        PrimitiveFeature: _transform_feature_frame,
-        RevolveFeature: _transform_feature_frame,
+        RegionFeature: _transform_feature_plane,
+        ExtrudeFeature: _transform_feature_plane,
+        PrimitiveFeature: _transform_feature_plane,
+        RevolveFeature: _transform_feature_plane,
     }
 )

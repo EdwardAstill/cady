@@ -19,12 +19,12 @@ text = dxf.render(drawing, tolerance=1e-3)
 Current DXF output emits:
 
 - `LINE` from `Line2D`;
-- `LWPOLYLINE` from `Polyline2D` and `ClosedPolyline2D`;
+- `LWPOLYLINE` from open and closed `Polyline2D`;
 - `CIRCLE` from `Circle2D`;
 - `ARC` from `Arc2D`;
 - `TEXT` from `Text2D`;
 - layer table records for drawing layers;
-- sampled closed polylines for other profile-like objects that expose
+- sampled closed polylines for other region-like objects that expose
   `to_array(tolerance=...)`.
 
 The drawing object can model hatches, blocks, inserts, and dimensions, but the

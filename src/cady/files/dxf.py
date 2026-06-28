@@ -6,15 +6,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import degrees, radians
 from pathlib import Path
-from typing import cast
+from typing import TypeAlias, cast
 
 from cady.drawing import Drawing2, DrawingEntity, Text2
 from cady.errors import ReadError, WriteError
-from cady.geometry import Arc2, Circle2, ClosedPolyline2, Line2, Mesh3, Polyline2, Wireframe3
-from cady.operations.section_loft import loft_section_polylines
-from cady.vec import Vec2, Vec3
+from cady.geometry import Arc2, Circle2, Line2, Mesh3, Polyline2, Wireframe3
+from cady.operations.meshes import loft_section_polylines
 
-Point2 = tuple[float, float]
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +41,7 @@ class DxfImportResult:
 class DxfWireCurve:
     """Wire-like DXF entity normalised to vertices and indexed edges."""
 
-    vertices: tuple[Vec3, ...]
+    vertices: tuple[Point3, ...]
     edges: tuple[tuple[int, int], ...]
     layer: str
     entity_type: str
@@ -49,15 +49,15 @@ class DxfWireCurve:
 
     @property
     def constant_x(self) -> bool:
-        return _is_constant(tuple(point.x for point in self.vertices))
+        return _is_constant(tuple(point[0] for point in self.vertices))
 
     @property
     def constant_y(self) -> bool:
-        return _is_constant(tuple(point.y for point in self.vertices))
+        return _is_constant(tuple(point[1] for point in self.vertices))
 
     @property
     def constant_z(self) -> bool:
-        return _is_constant(tuple(point.z for point in self.vertices))
+        return _is_constant(tuple(point[2] for point in self.vertices))
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,14 +128,14 @@ def read_wireframe(path: str | Path) -> Wireframe3:
 
 
 def _merge_wireframes(wireframes: Iterable[Wireframe3]) -> Wireframe3:
-    vertices: list[Vec3] = []
+    vertices: list[Point3] = []
     edges: list[tuple[int, int]] = []
     offset = 0
     for wf in wireframes:
         vertices.extend(wf.vertices)
         edges.extend((a + offset, b + offset) for a, b in wf.edges)
         offset += len(wf.vertices)
-    return Wireframe3(tuple(vertices), tuple(edges))
+    return Wireframe3.from_edges(tuple(vertices), tuple(edges))
 
 
 def _line_mesh_requested(
@@ -213,7 +213,7 @@ def _loft_section_wireframes_to_mesh(
 ) -> Mesh3 | None:
     loft_mesh = loft_section_polylines(
         (
-            tuple(point.tuple() for point in wireframe.vertices)
+            tuple(wireframe.vertices)
             for wireframe in wireframes
         ),
         tolerance=tolerance,
@@ -221,7 +221,7 @@ def _loft_section_wireframes_to_mesh(
     if loft_mesh is None:
         return None
     return Mesh3(
-        tuple(Vec3(x, y, z) for x, y, z in loft_mesh.vertices),
+        tuple((float(x), float(y), float(z)) for x, y, z in loft_mesh.vertices),
         loft_mesh.faces,
         loft_mesh.edges,
     )
@@ -328,18 +328,16 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "8",
             layer,
             "10",
-            _f(geometry.start.x),
+            _f(geometry.start[0]),
             "20",
-            _f(geometry.start.y),
+            _f(geometry.start[1]),
             "11",
-            _f(geometry.end.x),
+            _f(geometry.end[0]),
             "21",
-            _f(geometry.end.y),
+            _f(geometry.end[1]),
         ]
-    if isinstance(geometry, Polyline2 | ClosedPolyline2):
-        vertices = geometry.vertices
-        closed = isinstance(geometry, ClosedPolyline2)
-        return _lwpolyline_lines(vertices, layer, closed=closed)
+    if isinstance(geometry, Polyline2):
+        return _lwpolyline_lines(geometry.vertices, layer, closed=geometry.closed)
     if isinstance(geometry, Circle2):
         return [
             "0",
@@ -347,9 +345,9 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "8",
             layer,
             "10",
-            _f(geometry.centre.x),
+            _f(geometry.centre[0]),
             "20",
-            _f(geometry.centre.y),
+            _f(geometry.centre[1]),
             "40",
             _f(geometry.radius),
         ]
@@ -360,9 +358,9 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "8",
             layer,
             "10",
-            _f(geometry.centre.x),
+            _f(geometry.centre[0]),
             "20",
-            _f(geometry.centre.y),
+            _f(geometry.centre[1]),
             "40",
             _f(geometry.radius),
             "50",
@@ -372,9 +370,10 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
         ]
     to_array = getattr(geometry, "to_array", None)
     if callable(to_array):
-        polygon = to_array(tolerance=tolerance)
-        outer = _point2_sequence(getattr(polygon, "outer", ()))
-        return _lwpolyline_lines(outer, layer, closed=True)
+        polyline = to_array(tolerance=tolerance)
+        vertices = _point2_sequence(getattr(polyline, "vertices", ()))
+        closed = bool(getattr(polyline, "closed", False))
+        return _lwpolyline_lines(vertices, layer, closed=closed)
     return []
 
 
@@ -418,7 +417,7 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2:
             points = _lwpolyline_points(chunk)
             if len(points) >= 2:
                 closed = bool(_int(chunk, 70, 0) & 1)
-                geometry = ClosedPolyline2(points) if closed else Polyline2(points)
+                geometry = Polyline2(points, closed=closed)
                 drawing = drawing.add(geometry, layer=layer)
         elif entity_type == "CIRCLE":
             drawing = drawing.add(
@@ -465,7 +464,7 @@ def _parse_meshes(
         if entity_type == "3DFACE":
             meshes.append(_mesh_from_3dface(chunk))
         elif entity_type == "POLYLINE":
-            vertices: list[Vec3] = []
+            vertices: list[Point3] = []
             layer = _string(chunk, 8, None)
             index += 1
             # POLYLINE owns a run of VERTEX records terminated by SEQEND.
@@ -484,7 +483,7 @@ def _parse_meshes(
                     len(curves),
                 )
                 curves.append(curve)
-                wireframes.append(Wireframe3(curve.vertices, curve.edges))
+                wireframes.append(Wireframe3.from_edges(curve.vertices, curve.edges))
             else:
                 skipped.append(
                     DxfSkippedEntity(
@@ -596,11 +595,11 @@ def _lwpolyline_points(chunk: tuple[_Pair, ...]) -> tuple[tuple[float, float], .
     return tuple(points)
 
 
-def _vec3(chunk: tuple[_Pair, ...], x: int, y: int, z: int) -> Vec3:
-    return Vec3(_float(chunk, x), _float(chunk, y), _float(chunk, z, 0.0))
+def _vec3(chunk: tuple[_Pair, ...], x: int, y: int, z: int) -> Point3:
+    return (_float(chunk, x), _float(chunk, y), _float(chunk, z, 0.0))
 
 
-def _maybe_vec3(chunk: tuple[_Pair, ...], x: int, y: int, z: int) -> Vec3 | None:
+def _maybe_vec3(chunk: tuple[_Pair, ...], x: int, y: int, z: int) -> Point3 | None:
     if _maybe_float(chunk, x) is None or _maybe_float(chunk, y) is None:
         return None
     return _vec3(chunk, x, y, z)
@@ -639,8 +638,6 @@ def _point2_sequence(values: object) -> tuple[Point2, ...]:
 
 
 def _point2(value: object) -> Point2:
-    if isinstance(value, Vec2):
-        return (value.x, value.y)
     try:
         raw = tuple(cast(Iterable[object], value))
     except (TypeError, ValueError) as exc:

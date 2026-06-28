@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cady.geometry import Mesh3
-from cady.operations.linesplan import (
+from cady.operations.meshes import (
     LinesplanCurve,
     classify_linesplan_curves,
     mesh_linesplan_network,
@@ -31,7 +31,7 @@ def test_mesh_linesplan_network_builds_section_loft_without_source_overlay_edges
     assert len(mesh.vertices) == 9
     assert len(mesh.faces) == 8
     assert len(mesh.edges) == 12
-    assert mesh.bounds()[1].x == 4.0
+    assert mesh.bounds()[1][0] == 4.0
     face_edges = set()
     for a, b, c in mesh.faces:
         for start, end in ((a, b), (b, c), (c, a)):
@@ -65,8 +65,8 @@ def test_mesh_linesplan_network_adds_guide_derived_sample_columns() -> None:
 
     assert len(mesh.vertices) == 6
     assert len(mesh.faces) == 4
-    assert (0.0, 1.0, 1.0) in [vertex.tuple() for vertex in mesh.vertices]
-    assert (2.0, 1.0, 1.0) in [vertex.tuple() for vertex in mesh.vertices]
+    assert (0.0, 1.0, 1.0) in [vertex for vertex in mesh.vertices]
+    assert (2.0, 1.0, 1.0) in [vertex for vertex in mesh.vertices]
 
 
 def test_mesh_linesplan_network_merges_same_station_fragments() -> None:
@@ -102,8 +102,8 @@ def test_mesh_linesplan_network_merges_same_station_fragments() -> None:
 
     assert len(mesh.vertices) == 9
     assert len(mesh.faces) == 8
-    assert max(vertex.y for vertex in mesh.vertices) == 2.0
-    assert max(vertex.z for vertex in mesh.vertices) == 2.0
+    assert max(vertex[1] for vertex in mesh.vertices) == 2.0
+    assert max(vertex[2] for vertex in mesh.vertices) == 2.0
 
 
 def test_mesh_linesplan_network_rejects_network_without_two_sections() -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cady.operations.validation import as_faces, as_matrix3, as_matrix4, as_points2, as_points3
+from cady.operations.arrays import as_faces, as_matrix3, as_matrix4, as_points2, as_points3
 
 
 def test_points_validation_coerces_dtype() -> None:

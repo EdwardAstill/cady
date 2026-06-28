@@ -5,6 +5,8 @@ from __future__ import annotations
 from math import acos, ceil, cos, pi, sin, sqrt
 from typing import TypeAlias
 
+from cady.operations.coordinates import normalised2, scale2
+
 Point2: TypeAlias = tuple[float, float]
 
 
@@ -76,3 +78,25 @@ def cubic_bezier_points(
                 )
             )
     return tuple(pts)
+
+
+def midpoint(a: Point2, b: Point2) -> Point2:
+    """Return the midpoint between two 2D points."""
+    return ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+
+
+def perpendicular(vector: Point2) -> Point2:
+    """Return a unit-length left-hand perpendicular vector."""
+    unit = normalised2(vector)
+    return (-unit[1], unit[0])
+
+
+def offset_point(
+    point: Point2,
+    direction: Point2,
+    distance: float,
+) -> Point2:
+    """Offset a point along the perpendicular to ``direction``."""
+    unit = perpendicular(direction)
+    offset = scale2(unit, float(distance))
+    return (point[0] + offset[0], point[1] + offset[1])
