@@ -65,6 +65,81 @@ def test_mesh_to_array_and_merged_offsets_faces() -> None:
     np.testing.assert_array_equal(faces, [[0, 1, 2], [3, 4, 5]])
 
 
+def test_mesh_from_points_reconstructs_with_advancing_front() -> None:
+    points = (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (2.0, 1.0, 0.0),
+    )
+
+    mesh = Mesh3.from_points(points, tolerance=1e-9)
+
+    assert mesh.vertices == points
+    assert mesh.faces == ((0, 1, 3), (3, 1, 4), (4, 1, 2), (4, 2, 5))
+    assert mesh.edges == (
+        (0, 1),
+        (0, 3),
+        (1, 2),
+        (1, 3),
+        (1, 4),
+        (2, 4),
+        (2, 5),
+        (3, 4),
+        (4, 5),
+    )
+
+
+def test_mesh_from_points_accepts_numpy_point_array() -> None:
+    points = np.array(
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float64,
+    )
+
+    mesh = Mesh3.from_points(points, tolerance=1e-9)
+
+    assert mesh.vertices == ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    assert mesh.faces == ((0, 1, 2),)
+
+
+def test_mesh_from_points_validates_point_count_shape_and_tolerance() -> None:
+    too_few_points = (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+    )
+    valid_points = (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+
+    with pytest.raises(ValueError, match="at least three"):
+        Mesh3.from_points(too_few_points, tolerance=1e-9)
+
+    with pytest.raises(ValueError, match="shape"):
+        Mesh3.from_points(
+            (
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (0.0, 1.0),
+            ),
+            tolerance=1e-9,
+        )
+
+    with pytest.raises(ValueError, match="tolerance"):
+        Mesh3.from_points(valid_points, tolerance=0.0)
+
+
+def test_mesh_from_point_cloud_old_constructor_is_not_preserved() -> None:
+    assert not hasattr(Mesh3, "from_point_cloud")
+
+
 def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
     mesh = Mesh3(
         ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),

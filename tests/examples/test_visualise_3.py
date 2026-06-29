@@ -8,7 +8,7 @@ from types import ModuleType
 
 import pytest
 
-from cady import Wireframe3
+from cady import Mesh3, PointCloud3, Wireframe3
 from cady.view import prepare_scene
 
 
@@ -89,6 +89,66 @@ def test_visualise_mesh_boundary_scene_overlays_boundary_loops() -> None:
         "boundary_loop_4",
     ]
     assert all(mesh.render_mode == "wireframe" for mesh in prepared.meshes[1:])
+
+
+def test_pointcloud2mesh_prints_process_summary(import_env: dict[str, str]) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "examples/scripts/pointcloud2mesh.py",
+            "--no-view",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=import_env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert "cady point cloud meshing demo" in completed.stdout
+    assert "advancing-front point array" in completed.stdout
+    assert "points: 81" in completed.stdout
+    assert "271 faces" in completed.stdout
+    assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_pointcloud2mesh_scene_overlays_clouds_and_meshes() -> None:
+    module = _load_example_script("pointcloud2mesh")
+
+    cases = module.build_cases(grid_size=5)
+    scene = module.build_scene(cases)
+    prepared = prepare_scene(scene, tolerance=1e-3)
+
+    assert [obj.object_name for obj in scene.objects] == [
+        "advancing-front point array mesh",
+        "advancing-front point array samples",
+    ]
+    assert isinstance(scene.objects[0].target, Mesh3)
+    assert isinstance(scene.objects[1].target, PointCloud3)
+    assert [mesh.render_mode for mesh in prepared.meshes] == [
+        "shaded",
+        "points",
+    ]
+    assert [len(mesh.vertices) for mesh in prepared.meshes] == [25, 25]
+    assert [len(mesh.faces) for mesh in prepared.meshes] == [53, 0]
+
+
+def test_pointcloud2mesh_samples_irregular_y_positions() -> None:
+    module = _load_example_script("pointcloud2mesh")
+
+    samples = module.surface_samples(7)
+    first_column_y = [samples[row * 7].point[1] for row in range(7)]
+    y_steps = [
+        round(first_column_y[index + 1] - first_column_y[index], 6)
+        for index in range(len(first_column_y) - 1)
+    ]
+
+    assert first_column_y[0] == -1.0
+    assert first_column_y[-1] == 1.0
+    assert first_column_y == sorted(first_column_y)
+    assert len(set(y_steps)) > 1
 
 
 def test_visualise_linesplan_prints_summary_before_opening_viewer(

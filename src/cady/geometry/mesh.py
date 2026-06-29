@@ -177,6 +177,25 @@ class Mesh3:
             offset += len(mesh.vertices)
         return cls(tuple(vertices), tuple(faces), tuple(edges))
 
+    @classmethod
+    def from_points(
+        cls,
+        points: object,
+        *,
+        tolerance: float = 1e-6,
+    ) -> Mesh3:
+        """Reconstruct a triangle mesh from array-like 3D points."""
+        from cady.algorithms.advancing_front import advancing_front_surface
+
+        point_array = np.asarray(points, dtype=np.float64)
+        reconstructed = advancing_front_surface(
+            point_array,
+            tolerance=tolerance,
+        )
+        if not isinstance(reconstructed, Mesh3):
+            reconstructed = reconstructed.mesh
+        return reconstructed
+
     @property
     def triangles(self) -> tuple[tuple[Point3, Point3, Point3], ...]:
         return tuple(
