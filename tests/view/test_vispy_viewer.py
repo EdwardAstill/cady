@@ -21,6 +21,8 @@ from cady.view.vispy_viewer import (
     _mesh_edge_color,
     _orientation_edges,
     _require_vispy,
+    _scale_bar_for_camera,
+    _scale_bar_for_visible_height,
     _select_vispy_shader_backend,
     _shaded_face_buffers,
     _transform_from_pose,
@@ -222,6 +224,47 @@ def test_orthographic_axis_length_tracks_view_scale() -> None:
     far = _view_relative_orthographic_axis_length(200.0, (900, 700))
 
     assert far == pytest.approx(near * 2.0)
+
+
+def test_scale_bar_starts_at_one_unit_then_steps_down_when_zoomed_in() -> None:
+    one_unit = _scale_bar_for_visible_height(7.0, (900, 700))
+    zoomed_in = _scale_bar_for_visible_height(1.4, (900, 700))
+    zoomed_in_further = _scale_bar_for_visible_height(0.7, (900, 700))
+
+    assert one_unit.label == "1 unit"
+    assert one_unit.length_units == pytest.approx(1.0)
+    assert zoomed_in.label == "1e-1 units"
+    assert zoomed_in.length_units == pytest.approx(0.1)
+    assert zoomed_in.width_pixels < one_unit.width_pixels
+    assert zoomed_in_further.label == "1e-1 units"
+    assert zoomed_in_further.width_pixels > zoomed_in.width_pixels
+
+
+def test_scale_bar_steps_up_when_one_unit_would_be_too_small() -> None:
+    zoomed_out = _scale_bar_for_visible_height(70.0, (900, 700))
+
+    assert zoomed_out.label == "1e1 units"
+    assert zoomed_out.length_units == pytest.approx(10.0)
+    assert zoomed_out.width_pixels == pytest.approx(100.0)
+
+
+def test_scale_bar_is_only_available_for_orthographic_cameras() -> None:
+    orthographic = _scale_bar_for_camera(
+        Camera.orthographic(position=(0, -4, 2), target=(0, 0, 0), scale=7.0),
+        distance=4.5,
+        orthographic_scale=7.0,
+        viewport_size=(900, 700),
+    )
+    perspective = _scale_bar_for_camera(
+        Camera.perspective(position=(0, -4, 2), target=(0, 0, 0), fov_degrees=45.0),
+        distance=4.5,
+        orthographic_scale=7.0,
+        viewport_size=(900, 700),
+    )
+
+    assert orthographic is not None
+    assert orthographic.label == "1 unit"
+    assert perspective is None
 
 
 def test_orientation_edges_hide_coplanar_triangle_diagonal() -> None:

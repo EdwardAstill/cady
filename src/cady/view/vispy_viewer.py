@@ -10,7 +10,7 @@ import importlib
 import importlib.util
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import cos, radians, tan
+from math import cos, floor, log10, radians, tan
 from typing import Any, cast
 
 import numpy as np
@@ -58,6 +58,20 @@ void main() {
 }
 """
 
+_OVERLAY_VERT_SHADER = """
+attribute vec2 a_position;
+void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+}
+"""
+
+_OVERLAY_FRAG_SHADER = """
+uniform vec3 u_color;
+void main() {
+    gl_FragColor = vec4(u_color, 1.0);
+}
+"""
+
 _HAS_VISPY = importlib.util.find_spec("vispy") is not None
 _DEFAULT_MESH_COLOR = (0.45, 0.58, 0.72)
 _DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
@@ -86,6 +100,13 @@ _LOCAL_AXIS_COLORS: tuple[tuple[float, float, float], ...] = (
 )
 _LOCAL_AXIS_VIEW_FRACTION = 0.22
 _ORTHOGRAPHIC_ZOOM_FACTOR = 0.9
+_SCALE_BAR_COLOR = (0.05, 0.06, 0.07)
+_SCALE_BAR_MAX_PIXELS = 140.0
+_SCALE_BAR_MIN_PIXELS = 36.0
+_SCALE_BAR_MARGIN_PIXELS = 24.0
+_SCALE_BAR_BOTTOM_PIXELS = 38.0
+_SCALE_BAR_TEXT_BOTTOM_PIXELS = 18.0
+_SCALE_BAR_TICK_PIXELS = 10.0
 
 LineVertices = Sequence[Sequence[float]] | np.ndarray
 
@@ -148,6 +169,14 @@ class _CanvasGeometry:
     edge_batches: tuple[_DrawBatch, ...]
     point_batches: tuple[_DrawBatch, ...]
     bounds: _SceneBounds
+
+
+@dataclass(frozen=True, slots=True)
+class _ScaleBar:
+    exponent: int
+    length_units: float
+    width_pixels: float
+    label: str
 
 
 def _require_vispy() -> None:
@@ -302,6 +331,94 @@ def _zoomed_orthographic_scale(
     maximum = max(radius * 20.0, minimum * 2.0)
     zoomed = scale * (_ORTHOGRAPHIC_ZOOM_FACTOR**wheel_delta)
     return max(minimum, min(float(zoomed), maximum))
+
+
+def _scale_bar_label(exponent: int) -> str:
+    if exponent == 0:
+        return "1 unit"
+    return f"1e{exponent} units"
+
+
+def _scale_bar_for_visible_height(
+    visible_world_height: float,
+    viewport_size: tuple[int, int],
+    *,
+    min_pixels: float = _SCALE_BAR_MIN_PIXELS,
+    max_pixels: float = _SCALE_BAR_MAX_PIXELS,
+) -> _ScaleBar:
+    _width, height = viewport_size
+    height_px = max(float(height), 1.0)
+    units_per_pixel = max(float(visible_world_height), 1e-12) / height_px
+    exponent = floor(log10(units_per_pixel * max_pixels))
+
+    while (10.0**exponent) / units_per_pixel < min_pixels:
+        exponent += 1
+
+    length_units = 10.0**exponent
+    return _ScaleBar(
+        exponent=exponent,
+        length_units=length_units,
+        width_pixels=length_units / units_per_pixel,
+        label=_scale_bar_label(exponent),
+    )
+
+
+def _scale_bar_visible_height(
+    camera: Camera,
+    *,
+    distance: float,
+    orthographic_scale: float,
+) -> float | None:
+    if camera.projection == "orthographic":
+        return max(float(orthographic_scale), 1e-12)
+    return None
+
+
+def _scale_bar_for_camera(
+    camera: Camera,
+    *,
+    distance: float,
+    orthographic_scale: float,
+    viewport_size: tuple[int, int],
+) -> _ScaleBar | None:
+    visible_height = _scale_bar_visible_height(
+        camera,
+        distance=distance,
+        orthographic_scale=orthographic_scale,
+    )
+    if visible_height is None:
+        return None
+    return _scale_bar_for_visible_height(visible_height, viewport_size)
+
+
+def _scale_bar_line_vertices(
+    scale_bar: _ScaleBar,
+    viewport_size: tuple[int, int],
+) -> np.ndarray:
+    width, height = viewport_size
+    width_px = max(float(width), 1.0)
+    height_px = max(float(height), 1.0)
+    usable_width = max(width_px - _SCALE_BAR_MARGIN_PIXELS * 2.0, 1.0)
+    bar_width = min(scale_bar.width_pixels, usable_width)
+    x0 = _SCALE_BAR_MARGIN_PIXELS
+    x1 = x0 + bar_width
+    y0 = min(_SCALE_BAR_BOTTOM_PIXELS, height_px)
+    y1 = min(y0 + _SCALE_BAR_TICK_PIXELS, height_px)
+    vertices = np.array(
+        [
+            (x0, y0),
+            (x1, y0),
+            (x0, y0),
+            (x0, y1),
+            (x1, y0),
+            (x1, y1),
+        ],
+        dtype=np.float32,
+    )
+    clip = np.empty_like(vertices)
+    clip[:, 0] = (vertices[:, 0] / width_px) * 2.0 - 1.0
+    clip[:, 1] = (vertices[:, 1] / height_px) * 2.0 - 1.0
+    return np.ascontiguousarray(clip, dtype=np.float32)
 
 
 def _local_axis_line_data(
@@ -488,6 +605,7 @@ def _make_canvas(
     app = cast(Any, importlib.import_module("vispy.app"))
     gloo = cast(Any, importlib.import_module("vispy.gloo"))
     transforms = cast(Any, importlib.import_module("vispy.util.transforms"))
+    visuals = cast(Any, importlib.import_module("vispy.visuals"))
     perspective = transforms.perspective
     ortho = transforms.ortho
     canvas_base = cast(type[Any], app.Canvas)
@@ -504,6 +622,7 @@ def _make_canvas(
 
             _select_vispy_shader_backend(gloo.gl)
             self._program = gloo.Program(_VERT_SHADER, _FRAG_SHADER)
+            self._overlay_program = gloo.Program(_OVERLAY_VERT_SHADER, _OVERLAY_FRAG_SHADER)
             self._camera = prepared.camera
             self._face_batches = geometry.face_batches
             self._edge_batches = geometry.edge_batches
@@ -520,6 +639,19 @@ def _make_canvas(
             self._pan = np.zeros(2, dtype=np.float32)
             self._axis_positions, self._axis_normals, self._axis_colors, self._axis_index_buffer = (
                 self._create_axis_buffers(1.0)
+            )
+            self._scale_bar_positions = _scale_bar_line_vertices(
+                _scale_bar_for_visible_height(1.0, self.physical_size),
+                self.physical_size,
+            )
+            self._scale_label = visuals.TextVisual(
+                "1 unit",
+                color=(*_SCALE_BAR_COLOR, 1.0),
+                font_size=11,
+                pos=(_SCALE_BAR_MARGIN_PIXELS, 0.0, 0.0),
+                anchor_x="left",
+                anchor_y="bottom",
+                depth_test=False,
             )
             self._show_local_axes = False
             self._orientation = _camera_orientation(self._camera)
@@ -571,6 +703,28 @@ def _make_canvas(
         def _update_local_axis_length(self, length: float) -> None:
             self._axis_positions, _, _, _ = self._create_axis_buffers(length)
 
+        def _update_scale_bar(self, viewport_size: tuple[int, int]) -> None:
+            width, height = viewport_size
+            scale_bar = _scale_bar_for_camera(
+                self._camera,
+                distance=self._distance,
+                orthographic_scale=self._orthographic_scale,
+                viewport_size=viewport_size,
+            )
+            if scale_bar is None:
+                return
+            self._scale_bar_positions = _scale_bar_line_vertices(scale_bar, viewport_size)
+            self._scale_label.text = scale_bar.label
+
+            logical_width, logical_height = cast(tuple[int, int], self.size)
+            x_scale = max(float(logical_width), 1.0) / max(float(width), 1.0)
+            y_scale = max(float(logical_height), 1.0) / max(float(height), 1.0)
+            self._scale_label.pos = (
+                _SCALE_BAR_MARGIN_PIXELS * x_scale,
+                max(float(logical_height) - _SCALE_BAR_TEXT_BOTTOM_PIXELS * y_scale, 0.0),
+                0.0,
+            )
+
         def _projection(self, width: int, height: int) -> np.ndarray:
             near, far = _projection_clip_planes(self._radius, self._distance, self._camera)
             aspect = width / float(max(height, 1))
@@ -605,6 +759,7 @@ def _make_canvas(
                     fov_degrees=self._camera.fov_degrees,
                 )
             self._update_local_axis_length(axis_length)
+            self._update_scale_bar((width, height))
 
             self._program["u_projection"] = self._projection(width, height)
             self._program["u_view"] = view
@@ -670,12 +825,29 @@ def _make_canvas(
             self._program["a_color"] = self._axis_colors
             self._program.draw("lines", self._axis_index_buffer)
 
+        def _draw_scale_bar(self) -> None:
+            if self._camera.projection != "orthographic":
+                return
+            gloo.set_state(
+                blend=True,
+                depth_test=False,
+                depth_mask=False,
+                polygon_offset_fill=False,
+                line_width=2.0,
+            )
+            self._overlay_program["a_position"] = self._scale_bar_positions
+            self._overlay_program["u_color"] = _SCALE_BAR_COLOR
+            self._overlay_program.draw("lines")
+            self._scale_label.transforms.configure(canvas=self)
+            self._scale_label.draw()
+
         def on_draw(self, event: object) -> None:
             gloo.clear(color=True, depth=True)
             self._draw_face_batches()
             self._draw_edge_batches()
             self._draw_point_batches()
             self._draw_local_axes()
+            self._draw_scale_bar()
             gloo.set_state(depth_mask=True, line_width=1.0)
 
         def on_resize(self, event: object) -> None:

@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
 VIEW_ASPECT = 900.0 / 700.0
 FIT_PADDING = 1.08
+DEFAULT_EXCLUSION_DISTANCE = 0.1
 MESH_STYLE = DisplayStyle(color=(0.48, 0.56, 0.54), opacity=0.82, render_mode="shaded")
 WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe", line_width=1.0)
 POINT_STYLE = DisplayStyle(color=(0.88, 0.45, 0.12), render_mode="points", point_size=4.0)
@@ -52,6 +53,14 @@ class SegmentRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class IntersectionCandidate:
+    gap: float
+    section_measure: float
+    guide_measure: float
+    point: Point3
+
+
+@dataclass(frozen=True, slots=True)
 class PointCloudMesh:
     source: Wireframe3
     cloud: PointCloud3
@@ -59,9 +68,8 @@ class PointCloudMesh:
     node_rows: tuple[tuple[Point3, ...], ...]
     guide_count: int
     rejected_count: int
-    snap_tolerance: float
-    snap_steps: int
-    min_node_distance: float
+    snap_tolerances: tuple[float, ...]
+    exclusion_distance: float
 
 
 def main() -> None:
@@ -82,26 +90,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--snap-tolerance",
-        type=float,
-        default=None,
-        help=(
-            "Maximum gap between polylines treated as an intersection. "
-            "Defaults to 0.001 of the source wireframe diagonal."
-        ),
-    )
-    parser.add_argument(
-        "--snap-steps",
-        type=int,
-        default=8,
-        help="Number of increasing snap tolerances to try before reaching the maximum.",
-    )
-    parser.add_argument(
+        "--exclusion-distance",
         "--min-node-distance",
+        dest="exclusion_distance",
         type=float,
         default=None,
         help=(
-            "Minimum allowed distance between accepted intersection nodes. "
-            "Defaults to the maximum snap tolerance."
+            "Minimum allowed distance between accepted nodes and the snap growth limit. "
+            "Defaults to 0.1 model units."
         ),
     )
     parser.add_argument(
@@ -116,26 +112,19 @@ def main() -> None:
 
     curves = read_polyline_curves(args.input)
     source = wireframe_from_curves(curves)
-    snap_tolerance = _snap_tolerance(
-        source,
+    exclusion_distance = _exclusion_distance(
         tolerance=args.tolerance,
-        value=args.snap_tolerance,
+        value=args.exclusion_distance,
     )
     snap_tolerances = _snap_tolerances(
-        tolerance=args.tolerance,
-        snap_tolerance=snap_tolerance,
-        steps=args.snap_steps,
-    )
-    min_node_distance = _min_node_distance(
-        value=args.min_node_distance,
-        snap_tolerance=snap_tolerance,
+        exclusion_distance=exclusion_distance,
     )
     result = mesh_point_cloud_from_intersections(
         curves,
         source=source,
         tolerance=args.tolerance,
         snap_tolerances=snap_tolerances,
-        min_node_distance=min_node_distance,
+        exclusion_distance=exclusion_distance,
     )
 
     print("cady linesplan intersection point-cloud demo")
@@ -145,8 +134,8 @@ def main() -> None:
         f"classified rows: {len(result.node_rows)}, guides={result.guide_count}, "
         f"rejected={result.rejected_count}"
     )
-    print(f"snap tolerance: {result.snap_tolerance:g} ({result.snap_steps} steps)")
-    print(f"minimum node distance: {result.min_node_distance:g}")
+    print(f"exclusion distance: {result.exclusion_distance:g}")
+    print(f"snap schedule: {_format_snap_schedule(result.snap_tolerances)}")
     print(f"intersection nodes: {len(result.cloud.vertices)}")
     if result.mesh is None:
         print("mesh: skipped (intersection node rows are not rectangular)")
@@ -173,61 +162,51 @@ def wireframe_from_curves(curves: Iterable[dxf.DxfWireCurve | LinesplanCurve]) -
     return Wireframe3.from_polylines(Polyline3(curve.vertices) for curve in curves)
 
 
-def _snap_tolerance(
-    source: Wireframe3,
+def _exclusion_distance(
     *,
     tolerance: float,
     value: float | None,
 ) -> float:
     if value is not None:
         if value <= 0.0 or not isfinite(value):
-            raise ValueError("snap_tolerance must be positive")
+            raise ValueError("exclusion_distance must be positive")
         return value
 
-    lower, upper = source.bounds()
-    return max(tolerance, dist(lower, upper) * 0.001)
+    return max(tolerance, DEFAULT_EXCLUSION_DISTANCE)
 
 
 def _snap_tolerances(
     *,
-    tolerance: float,
-    snap_tolerance: float,
-    steps: int,
+    exclusion_distance: float,
 ) -> tuple[float, ...]:
-    if steps < 1:
-        raise ValueError("snap_steps must be at least 1")
-    if snap_tolerance <= tolerance or steps == 1:
-        return (snap_tolerance,)
+    if exclusion_distance <= 1e-12:
+        return (exclusion_distance,)
 
-    ratio = (snap_tolerance / tolerance) ** (1.0 / (steps - 1))
-    values = [min(snap_tolerance, tolerance * ratio**index) for index in range(steps)]
-    values[-1] = snap_tolerance
-
-    result: list[float] = []
-    for value in values:
-        if not result or value > result[-1]:
-            result.append(value)
-    return tuple(result)
+    values = [1e-12]
+    snap = 1e-6
+    while snap < exclusion_distance * (1.0 - 1e-12):
+        values.append(snap)
+        snap *= 10.0
+    values.append(exclusion_distance)
+    return tuple(values)
 
 
-def _min_node_distance(
-    *,
-    value: float | None,
-    snap_tolerance: float,
-) -> float:
-    if value is not None:
-        if value <= 0.0 or not isfinite(value):
-            raise ValueError("min_node_distance must be positive")
-        return value
-    return snap_tolerance
+def _format_snap_schedule(values: tuple[float, ...]) -> str:
+    if not values:
+        return ""
+    labels = ["exact" if index == 0 else f"{value:g}" for index, value in enumerate(values)]
+    if len(labels) <= 5:
+        return " -> ".join(labels)
+    return " -> ".join((*labels[:3], "...", labels[-1]))
 
 
 def mesh_point_cloud_from_intersections(
-    curves: tuple[LinesplanCurve, ...],
+    curves: tuple[dxf.DxfWireCurve, ...],
     *,
     source: Wireframe3,
     tolerance: float,
-    snap_tolerance: float,
+    snap_tolerances: tuple[float, ...],
+    exclusion_distance: float,
 ) -> PointCloudMesh:
     network = classify_linesplan_curves(curves, tolerance=tolerance)
     sections = tuple(sorted(network.sections, key=_station_x))
@@ -244,7 +223,8 @@ def mesh_point_cloud_from_intersections(
                 section,
                 guides,
                 tolerance=tolerance,
-                snap_tolerance=snap_tolerance,
+                snap_tolerances=snap_tolerances,
+                exclusion_distance=exclusion_distance,
             )
             for section in sections
         )
@@ -252,7 +232,7 @@ def mesh_point_cloud_from_intersections(
     )
     nodes = _unique_points(
         (point for row in node_rows for point in row),
-        tolerance=tolerance,
+        tolerance=exclusion_distance,
     )
     if not nodes:
         raise ValueError("no section-guide intersection nodes were found")
@@ -265,7 +245,8 @@ def mesh_point_cloud_from_intersections(
         node_rows,
         len(guides),
         len(network.rejected),
-        snap_tolerance,
+        snap_tolerances,
+        exclusion_distance,
     )
 
 
@@ -308,18 +289,58 @@ def _section_intersection_nodes(
     guides: tuple[LinesplanCurve, ...],
     *,
     tolerance: float,
-    snap_tolerance: float,
+    snap_tolerances: tuple[float, ...],
+    exclusion_distance: float,
 ) -> tuple[Point3, ...]:
-    measured_nodes: list[tuple[float, Point3]] = []
+    candidates = _intersection_candidates(
+        section,
+        guides,
+        tolerance=tolerance,
+        snap_tolerance=snap_tolerances[-1],
+    )
+
+    accepted: list[IntersectionCandidate] = []
+    for snap_tolerance in snap_tolerances:
+        for candidate in candidates:
+            if candidate.gap <= snap_tolerance:
+                _append_candidate(
+                    accepted,
+                    candidate,
+                    exclusion_distance=exclusion_distance,
+                )
+    return tuple(
+        candidate.point
+        for candidate in sorted(accepted, key=lambda candidate: candidate.section_measure)
+    )
+
+
+def _intersection_candidates(
+    section: LinesplanCurve,
+    guides: tuple[LinesplanCurve, ...],
+    *,
+    tolerance: float,
+    snap_tolerance: float,
+) -> tuple[IntersectionCandidate, ...]:
+    candidates: list[IntersectionCandidate] = []
     for guide in guides:
-        for measure, point in _polyline_intersections(
-            section.vertices,
-            guide.vertices,
-            tolerance=tolerance,
-            snap_tolerance=snap_tolerance,
-        ):
-            _append_unique_measured_node(measured_nodes, measure, point, tolerance=tolerance)
-    return tuple(point for _measure, point in sorted(measured_nodes, key=lambda item: item[0]))
+        candidates.extend(
+            _polyline_intersections(
+                section.vertices,
+                guide.vertices,
+                tolerance=tolerance,
+                snap_tolerance=snap_tolerance,
+            )
+        )
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda candidate: (
+                candidate.gap,
+                candidate.section_measure,
+                candidate.guide_measure,
+            ),
+        )
+    )
 
 
 def _polyline_intersections(
@@ -328,8 +349,8 @@ def _polyline_intersections(
     *,
     tolerance: float,
     snap_tolerance: float,
-) -> tuple[tuple[float, Point3], ...]:
-    intersections: list[tuple[float, Point3]] = []
+) -> tuple[IntersectionCandidate, ...]:
+    intersections: list[IntersectionCandidate] = []
     left_segments = _segment_records(left, tolerance=tolerance)
     right_segments = _segment_records(right, tolerance=tolerance)
     for left_segment in left_segments:
@@ -348,8 +369,14 @@ def _polyline_intersections(
                 (result.left[1] + result.right[1]) * 0.5,
                 (result.left[2] + result.right[2]) * 0.5,
             )
-            measure = left_segment.offset + left_segment.length * result.left_parameter
-            _append_unique_measured_node(intersections, measure, point, tolerance=tolerance)
+            intersections.append(
+                IntersectionCandidate(
+                    result.distance,
+                    left_segment.offset + left_segment.length * result.left_parameter,
+                    right_segment.offset + right_segment.length * result.right_parameter,
+                    point,
+                )
+            )
     return tuple(intersections)
 
 
@@ -401,17 +428,18 @@ def _bounds_overlap(
     )
 
 
-def _append_unique_measured_node(
-    nodes: list[tuple[float, Point3]],
-    measure: float,
-    point: Point3,
+def _append_candidate(
+    nodes: list[IntersectionCandidate],
+    candidate: IntersectionCandidate,
     *,
-    tolerance: float,
+    exclusion_distance: float,
 ) -> None:
-    for _existing_measure, existing in nodes:
-        if _points_close(point, existing, tolerance=tolerance):
-            return
-    nodes.append((measure, point))
+    if any(
+        _points_close(candidate.point, node.point, tolerance=exclusion_distance)
+        for node in nodes
+    ):
+        return
+    nodes.append(candidate)
 
 
 def _unique_points(points: Iterable[Point3], *, tolerance: float) -> tuple[Point3, ...]:
@@ -446,11 +474,7 @@ def _neighbour_keys(key: PointKey3) -> Iterable[PointKey3]:
 
 
 def _points_close(left: Point3, right: Point3, *, tolerance: float) -> bool:
-    return (
-        abs(left[0] - right[0]) <= tolerance
-        and abs(left[1] - right[1]) <= tolerance
-        and abs(left[2] - right[2]) <= tolerance
-    )
+    return dist(left, right) <= tolerance
 
 
 def _mesh_from_rectangular_rows(
