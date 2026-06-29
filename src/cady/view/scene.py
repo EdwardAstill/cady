@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from cady.product.material import Metadata, metadata_items
@@ -105,15 +105,7 @@ class Scene:
         """Return a copy with an existing scene object appended."""
         if not isinstance(obj, SceneObject):
             raise ViewError("scene objects must be SceneObject values")
-        return Scene(
-            name=self.name,
-            objects=(*self.objects, obj),
-            cameras=self.cameras,
-            lights=self.lights,
-            active_camera=self.active_camera,
-            units=self.units,
-            metadata=self.metadata,
-        )
+        return replace(self, objects=(*self.objects, obj))
 
     def with_camera(self, camera: object, *, name: str = "camera", active: bool = True) -> Scene:
         """Return a copy with an additional named camera."""
@@ -123,41 +115,21 @@ class Scene:
             raise ViewError("camera name cannot be empty")
         if any(existing == name for existing, _camera in self.cameras):
             raise ViewError(f"duplicate camera name: {name}")
-        return Scene(
-            name=self.name,
-            objects=self.objects,
+        return replace(
+            self,
             cameras=(*self.cameras, (name, camera)),
-            lights=self.lights,
             active_camera=name if active else self.active_camera,
-            units=self.units,
-            metadata=self.metadata,
         )
 
     def with_light(self, light: object) -> Scene:
         """Return a copy with an additional light."""
         if not isinstance(light, Light):
             raise ViewError("light must be a Light")
-        return Scene(
-            name=self.name,
-            objects=self.objects,
-            cameras=self.cameras,
-            lights=(*self.lights, light),
-            active_camera=self.active_camera,
-            units=self.units,
-            metadata=self.metadata,
-        )
+        return replace(self, lights=(*self.lights, light))
 
     def with_metadata(self, **metadata: Any) -> Scene:
         """Return a copy with merged scene metadata."""
-        return Scene(
-            name=self.name,
-            objects=self.objects,
-            cameras=self.cameras,
-            lights=self.lights,
-            active_camera=self.active_camera,
-            units=self.units,
-            metadata=metadata_items(dict(self.metadata) | metadata),
-        )
+        return replace(self, metadata=metadata_items(dict(self.metadata) | metadata))
 
 
 __all__ = ["Scene", "SceneObject"]

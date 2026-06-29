@@ -3,46 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import acos, degrees, isfinite, sqrt
-from typing import Literal, TypeAlias
+from math import acos, degrees, isfinite
+from typing import Literal, cast
 
+from cady.operations.coordinates import dot3, length3, sub3
+from cady.view._coordinates import Point3, finite_point3
 from cady.view.errors import ViewError
 
 Projection = Literal["perspective", "orthographic"]
-Point3: TypeAlias = tuple[float, float, float]
-
-
-def _finite_point3(value: object, *, name: str) -> Point3:
-    try:
-        raw = tuple(float(component) for component in value)  # type: ignore[reportUnknownVariableType]
-    except TypeError as exc:
-        raise ViewError(f"{name} must be a finite 3D coordinate") from exc
-    if len(raw) != 3 or any(not isfinite(component) for component in raw):
-        raise ViewError(f"{name} must be a finite 3D coordinate")
-    return raw
-
-
-def _sub(a: Point3, b: Point3) -> Point3:
-    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-
-def _dot(a: Point3, b: Point3) -> float:
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-
-def _length(a: Point3) -> float:
-    return sqrt(_dot(a, a))
 
 
 def _reject_degenerate_basis(position: Point3, target: Point3, up: Point3) -> None:
-    view = _sub(target, position)
-    view_length = _length(view)
-    up_length = _length(up)
+    view = sub3(target, position)
+    view_length = length3(view)
+    up_length = length3(up)
     if view_length == 0.0:
         raise ViewError("camera position and target must be different")
     if up_length == 0.0:
         raise ViewError("camera up vector must be non-zero")
-    cosine = abs(_dot(view, up) / (view_length * up_length))
+    cosine = abs(dot3(view, up) / (view_length * up_length))
     if degrees(acos(min(1.0, cosine))) < 1e-6:
         raise ViewError("camera up vector must not be parallel to the view direction")
 
@@ -61,9 +40,9 @@ class Camera:
     far: float = 1e6
 
     def __post_init__(self) -> None:
-        position = _finite_point3(self.position, name="position")
-        target = _finite_point3(self.target, name="target")
-        up = _finite_point3(self.up, name="up")
+        position = finite_point3(self.position, name="position")
+        target = finite_point3(self.target, name="target")
+        up = finite_point3(self.up, name="up")
         _reject_degenerate_basis(position, target, up)
         if self.projection not in ("perspective", "orthographic"):
             raise ViewError("projection must be 'perspective' or 'orthographic'")
@@ -89,9 +68,9 @@ class Camera:
     ) -> Camera:
         """Create a camera from explicit position, target, and up vectors."""
         return cls(
-            _finite_point3(position, name="position"),
-            _finite_point3(target, name="target"),
-            _finite_point3(up, name="up"),
+            cast(Point3, position),
+            cast(Point3, target),
+            cast(Point3, up),
         )
 
     @classmethod
@@ -105,9 +84,9 @@ class Camera:
     ) -> Camera:
         """Create a perspective camera."""
         return cls(
-            _finite_point3(position, name="position"),
-            _finite_point3(target, name="target"),
-            _finite_point3(up, name="up"),
+            cast(Point3, position),
+            cast(Point3, target),
+            cast(Point3, up),
             projection="perspective",
             fov_degrees=fov_degrees,
         )
@@ -123,9 +102,9 @@ class Camera:
     ) -> Camera:
         """Create an orthographic camera."""
         return cls(
-            _finite_point3(position, name="position"),
-            _finite_point3(target, name="target"),
-            _finite_point3(up, name="up"),
+            cast(Point3, position),
+            cast(Point3, target),
+            cast(Point3, up),
             projection="orthographic",
             orthographic_scale=scale,
         )

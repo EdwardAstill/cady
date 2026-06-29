@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 from typing import Any, Literal, cast
 
@@ -39,15 +39,7 @@ class DisplayStyle:
 
     def with_metadata(self, **metadata: Any) -> DisplayStyle:
         """Return a copy with merged metadata."""
-        return DisplayStyle(
-            color=self.color,
-            opacity=self.opacity,
-            line_width=self.line_width,
-            point_size=self.point_size,
-            render_mode=self.render_mode,
-            visible=self.visible,
-            metadata=metadata_items(dict(self.metadata) | metadata),
-        )
+        return replace(self, metadata=metadata_items(dict(self.metadata) | metadata))
 
 
 def style_from_mapping(values: Mapping[str, object]) -> DisplayStyle:

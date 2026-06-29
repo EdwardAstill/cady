@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sized
+from collections.abc import Callable, Sized
 from math import sqrt
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from cady.document import Document
 from cady.geometry import Mesh3
 from cady.utils import positive_tolerance
+from cady.view._coordinates import finite_point3
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import DirectionalLight, Light
@@ -92,7 +93,13 @@ def _target_bounds_and_wire_mode(
     if not callable(bounds_method):
         raise ViewError("view target must expose bounds() or to_mesh(tolerance=...)")
     lower, upper = cast(tuple[object, object], bounds_method())
-    return (_point3(lower), _point3(upper)), _is_wire_only(geometry)
+    return (
+        (
+            finite_point3(lower, name="bounds lower"),
+            finite_point3(upper, name="bounds upper"),
+        ),
+        _is_wire_only(geometry),
+    )
 
 
 def _mesh_like(target: object, *, tolerance: float) -> object:
@@ -174,19 +181,6 @@ def _fit_camera(
         raise ViewError("projection must be 'orthographic' or 'perspective'")
     scale = max(span[2], span[0] / DEFAULT_VIEW_ASPECT, span[1], 1.0) * FIT_PADDING
     return Camera.orthographic(position=position, target=centre, scale=scale)
-
-
-def _point3(value: object) -> tuple[float, float, float]:
-    as_tuple = getattr(value, "tuple", None)
-    raw = as_tuple() if callable(as_tuple) else value
-    try:
-        point = tuple(cast(Iterable[object], raw))
-    except TypeError as exc:
-        raise ViewError("point must be a 3D coordinate") from exc
-    if len(point) != 3:
-        raise ViewError("point must be a 3D coordinate")
-    x, y, z = point
-    return (float(cast(Any, x)), float(cast(Any, y)), float(cast(Any, z)))
 
 
 def _target_name(target: object) -> str:

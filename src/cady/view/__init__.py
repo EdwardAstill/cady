@@ -9,11 +9,13 @@ from cady.view.scene import Scene, SceneObject
 from cady.view.style import DisplayStyle
 
 if TYPE_CHECKING:
-    from cady.view.vispy_viewer import (
+    from cady.view.preparation import (
         PreparedScene,
         SceneLine,
         SceneMesh,
         prepare_scene,
+    )
+    from cady.view.vispy_viewer import (
         view_lines,
         view_mesh,
         view_meshes,
@@ -21,12 +23,16 @@ if TYPE_CHECKING:
         view_target,
     )
 
-_VIEWER_EXPORTS = frozenset(
+_PREPARATION_EXPORTS = frozenset(
     {
         "PreparedScene",
         "SceneLine",
         "SceneMesh",
         "prepare_scene",
+    }
+)
+_VIEWER_EXPORTS = frozenset(
+    {
         "view_lines",
         "view_mesh",
         "view_meshes",
@@ -42,6 +48,11 @@ def scene_from_target(target: object, *, name: str = "scene") -> Scene:
 
 
 def __getattr__(name: str) -> object:
+    if name in _PREPARATION_EXPORTS:
+        # Scene preparation is backend-independent and does not open GUI paths.
+        from cady.view import preparation
+
+        return getattr(preparation, name)
     if name in _VIEWER_EXPORTS:
         # Defer viewer backend imports until a GUI-facing helper is requested.
         from cady.view import vispy_viewer
@@ -51,7 +62,7 @@ def __getattr__(name: str) -> object:
 
 
 def __dir__() -> list[str]:
-    return sorted((*globals(), *_VIEWER_EXPORTS))
+    return sorted((*globals(), *_PREPARATION_EXPORTS, *_VIEWER_EXPORTS))
 
 
 __all__ = [
