@@ -24,7 +24,7 @@ def test_polyline_bounds_length_and_transform() -> None:
     np.testing.assert_allclose(max_point, [3.0, 4.0])
     assert polyline2_length(polyline) == 5.0
     np.testing.assert_allclose(
-        Transform2.translation(1.0, 2.0).apply_points(polyline),
+        Transform2(polyline).translate(1.0, 2.0).array,
         [[1.0, 2.0], [4.0, 6.0]],
     )
 
@@ -39,7 +39,7 @@ def test_closed_polyline_area_bounds_centroid_and_transform() -> None:
     np.testing.assert_allclose(polyline2_centroid(polyline), [2.0, 2.0])
     np.testing.assert_allclose(bounds2(polyline)[1], [4.0, 4.0])
     np.testing.assert_allclose(
-        Transform2.translation(1.0, 0.0).apply_points(polyline)[0],
+        Transform2(polyline).translate(1.0, 0.0).array[0],
         [1.0, 0.0],
     )
 

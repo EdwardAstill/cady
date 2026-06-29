@@ -203,7 +203,7 @@ def _origin_pose(
 
     lower, upper = bounds
     centre = _centre(lower, upper)
-    return Transform3.translation(-centre[0], -centre[1], -centre[2])
+    return Transform3().translate(-centre[0], -centre[1], -centre[2])
 
 
 def _centred_bounds(

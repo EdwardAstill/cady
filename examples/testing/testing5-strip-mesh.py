@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, sqrt
+from typing import NamedTuple
 
 from wireframe import WIREFRAME_OBJECT
 
@@ -30,16 +31,22 @@ from cady import (
     PointCloud3,
     Polyline3,
     Scene,
-    Vec3,
     Wireframe3,
 )
 from cady.view import view_scene
 
-Point3 = tuple[float, float, float]
-PointLike3 = Point3 | Vec3
+
+class Point3(NamedTuple):
+    x: float
+    y: float
+    z: float
+
+    def tuple(self) -> tuple[float, float, float]:
+        return (self.x, self.y, self.z)
+PointLike3 = tuple[float, float, float] | Point3
 EdgeIndex = tuple[int, int]
 FaceIndex = tuple[int, int, int]
-NodeArray = list[list[Vec3]]
+NodeArray = list[list[Point3]]
 
 MIN_SLICE_Y = -5.0
 MAX_SLICE_Y = 5.0
@@ -96,7 +103,7 @@ class StripInterval:
 class RefinedPolylineRow:
     """One longitudinal row with optional distance-limited inserted nodes."""
 
-    points: list[Vec3]
+    points: list[Point3]
     intervals: list[StripInterval]
 
 
@@ -184,8 +191,8 @@ def slice_polyline_at_y_values(
     *,
     polyline_index: int,
     tolerance: float,
-) -> list[Vec3]:
-    row: list[Vec3] = []
+) -> list[Point3]:
+    row: list[Point3] = []
 
     for y in y_values:
         point = polyline_y_intersection(polyline, y, tolerance=tolerance)
@@ -203,8 +210,8 @@ def polyline_y_intersection(
     y: float,
     *,
     tolerance: float,
-) -> Vec3 | None:
-    intersections: list[Vec3] = []
+) -> Point3 | None:
+    intersections: list[Point3] = []
     vertices = polyline_vertices(polyline)
 
     for start, end in zip(vertices, vertices[1:], strict=False):
@@ -220,12 +227,12 @@ def polyline_y_intersection(
 
 
 def segment_y_intersection(
-    start: Vec3,
-    end: Vec3,
+    start: Point3,
+    end: Point3,
     y: float,
     *,
     tolerance: float,
-) -> Vec3 | None:
+) -> Point3 | None:
     start_delta = start.y - y
     end_delta = end.y - y
 
@@ -244,7 +251,7 @@ def segment_y_intersection(
     if not -tolerance <= t <= 1.0 + tolerance:
         return None
 
-    return Vec3(
+    return Point3(
         lerp(start.x, end.x, t),
         y,
         lerp(start.z, end.z, t),
@@ -308,7 +315,7 @@ def selected_refinement_rows(
 
 def refine_polyline_row(
     polyline: Polyline3,
-    base_row: Iterable[Vec3],
+    base_row: Iterable[Point3],
     *,
     max_segment_length: float | None,
     tolerance: float,
@@ -330,7 +337,7 @@ def refine_polyline_row(
         for point in base_points
     )
 
-    refined_points: list[Vec3] = []
+    refined_points: list[Point3] = []
     intervals: list[StripInterval] = []
 
     for interval_index in range(len(base_points) - 1):
@@ -357,16 +364,16 @@ def refine_polyline_row(
 
 
 def refined_interval_points(
-    source_points: tuple[Vec3, ...],
+    source_points: tuple[Point3, ...],
     source_distances: tuple[float, ...],
-    start_point: Vec3,
-    end_point: Vec3,
+    start_point: Point3,
+    end_point: Point3,
     start_distance: float,
     end_distance: float,
     *,
     max_segment_length: float | None,
     tolerance: float,
-) -> list[tuple[Vec3, float]]:
+) -> list[tuple[Point3, float]]:
     """Return ordered (point, parameter) values for one station interval."""
     length = abs(end_distance - start_distance)
     segment_count = required_segment_count(
@@ -376,7 +383,7 @@ def refined_interval_points(
     )
     direction = 1.0 if end_distance >= start_distance else -1.0
 
-    samples: list[tuple[Vec3, float]] = []
+    samples: list[tuple[Point3, float]] = []
     for index in range(segment_count + 1):
         parameter = index / segment_count
         if index == 0:
@@ -407,8 +414,8 @@ def required_segment_count(
 
 
 def append_interval_points(
-    row_points: list[Vec3],
-    interval_points: list[tuple[Vec3, float]],
+    row_points: list[Point3],
+    interval_points: list[tuple[Point3, float]],
     *,
     reuse_previous_endpoint: bool,
     tolerance: float,
@@ -445,7 +452,7 @@ def refined_rows_to_strip_mesh(
     if len(rows) < 2:
         raise ValueError("at least two refined rows are required to build strips")
 
-    vertices: list[Vec3] = []
+    vertices: list[Point3] = []
     vertex_lookup: dict[Point3, int] = {}
     row_vertex_indices = [
         [index_point(vertices, vertex_lookup, point) for point in row.points]
@@ -481,7 +488,7 @@ def add_strip_faces(
     faces: list[FaceIndex],
     edges: list[EdgeIndex],
     seen_edges: set[EdgeIndex],
-    vertices: list[Vec3],
+    vertices: list[Point3],
     tolerance: float,
 ) -> None:
     if len(top_row.intervals) != len(bottom_row.intervals):
@@ -521,7 +528,7 @@ def add_zipper_faces(
     faces: list[FaceIndex],
     edges: list[EdgeIndex],
     seen_edges: set[EdgeIndex],
-    vertices: list[Vec3],
+    vertices: list[Point3],
     tolerance: float,
 ) -> None:
     """Triangulate a two-boundary strip by merging each side's parameters."""
@@ -594,7 +601,7 @@ def append_valid_face(
     seen_edges: set[EdgeIndex],
     face: FaceIndex,
     *,
-    vertices: list[Vec3],
+    vertices: list[Point3],
     tolerance: float,
 ) -> None:
     if is_degenerate_face(face, vertices=vertices, tolerance=tolerance):
@@ -610,7 +617,7 @@ def append_valid_face(
 def is_degenerate_face(
     face: FaceIndex,
     *,
-    vertices: list[Vec3],
+    vertices: list[Point3],
     tolerance: float,
 ) -> bool:
     a, b, c = face
@@ -629,14 +636,14 @@ def is_degenerate_face(
 # -----------------------------------------------------------------------------
 
 
-def polyline_vertices(polyline: Polyline3) -> tuple[Vec3, ...]:
+def polyline_vertices(polyline: Polyline3) -> tuple[Point3, ...]:
     vertices = tuple(as_vec3(vertex) for vertex in polyline.vertices)
     if len(vertices) < 2:
         raise ValueError("source polyline must contain at least two vertices")
     return vertices
 
 
-def cumulative_polyline_distances(vertices: tuple[Vec3, ...]) -> tuple[float, ...]:
+def cumulative_polyline_distances(vertices: tuple[Point3, ...]) -> tuple[float, ...]:
     distances = [0.0]
     for start, end in zip(vertices, vertices[1:], strict=False):
         distances.append(distances[-1] + distance(start, end))
@@ -644,9 +651,9 @@ def cumulative_polyline_distances(vertices: tuple[Vec3, ...]) -> tuple[float, ..
 
 
 def polyline_distance_at_point(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     distances: tuple[float, ...],
-    point: Vec3,
+    point: Point3,
     *,
     tolerance: float,
 ) -> float:
@@ -677,10 +684,10 @@ def polyline_distance_at_point(
 
 
 def point_at_polyline_distance(
-    vertices: tuple[Vec3, ...],
+    vertices: tuple[Point3, ...],
     distances: tuple[float, ...],
     target_distance: float,
-) -> Vec3:
+) -> Point3:
     target_distance = clamp(target_distance, distances[0], distances[-1])
 
     for index, (start, end) in enumerate(zip(vertices, vertices[1:], strict=False)):
@@ -735,10 +742,10 @@ def plane_grid(
     steps: int,
 ) -> Mesh3:
     vertices = [
-        Vec3(x_min, y, z_max),
-        Vec3(x_max, y, z_max),
-        Vec3(x_max, y, z_min),
-        Vec3(x_min, y, z_min),
+        Point3(x_min, y, z_max),
+        Point3(x_max, y, z_max),
+        Point3(x_max, y, z_min),
+        Point3(x_min, y, z_min),
     ]
     edges = [(0, 1), (1, 2), (2, 3), (3, 0)]
 
@@ -752,20 +759,20 @@ def plane_grid(
 
 
 def add_display_segment(
-    vertices: list[Vec3],
+    vertices: list[Point3],
     start: Point3,
     end: Point3,
 ) -> EdgeIndex:
     start_index = len(vertices)
-    vertices.append(Vec3(*start))
-    vertices.append(Vec3(*end))
+    vertices.append(Point3(*start))
+    vertices.append(Point3(*end))
     return start_index, start_index + 1
 
 
 def build_scene(
     wireframe: Wireframe3,
     planes: Iterable[tuple[float, Mesh3]],
-    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3 | None = None,
+    nodes: Mesh3 | Iterable[Iterable[Point3]] | PointCloud3 | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_strip_mesh").add(
         wireframe,
@@ -794,7 +801,7 @@ def add_planes_to_scene(
 
 def add_nodes_to_scene(
     scene: Scene,
-    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3 | None,
+    nodes: Mesh3 | Iterable[Iterable[Point3]] | PointCloud3 | None,
 ) -> Scene:
     if nodes is None:
         return scene
@@ -819,7 +826,7 @@ def add_nodes_to_scene(
 
 
 def nodes_to_scene_geometry(
-    nodes: Mesh3 | Iterable[Iterable[Vec3]] | PointCloud3,
+    nodes: Mesh3 | Iterable[Iterable[Point3]] | PointCloud3,
 ) -> tuple[Mesh3 | None, PointCloud3]:
     if isinstance(nodes, Mesh3):
         return nodes, PointCloud3(nodes.vertices)
@@ -836,14 +843,14 @@ def nodes_to_scene_geometry(
 # -----------------------------------------------------------------------------
 
 
-def as_vec3(point: PointLike3) -> Vec3:
-    if isinstance(point, Vec3):
+def as_vec3(point: PointLike3) -> Point3:
+    if isinstance(point, Point3):
         return point
-    return Vec3(*point)
+    return Point3(*point)
 
 
-def interpolate_vec3(start: Vec3, end: Vec3, t: float) -> Vec3:
-    return Vec3(
+def interpolate_vec3(start: Point3, end: Point3, t: float) -> Point3:
+    return Point3(
         lerp(start.x, end.x, t),
         lerp(start.y, end.y, t),
         lerp(start.z, end.z, t),
@@ -858,7 +865,7 @@ def clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
-def point_segment_parameter(start: Vec3, end: Vec3, point: Vec3) -> float:
+def point_segment_parameter(start: Point3, end: Point3, point: Point3) -> float:
     segment = subtract(end, start)
     offset = subtract(point, start)
     length_squared = dot(segment, segment)
@@ -867,33 +874,33 @@ def point_segment_parameter(start: Vec3, end: Vec3, point: Vec3) -> float:
     return dot(offset, segment) / length_squared
 
 
-def distance(left: Vec3, right: Vec3) -> float:
+def distance(left: Point3, right: Point3) -> float:
     delta = subtract(right, left)
     return sqrt(dot(delta, delta))
 
 
-def subtract(left: Vec3, right: Vec3) -> Vec3:
-    return Vec3(left.x - right.x, left.y - right.y, left.z - right.z)
+def subtract(left: Point3, right: Point3) -> Point3:
+    return Point3(left.x - right.x, left.y - right.y, left.z - right.z)
 
 
-def dot(left: Vec3, right: Vec3) -> float:
+def dot(left: Point3, right: Point3) -> float:
     return left.x * right.x + left.y * right.y + left.z * right.z
 
 
-def cross(left: Vec3, right: Vec3) -> Vec3:
-    return Vec3(
+def cross(left: Point3, right: Point3) -> Point3:
+    return Point3(
         left.y * right.z - left.z * right.y,
         left.z * right.x - left.x * right.z,
         left.x * right.y - left.y * right.x,
     )
 
 
-def cross_length(left: Vec3, right: Vec3) -> float:
+def cross_length(left: Point3, right: Point3) -> float:
     value = cross(left, right)
     return sqrt(dot(value, value))
 
 
-def points_close(left: Vec3, right: Vec3, *, tolerance: float) -> bool:
+def points_close(left: Point3, right: Point3, *, tolerance: float) -> bool:
     return (
         abs(left.x - right.x) <= tolerance
         and abs(left.y - right.y) <= tolerance
@@ -902,8 +909,8 @@ def points_close(left: Vec3, right: Vec3, *, tolerance: float) -> bool:
 
 
 def append_unique_point(
-    points: list[Vec3],
-    point: Vec3,
+    points: list[Point3],
+    point: Point3,
     *,
     tolerance: float,
 ) -> None:
@@ -913,11 +920,11 @@ def append_unique_point(
 
 
 def unique_points(
-    point_groups: Iterable[Iterable[Vec3]],
+    point_groups: Iterable[Iterable[Point3]],
     *,
     tolerance: float,
-) -> tuple[Vec3, ...]:
-    points: list[Vec3] = []
+) -> tuple[Point3, ...]:
+    points: list[Point3] = []
     for group in point_groups:
         for point in group:
             append_unique_point(points, point, tolerance=tolerance)
@@ -930,7 +937,7 @@ def unique_points(
 
 
 def index_point(
-    vertices: list[Vec3],
+    vertices: list[Point3],
     vertex_lookup: dict[Point3, int],
     point: PointLike3,
 ) -> int:
@@ -1033,7 +1040,7 @@ def print_wireframe_summary(wireframe: Wireframe3) -> None:
 
 
 def format_point(point: PointLike3) -> str:
-    x, y, z = point.tuple() if isinstance(point, Vec3) else point
+    x, y, z = point.tuple() if isinstance(point, Point3) else point
     return f"({float(x):.3g}, {float(y):.3g}, {float(z):.3g})"
 
 

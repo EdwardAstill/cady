@@ -33,7 +33,6 @@ def test_smoke_import() -> None:
         "PointCloud2",
         "PointCloud3",
         "Polyline3",
-        "Pose3",
         "Region2",
         "Scene",
         "Spline2",

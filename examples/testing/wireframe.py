@@ -9,10 +9,18 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt
+from typing import NamedTuple
 
-from cady import Polyline3, Vec3, Wireframe3
+from cady import Polyline3, Wireframe3
 
-Point3 = tuple[float, float, float]
+
+class Point3(NamedTuple):
+    x: float
+    y: float
+    z: float
+
+    def tuple(self) -> tuple[float, float, float]:
+        return (self.x, self.y, self.z)
 EdgeIndex = tuple[int, int]
 
 RADIUS = 5.0
@@ -98,7 +106,7 @@ def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
 
 
 def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
-    vertices: list[Vec3] = []
+    vertices: list[Point3] = []
     vertex_indices: dict[Point3, int] = {}
     edges: list[EdgeIndex] = []
 
@@ -114,9 +122,9 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
 
 
 def index_point(
-    vertices: list[Vec3],
+    vertices: list[Point3],
     vertex_indices: dict[Point3, int],
-    point: Vec3,
+    point: Point3,
 ) -> int:
     key = point.tuple()
     existing_index = vertex_indices.get(key)

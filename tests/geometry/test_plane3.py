@@ -27,7 +27,7 @@ def test_frame_rejects_zero_normal() -> None:
 
 
 def test_transformed_frame_moves_origin_and_axes() -> None:
-    plane = Plane3.world_xy().transformed(Transform3.translation(1.0, 2.0, 3.0))
+    plane = Plane3.world_xy().transformed(Transform3().translate(1.0, 2.0, 3.0))
 
     assert plane.origin == (1.0, 2.0, 3.0)
     assert plane.point(2.0, 3.0) == (3.0, 5.0, 3.0)

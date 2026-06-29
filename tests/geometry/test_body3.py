@@ -83,7 +83,7 @@ def test_extrude_accepts_region_directly() -> None:
 
 
 def test_body_transform_applies_to_meshable_feature_frames() -> None:
-    moved = box(1.0, 1.0, 1.0).transformed(Transform3.translation(3.0, 4.0, 5.0))
+    moved = box(1.0, 1.0, 1.0).transformed(Transform3().translate(3.0, 4.0, 5.0))
 
     assert moved.to_mesh(tolerance=1e-3).bounds() == (
         (3.0, 4.0, 5.0),

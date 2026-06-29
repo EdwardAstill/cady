@@ -22,7 +22,7 @@ def test_point_cloud_2_bounds_array_and_transform() -> None:
         [[0.0, 0.0], [1.0, -2.0]],
     )
 
-    moved = cloud.transformed(Transform2.translation(0.0, 2.0))
+    moved = cloud.transformed(Transform2(cloud.vertices).translate(0.0, 2.0))
 
     assert moved.vertices == ((0.0, 2.0), (1.0, 0.0))
 

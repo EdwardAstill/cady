@@ -39,7 +39,7 @@ def main() -> None:
 def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
     lower, upper = _result_bounds(result)
     centre = _bounds_centre(lower, upper)
-    origin_pose = Transform3.translation(-centre[0], -centre[1], -centre[2])
+    origin_pose = Transform3().translate(-centre[0], -centre[1], -centre[2])
     scene = Scene(name="linesplan_9m_wires")
 
     for index, wf in enumerate(result.wireframes, start=1):

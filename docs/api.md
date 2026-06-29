@@ -76,7 +76,6 @@
 | Name | Description |
 |------|-------------|
 | `Document` | Optional project registry. |
-| `Pose3` | 3D position and orientation. |
 
 ## Factory functions
 

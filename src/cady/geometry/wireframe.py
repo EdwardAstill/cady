@@ -89,7 +89,7 @@ class Wireframe3:
         return Wireframe3.from_edges(vertices, self.edges)
 
     def mirror(self, plane_origin: object, plane_normal: object) -> Wireframe3:
-        return self.transformed(Transform3.mirror(plane_origin, plane_normal))
+        return self.transformed(Transform3(self.vertices).mirror(plane_origin, plane_normal))
 
     def bounds(self) -> tuple[Point3, Point3]:
         if not self.vertices:

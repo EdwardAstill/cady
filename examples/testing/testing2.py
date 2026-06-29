@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt
+from typing import NamedTuple
 
 from cady import (
     Camera,
@@ -18,16 +19,22 @@ from cady import (
     PointCloud3,
     Polyline3,
     Scene,
-    Vec3,
     Wireframe3,
 )
 from cady.view import view_scene
 
-Point3 = tuple[float, float, float]
+
+class Point3(NamedTuple):
+    x: float
+    y: float
+    z: float
+
+    def tuple(self) -> tuple[float, float, float]:
+        return (self.x, self.y, self.z)
 EdgeIndex = tuple[int, int]
 FaceIndex = tuple[int, int, int]
-PointLike3 = Point3 | Vec3
-NodeArray = list[list[Vec3]]
+PointLike3 = tuple[float, float, float] | Point3
+NodeArray = list[list[Point3]]
 
 RADIUS = 5.0
 SAMPLES = 33
@@ -200,7 +207,7 @@ def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
 
 
 def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
-    vertices: list[Vec3] = []
+    vertices: list[Point3] = []
     vertex_indices: dict[Point3, int] = {}
     edges: list[tuple[int, int]] = []
 
@@ -212,7 +219,7 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
             if current is None:
                 current = len(vertices)
                 vertex_indices[point] = current
-                vertices.append(Vec3(*point))
+                vertices.append(Point3(*point))
             if previous is not None and previous != current:
                 edges.append((previous, current))
             previous = current
@@ -251,10 +258,10 @@ def plane_grid(
     steps: int,
 ) -> Mesh3:
     vertices = [
-        Vec3(x_min, y, z_max),
-        Vec3(x_max, y, z_max),
-        Vec3(x_max, y, z_min),
-        Vec3(x_min, y, z_min),
+        Point3(x_min, y, z_max),
+        Point3(x_max, y, z_max),
+        Point3(x_max, y, z_min),
+        Point3(x_min, y, z_min),
     ]
     edges = [(0, 1), (1, 2), (2, 3), (3, 0)]
 
@@ -268,13 +275,13 @@ def plane_grid(
 
 
 def _add_segment(
-    vertices: list[Vec3],
+    vertices: list[Point3],
     start: Point3,
     end: Point3,
 ) -> tuple[int, int]:
     start_index = len(vertices)
-    vertices.append(Vec3(*start))
-    vertices.append(Vec3(*end))
+    vertices.append(Point3(*start))
+    vertices.append(Point3(*end))
     return (start_index, start_index + 1)
 
 
@@ -290,7 +297,7 @@ def split_wireframe_with_planes(
     y_planes = tuple(y_values)
     node_array: NodeArray = []
     for polyline_index, polyline in enumerate(polylines, start=1):
-        row: list[Vec3] = []
+        row: list[Point3] = []
         for y in y_planes:
             point = _polyline_y_intersection(
                 polyline,
@@ -308,7 +315,7 @@ def split_wireframe_with_planes(
 
 
 def node_array_to_point_cloud(
-    node_array: Iterable[Iterable[Vec3]],
+    node_array: Iterable[Iterable[Point3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
 ) -> PointCloud3:
@@ -319,7 +326,7 @@ def node_array_to_point_cloud(
 
 
 def node_array_to_mesh(
-    node_array: Iterable[Iterable[Vec3]],
+    node_array: Iterable[Iterable[Point3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
 ) -> Mesh3:
@@ -341,11 +348,11 @@ def _validate_tolerance(tolerance: float) -> None:
 
 
 def _unique_nodes(
-    node_groups: Iterable[Iterable[Vec3]],
+    node_groups: Iterable[Iterable[Point3]],
     *,
     tolerance: float,
-) -> tuple[Vec3, ...]:
-    nodes: list[Vec3] = []
+) -> tuple[Point3, ...]:
+    nodes: list[Point3] = []
     for group in node_groups:
         for node in group:
             _append_unique_point(nodes, node, tolerance=tolerance)
@@ -353,7 +360,7 @@ def _unique_nodes(
 
 
 def _validate_rectangular_node_array(
-    node_array: Iterable[Iterable[Vec3]],
+    node_array: Iterable[Iterable[Point3]],
     *,
     tolerance: float = INTERSECTION_TOLERANCE,
 ) -> None:
@@ -378,8 +385,8 @@ def _polyline_y_intersection(
     y: float,
     *,
     tolerance: float,
-) -> Vec3 | None:
-    nodes: list[Vec3] = []
+) -> Point3 | None:
+    nodes: list[Point3] = []
     vertices = tuple(polyline.vertices)
     for start, end in zip(vertices, vertices[1:], strict=False):
         point = _edge_y_intersection(start, end, y, tolerance=tolerance)
@@ -393,14 +400,14 @@ def _polyline_y_intersection(
     return nodes[0]
 
 
-def _as_vec3(point: PointLike3) -> Vec3:
-    if isinstance(point, Vec3):
+def _as_vec3(point: PointLike3) -> Point3:
+    if isinstance(point, Point3):
         return point
-    return Vec3(*point)
+    return Point3(*point)
 
 
-def _index_node_rows(rows: NodeArray) -> tuple[tuple[Vec3, ...], list[list[int]]]:
-    vertices: list[Vec3] = []
+def _index_node_rows(rows: NodeArray) -> tuple[tuple[Point3, ...], list[list[int]]]:
+    vertices: list[Point3] = []
     row_indices: list[list[int]] = []
     for row in rows:
         indices: list[int] = []
@@ -445,12 +452,12 @@ def _next_row(row_indices: list[list[int]], row_index: int) -> list[int]:
 
 
 def _edge_y_intersection(
-    start: Vec3,
-    end: Vec3,
+    start: Point3,
+    end: Point3,
     y: float,
     *,
     tolerance: float,
-) -> Vec3 | None:
+) -> Point3 | None:
     start_delta = start.y - y
     end_delta = end.y - y
     start_on_plane = abs(start_delta) <= tolerance
@@ -470,7 +477,7 @@ def _edge_y_intersection(
     t = (y - start.y) / span
     if t < -tolerance or t > 1.0 + tolerance:
         return None
-    return Vec3(
+    return Point3(
         start.x + (end.x - start.x) * t,
         y,
         start.z + (end.z - start.z) * t,
@@ -478,8 +485,8 @@ def _edge_y_intersection(
 
 
 def _append_unique_point(
-    points: list[Vec3],
-    point: Vec3,
+    points: list[Point3],
+    point: Point3,
     *,
     tolerance: float,
 ) -> None:
@@ -489,8 +496,8 @@ def _append_unique_point(
 
 
 def _points_close(
-    left: Vec3,
-    right: Vec3,
+    left: Point3,
+    right: Point3,
     *,
     tolerance: float,
 ) -> bool:
@@ -612,7 +619,7 @@ def node_on_original_line_by_one_based_position(
     *,
     position: float,
     tolerance: float = INTERSECTION_TOLERANCE,
-) -> Vec3:
+) -> Point3:
     """Return the source polyline point for a shorthand position like 10.5."""
     _validate_tolerance(tolerance)
 
@@ -694,11 +701,11 @@ def _node_array_vertex_index(
 
 
 def _interpolate_vec3(
-    start: Vec3,
-    end: Vec3,
+    start: Point3,
+    end: Point3,
     t: float,
-) -> Vec3:
-    return Vec3(
+) -> Point3:
+    return Point3(
         start.x + (end.x - start.x) * t,
         start.y + (end.y - start.y) * t,
         start.z + (end.z - start.z) * t,
@@ -709,7 +716,7 @@ def _split_mesh_edge(
     mesh: Mesh3,
     start_index: int,
     end_index: int,
-    new_node: Vec3,
+    new_node: Point3,
     *,
     tolerance: float,
 ) -> Mesh3:
@@ -890,14 +897,14 @@ def _append_unique_edge(
 
 
 def _point_segment_distance(
-    start: Vec3,
-    end: Vec3,
-    point: Vec3,
+    start: Point3,
+    end: Point3,
+    point: Point3,
 ) -> float:
     t = _point_segment_parameter(start, end, point)
     t = max(0.0, min(1.0, t))
 
-    closest = Vec3(
+    closest = Point3(
         start.x + (end.x - start.x) * t,
         start.y + (end.y - start.y) * t,
         start.z + (end.z - start.z) * t,
@@ -907,9 +914,9 @@ def _point_segment_distance(
 
 
 def _point_segment_parameter(
-    start: Vec3,
-    end: Vec3,
-    point: Vec3,
+    start: Point3,
+    end: Point3,
+    point: Point3,
 ) -> float:
     ab_x = end.x - start.x
     ab_y = end.y - start.y
@@ -927,8 +934,8 @@ def _point_segment_parameter(
 
 
 def _distance(
-    left: Vec3,
-    right: Vec3,
+    left: Point3,
+    right: Point3,
 ) -> float:
     dx = right.x - left.x
     dy = right.y - left.y
@@ -939,7 +946,7 @@ def _distance(
 def build_scene(
     wireframe: Wireframe3,
     planes: Iterable[tuple[float, Mesh3]],
-    nodes: Mesh3 | WireframeArray | Iterable[Iterable[Vec3]] | PointCloud3 | None = None,
+    nodes: Mesh3 | WireframeArray | Iterable[Iterable[Point3]] | PointCloud3 | None = None,
 ) -> Scene:
     scene = Scene(name="quarter_sphere_slice_planes").add(
         wireframe,
@@ -996,8 +1003,8 @@ def print_wireframe_summary(wireframe: Wireframe3) -> None:
     )
 
 
-def format_point(point: Point3 | Vec3) -> str:
-    x, y, z = point.tuple() if isinstance(point, Vec3) else point
+def format_point(point: Point3) -> str:
+    x, y, z = point.tuple() if isinstance(point, Point3) else point
     return f"({float(x):.3g}, {float(y):.3g}, {float(z):.3g})"
 
 

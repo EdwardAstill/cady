@@ -96,7 +96,7 @@ def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
 def test_transform_from_pose_preserves_viewer_message() -> None:
     with pytest.raises(
         TypeError,
-        match="scene object pose must be Transform3, Pose3-like, or a 3D translation",
+        match="scene object pose must be Transform3-like or a 3D translation",
     ):
         _transform_from_pose((1.0, 2.0))
 

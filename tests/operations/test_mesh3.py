@@ -14,7 +14,7 @@ def test_polyline3_bounds_and_transform() -> None:
 
     np.testing.assert_allclose(bounds3(polyline)[1], [1.0, 2.0, 3.0])
     np.testing.assert_allclose(
-        polyline3_transformed(polyline, Transform3.translation(1.0, 0.0, -1.0)),
+        polyline3_transformed(polyline, Transform3().translate(1.0, 0.0, -1.0)),
         [[1.0, 0.0, -1.0], [2.0, 2.0, 2.0]],
     )
 
@@ -29,7 +29,7 @@ def test_mesh_triangles_bounds_and_transform_keeps_faces() -> None:
     assert mesh.bounds()[1] == (1.0, 1.0, 0.0)
     assert mesh.boundary == ((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
 
-    transformed = mesh.transformed(Transform3.translation(0.0, 0.0, 1.0))
+    transformed = mesh.transformed(Transform3().translate(0.0, 0.0, 1.0))
     assert transformed.faces == mesh.faces
     assert transformed.triangles[0][0] == (0.0, 0.0, 1.0)
 

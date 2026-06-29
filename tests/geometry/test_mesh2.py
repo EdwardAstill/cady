@@ -18,7 +18,7 @@ def test_mesh_triangles_bounds_and_transform() -> None:
     assert mesh.boundary == ((0.0, 0.0), (1.0, 1.0))
     assert len(mesh.boundary_loops) == 1
 
-    moved = mesh.transformed(Transform2.translation(2.0, -1.0))
+    moved = mesh.transformed(Transform2(mesh.vertices).translate(2.0, -1.0))
     assert moved.bounds() == ((2.0, -1.0), (3.0, 0.0))
     assert moved.faces == mesh.faces
 

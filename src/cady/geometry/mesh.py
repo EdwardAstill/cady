@@ -16,7 +16,7 @@ from cady.operations.meshes import (
     project_point_to_plane,
     prune_dangling_edges,
 )
-from cady.operations.transforms import Transform3
+from cady.operations.transforms import Transform2, Transform3
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
@@ -24,7 +24,6 @@ Point3: TypeAlias = tuple[float, float, float]
 if TYPE_CHECKING:
     from cady.geometry.wireframe import Wireframe3
     from cady.operations.arrays import PointArray2, PointArray3
-    from cady.operations.transforms import Transform2
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -109,7 +108,7 @@ class Mesh2:
         return vertices, faces, edges
 
     def transformed(self, transform: Transform2) -> Mesh2:
-        array = transform.apply_points(self.vertices)
+        array = transform.array
         vertices = tuple((float(x), float(y)) for x, y in array)
         return Mesh2(vertices, self.faces, self.edges)
 
@@ -209,7 +208,7 @@ class Mesh3:
         return Mesh3(vertices, self.faces, self.edges)
 
     def mirror(self, plane_origin: object, plane_normal: object) -> Mesh3:
-        mirrored = self.transformed(Transform3.mirror(plane_origin, plane_normal))
+        mirrored = self.transformed(Transform3(self.vertices).mirror(plane_origin, plane_normal))
         return Mesh3(mirrored.vertices, _reverse_face_winding(self.faces), self.edges)
 
     def bounds(self) -> tuple[Point3, Point3]:

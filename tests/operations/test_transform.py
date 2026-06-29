@@ -5,135 +5,115 @@ from math import pi
 import numpy as np
 import pytest
 
-from cady.operations.transforms import (
-    Pose3,
-    Transform2,
-    Transform3,
-    coerce_transform3,
-    rotation_matrix2,
-    rotation_matrix3,
-)
+from cady.operations.transforms import Transform2, Transform3
 
 
-def test_rotation_matrix2_returns_planar_rotation() -> None:
-    matrix = rotation_matrix2(pi / 2)
+def test_transform2_chains_sequential_operations() -> None:
+    points = (
+        Transform2([[1.0, 0.0]])
+        .rotate(pi / 2)
+        .scale(2.0)
+        .translate(1.0, 0.0)
+        .array
+    )
 
-    assert matrix.shape == (2, 2)
-    assert matrix.dtype == np.float64
-    np.testing.assert_allclose(matrix @ np.array([1.0, 0.0]), [0.0, 1.0], atol=1e-12)
-
-
-def test_rotation_matrix3_returns_axis_rotation() -> None:
-    matrix = rotation_matrix3((0.0, 0.0, 2.0), pi / 2)
-
-    assert matrix.shape == (3, 3)
-    assert matrix.dtype == np.float64
-    np.testing.assert_allclose(matrix @ np.array([1.0, 0.0, 0.0]), [0.0, 1.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(points, [[1.0, 2.0]], atol=1e-12)
 
 
-def test_rotation_matrix3_rejects_zero_axis() -> None:
-    with pytest.raises(ValueError, match="axis_dir must be non-zero"):
-        rotation_matrix3((0.0, 0.0, 0.0), pi / 2)
-
-
-def test_transform2_rotation_origin_and_centre() -> None:
-    rotated = Transform2.rotation(pi / 2).apply_points([[1.0, 0.0]])
-    np.testing.assert_allclose(rotated, [[0.0, 1.0]], atol=1e-12)
-
-    around_centre = Transform2.rotation(pi / 2, centre=(1.0, 1.0)).apply_points([[2.0, 1.0]])
+def test_transform2_centre_mirror_and_linear_transform() -> None:
+    around_centre = Transform2([[2.0, 1.0]]).rotate(pi / 2, centre=(1.0, 1.0)).array
     np.testing.assert_allclose(around_centre, [[1.0, 2.0]], atol=1e-12)
 
+    mirrored = Transform2([[2.0, 0.0]]).mirror((0.0, 0.0), (0.0, 1.0)).array
+    np.testing.assert_allclose(mirrored, [[-2.0, 0.0]], atol=1e-12)
 
-def test_transform2_compose_applies_other_then_self() -> None:
-    transform = Transform2.translation(1.0, 0.0).compose(Transform2.rotation(pi / 2))
-
-    np.testing.assert_allclose(transform.apply_points([[1.0, 0.0]]), [[1.0, 1.0]], atol=1e-12)
-
-
-def test_transform2_inverse_round_trip_and_mirror() -> None:
-    points = np.array([[1.0, 2.0], [3.0, 4.0]])
-    transform = Transform2.translation(2.0, -1.0).compose(Transform2.scale(2.0))
-
-    np.testing.assert_allclose(
-        transform.inverse().apply_points(transform.apply_points(points)),
-        points,
-    )
-    np.testing.assert_allclose(
-        Transform2.mirror((0.0, 0.0), (0.0, 1.0)).apply_points([[2.0, 0.0]]),
-        [[-2.0, 0.0]],
-    )
+    sheared = Transform2([[1.0, 2.0]]).transform([[1.0, 2.0], [0.0, 1.0]]).array
+    np.testing.assert_allclose(sheared, [[5.0, 2.0]])
 
 
-def test_transform3_rotation_arbitrary_axis() -> None:
-    transform = Transform3.rotation((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), pi / 2)
+def test_transform2_can_apply_delayed_transform_to_points() -> None:
+    transform = Transform2().translate(1.0, 2.0).rotate(pi / 2)
 
     np.testing.assert_allclose(
-        transform.apply_points([[2.0, 0.0, 0.0]]),
-        [[1.0, 1.0, 0.0]],
+        transform.apply_points([[1.0, 0.0]]),
+        [[-2.0, 2.0]],
         atol=1e-12,
     )
 
 
-def test_transform3_scale_mirror_and_inverse_round_trip() -> None:
+def test_transform3_chains_sequential_operations() -> None:
+    points = (
+        Transform3([[2.0, 0.0, 0.0]])
+        .rotate(axis_dir=(0.0, 0.0, 1.0), angle=pi / 2, axis_origin=(1.0, 0.0, 0.0))
+        .translate(0.0, 0.0, 3.0)
+        .array
+    )
+
+    np.testing.assert_allclose(points, [[1.0, 1.0, 3.0]], atol=1e-12)
+
+
+def test_transform3_scale_mirror_and_linear_transform() -> None:
+    scaled = Transform3([[2.0, 3.0, 4.0]]).scale(
+        2.0,
+        3.0,
+        4.0,
+        centre=(1.0, 1.0, 1.0),
+    ).array
+    np.testing.assert_allclose(scaled, [[3.0, 7.0, 13.0]])
+
+    mirrored = Transform3([[1.0, 2.0, 3.0]]).mirror(
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+    ).array
+    np.testing.assert_allclose(mirrored, [[-1.0, 2.0, 3.0]])
+
+    flipped = Transform3([[1.0, 2.0, 3.0]]).transform(
+        np.diag([-1.0, 1.0, 1.0])
+    ).array
+    np.testing.assert_allclose(flipped, [[-1.0, 2.0, 3.0]])
+
+
+def test_transform3_applies_and_composes_delayed_transforms() -> None:
     points = np.array([[1.0, 2.0, 3.0], [2.0, 4.0, 6.0]])
-    transform = Transform3.translation(1.0, 2.0, 3.0).compose(
-        Transform3.scale(2.0, 3.0, 4.0, centre=(1.0, 1.0, 1.0))
+    transform = Transform3().translate(1.0, 2.0, 3.0).compose(
+        Transform3().scale(2.0, 3.0, 4.0).translate(-1.0, -2.0, -3.0)
     )
+
+    transformed = transform.apply_points(points)
+
+    np.testing.assert_allclose(transform.inverse().apply_points(transformed), points)
+    np.testing.assert_allclose(transform.with_points(points).array, transformed)
+
+
+def test_transform3_coerce_accepts_none_transform_matrix_and_translation() -> None:
+    transform = Transform3().translate(1.0, 2.0, 3.0)
 
     np.testing.assert_allclose(
-        transform.inverse().apply_points(transform.apply_points(points)),
-        points,
+        Transform3.coerce(None, allow_none=True).matrix,
+        Transform3().matrix,
     )
+    np.testing.assert_allclose(Transform3.coerce(transform).matrix, transform.matrix)
+    np.testing.assert_allclose(Transform3.coerce(transform.matrix).matrix, transform.matrix)
     np.testing.assert_allclose(
-        Transform3.mirror((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)).apply_points([[1.0, 2.0, 3.0]]),
-        [[-1.0, 2.0, 3.0]],
+        Transform3.coerce((4.0, 5.0, 6.0)).matrix,
+        Transform3().translate(4.0, 5.0, 6.0).matrix,
     )
 
 
-def test_pose3_and_vectorised_large_transform() -> None:
-    points = np.column_stack(
-        [
-            np.arange(1000, dtype=np.float64),
-            np.ones(1000, dtype=np.float64),
-            np.zeros(1000, dtype=np.float64),
-        ]
-    )
-    pose = Pose3(np.eye(3), np.array([1.0, 2.0, 3.0]))
-
-    transformed = pose.apply_points(points)
-
-    assert transformed.shape == (1000, 3)
-    np.testing.assert_allclose(transformed[0], [1.0, 3.0, 3.0])
-    np.testing.assert_allclose(pose.to_transform3().apply_points(points), transformed)
-
-
-def test_coerce_transform3_accepts_none_transform_pose_and_translation() -> None:
-    pose = Pose3(np.eye(3), np.array([1.0, 2.0, 3.0]))
-
-    np.testing.assert_allclose(
-        coerce_transform3(None, allow_none=True).matrix,
-        Transform3.identity().matrix,
-    )
-    np.testing.assert_allclose(
-        coerce_transform3(Transform3.translation(1.0, 2.0, 3.0)).matrix,
-        Transform3.translation(1.0, 2.0, 3.0).matrix,
-    )
-    np.testing.assert_allclose(
-        coerce_transform3(pose).matrix,
-        pose.to_transform3().matrix,
-    )
-    np.testing.assert_allclose(
-        coerce_transform3((4.0, 5.0, 6.0)).matrix,
-        Transform3.translation(4.0, 5.0, 6.0).matrix,
-    )
-
-
-def test_coerce_transform3_rejects_invalid_values() -> None:
+def test_transform3_coerce_rejects_invalid_values() -> None:
     with pytest.raises(TypeError, match="value must not be None"):
-        coerce_transform3(None)
+        Transform3.coerce(None)
 
-    with pytest.raises(
-        TypeError,
-        match="value must be Transform3, Pose3-like, or a 3D translation",
-    ):
-        coerce_transform3((1.0, 2.0))
+    with pytest.raises(TypeError, match="value must be Transform3-like or a 3D translation"):
+        Transform3.coerce((1.0, 2.0))
+
+
+def test_transform_rejects_invalid_axes_and_missing_points() -> None:
+    with pytest.raises(ValueError, match="axis_dir must be non-zero"):
+        Transform3([[1.0, 0.0, 0.0]]).rotate(
+            axis_dir=(0.0, 0.0, 0.0),
+            angle=pi / 2,
+        )
+
+    with pytest.raises(ValueError, match="Transform2 has no points"):
+        _points = Transform2().array

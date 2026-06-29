@@ -31,11 +31,15 @@ def test_assembly_add_returns_new_assembly_and_reuses_parts_as_instances() -> No
 
 def test_nested_assembly_flattening_applies_parent_before_child_pose() -> None:
     part = Part("pin").with_body(_point_mesh())
-    child = Assembly("child").add(part, name="pin", pose=Transform3.translation(5.0, 0.0, 0.0))
+    child = Assembly("child").add(
+        part,
+        name="pin",
+        pose=Transform3().translate(5.0, 0.0, 0.0),
+    )
     root = Assembly("root").add_assembly(
         child,
         name="child_a",
-        pose=Transform3.translation(10.0, 0.0, 0.0),
+        pose=Transform3().translate(10.0, 0.0, 0.0),
     )
 
     flattened = root.flatten()
@@ -63,6 +67,6 @@ def test_assembly_pose_validation_message_is_preserved() -> None:
 
     with pytest.raises(
         ProductError,
-        match="pose must be None, Transform3, Pose3-like, or a 3D translation",
+        match="pose must be None, Transform3-like, or a 3D translation",
     ):
         Assembly("assy").add(part, pose=(1.0, 2.0))

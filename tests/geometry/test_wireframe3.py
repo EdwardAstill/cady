@@ -87,7 +87,7 @@ def test_wireframe_transformed() -> None:
         ((0, 0, 0), (1, 0, 0)),
         ((0, 1),),
     )
-    moved = wf.transformed(Transform3.translation(0, 0, 5))
+    moved = wf.transformed(Transform3(wf.vertices).translate(0, 0, 5))
     assert tuple(moved.vertices[0]) == (0.0, 0.0, 5.0)
     assert tuple(moved.vertices[1]) == (1.0, 0.0, 5.0)
     assert moved.edges == ((0, 1),)

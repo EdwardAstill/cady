@@ -59,11 +59,11 @@ class PointCloud2:
         return np.array(self.vertices, dtype=np.float64)
 
     def transformed(self, transform: Transform2) -> PointCloud2:
-        array = transform.apply_points(self.vertices)
+        array = transform.array
         return PointCloud2((float(x), float(y)) for x, y in array)
 
     def mirror(self, point: object, direction: object) -> PointCloud2:
-        return self.transformed(Transform2.mirror(point, direction))
+        return self.transformed(Transform2(self.vertices).mirror(point, direction))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -111,7 +111,7 @@ class PointCloud3:
         return PointCloud3((float(x), float(y), float(z)) for x, y, z in array)
 
     def mirror(self, plane_origin: object, plane_normal: object) -> PointCloud3:
-        return self.transformed(Transform3.mirror(plane_origin, plane_normal))
+        return self.transformed(Transform3(self.vertices).mirror(plane_origin, plane_normal))
 
     def view(
         self,

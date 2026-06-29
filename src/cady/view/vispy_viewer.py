@@ -16,7 +16,7 @@ from typing import Any, cast
 import numpy as np
 
 from cady.geometry import Mesh3, PointCloud3, Wireframe3
-from cady.operations.transforms import Transform3, coerce_transform3
+from cady.operations.transforms import Transform3
 from cady.product import Assembly, Part
 from cady.utils import positive_tolerance
 from cady.view import AmbientLight, Camera, DirectionalLight, Scene
@@ -959,10 +959,10 @@ def _line_from_target(
 
 def _transform_from_pose(pose: object) -> Transform3:
     try:
-        return coerce_transform3(pose)
+        return Transform3.coerce(pose)
     except TypeError as exc:
         raise TypeError(
-            "scene object pose must be Transform3, Pose3-like, or a 3D translation"
+            "scene object pose must be Transform3-like or a 3D translation"
         ) from exc
 
 

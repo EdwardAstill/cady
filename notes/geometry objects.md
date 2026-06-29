@@ -34,7 +34,8 @@ The objects split into three layers:
 The important rule is that authoring objects should stay semantic. A circle is a
 centre plus radius until `to_array(tolerance=...)` samples it; a body is feature
 history until `to_mesh(tolerance=...)` evaluates it. The current codebase uses
-plain point tuples for coordinates rather than dedicated vector classes.
+plain point tuples for coordinates; there is no public `Vec2` or `Vec3` value
+layer.
 
 ### Line2 and Line3
 
@@ -280,23 +281,32 @@ curves should stay curves.
 
 ## Transform Methods
 
-Transforms should return new values and preserve semantic shape where possible.
+Geometry objects should return new values when transformed. The transform object
+is built separately, then passed into the semantic object:
+
+```python
+mesh.transformed(Transform3(mesh.vertices).translate(0.0, 0.0, 2.0))
+body.transformed(Transform3().translate(3.0, 4.0, 5.0))
+```
+
+The first form binds points immediately and exposes `.array`. The second form
+stores a delayed transform for objects that apply it internally.
+
 A body transform should move feature planes instead of immediately baking the
 body into a mesh.
 
-| Method | 2D meaning | 3D meaning |
+| Surface | 2D meaning | 3D meaning |
 |---|---|---|
-| `transformed(transform)` | Apply a `Transform2`. | Apply a `Transform3`. |
-| `translate(...)` | Move by `(dx, dy)` or a 2D vector. | Move by `(dx, dy, dz)` or a 3D vector. |
-| `rotate(...)` | Rotate by `angle` about a `centre` point. | Rotate by `angle` about an axis line. |
-| `scale(...)` | Scale about a `centre` point. | Scale about a `centre` point. |
-| `mirror(...)` | Reflect across a line, given a point and direction. | Reflect across a plane, given origin and normal. |
+| Geometry object | `transformed(Transform2(...))` where supported. | `transformed(Transform3(...))` where supported. |
+| Transform object | `translate`, `rotate`, `scale`, `mirror`, `transform`. | `translate`, `rotate`, `scale`, `mirror`, `transform`. |
+| Point output | `Transform2(points).translate(...).array`. | `Transform3(points).translate(...).array`. |
+| Delayed output | `Transform2().translate(...).apply_points(points)`. | `Transform3().translate(...).apply_points(points)`. |
 
 The rotate signatures should make the dimension difference visible:
 
 ```python
-shape2.rotate(angle, centre=(0.0, 0.0))
-shape3.rotate(angle, axis_origin=(0.0, 0.0, 0.0), axis_dir=(0.0, 0.0, 1.0))
+Transform2(points).rotate(angle, centre=(0.0, 0.0))
+Transform3(points).rotate(axis_dir=(0.0, 0.0, 1.0), angle=angle)
 ```
 
 For 3D objects, rotating about a line means rotating around
@@ -306,6 +316,10 @@ canonical transform should reduce to origin plus direction.
 `mirror(...)` needs one extra rule for surface meshes: reflection reverses
 orientation, so mesh implementations should reverse face winding to keep
 normals consistent.
+
+There is no separate pose object. Product and scene placement use delayed
+`Transform3` values, usually created with `Transform3().translate(...)` or
+coerced from a 3-number translation tuple.
 
 ## Current Shape
 

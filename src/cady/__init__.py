@@ -50,7 +50,6 @@ from cady.geometry import (
     Surface3,
     Wireframe3,
 )
-from cady.operations import Pose3 as Pose3
 from cady.operations import (
     arc2,
     arc3,
@@ -121,7 +120,6 @@ __all__ = [
     "PointCloud3",
     "Polyline3",
     "Polyline2",
-    "Pose3",
     "ProductError",
     "Region2",
     "Region3",

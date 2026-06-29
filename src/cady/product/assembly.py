@@ -20,13 +20,13 @@ if TYPE_CHECKING:
 
 def _transform_from_pose(pose: object | None) -> Transform3:
     """Coerce an optional pose-like value to a concrete transform."""
-    from cady.operations.transforms import coerce_transform3
+    from cady.operations.transforms import Transform3
 
     try:
-        return coerce_transform3(pose, allow_none=True)
+        return Transform3.coerce(pose, allow_none=True)
     except TypeError as exc:
         raise ProductError(
-            "pose must be None, Transform3, Pose3-like, or a 3D translation"
+            "pose must be None, Transform3-like, or a 3D translation"
         ) from exc
 
 

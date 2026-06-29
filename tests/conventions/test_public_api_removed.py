@@ -19,6 +19,8 @@ def test_removed_top_level_api_names_are_not_exported() -> None:
         "Shape3",
         "Sphere",
         "StlMesh",
+        "Vec2",
+        "Vec3",
     }
 
     for name in removed:
@@ -35,3 +37,9 @@ def test_array_mesh_wrapper_is_not_public_api() -> None:
     assert not hasattr(arrays, "ArrayMesh3")
     assert not hasattr(operations, "ArrayMesh3")
     assert "ArrayMesh3" not in operations.__all__
+
+
+def test_removed_vec_module_is_absent() -> None:
+    import importlib.util
+
+    assert importlib.util.find_spec("cady.vec") is None

@@ -9,16 +9,8 @@ from math import ceil, cos, dist, pi, sin
 from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, TypeGuard, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
-from cady.operations.arrays import (
-    EdgeArray,
-    FaceArray,
-    PointArray3,
-    as_edges,
-    as_faces,
-    as_points2,
-    as_points3,
-)
 from cady.operations.coordinates import add3, scale3
 from cady.operations.projections import (
     Point3Array,
@@ -47,6 +39,10 @@ Point3: TypeAlias = tuple[float, float, float]
 Triangle3: TypeAlias = tuple[Point3Tuple, Point3Tuple, Point3Tuple]
 FaceIndex = tuple[int, int, int]
 EdgeIndex = tuple[int, int]
+PointArray2 = NDArray[np.float64]
+PointArray3 = NDArray[np.float64]
+FaceArray = NDArray[np.int64]
+EdgeArray = NDArray[np.int64]
 MeshArrays = tuple[PointArray3, FaceArray, EdgeArray]
 
 
@@ -55,7 +51,7 @@ def coerce_mesh(
     faces: object | None,
     edges: object | None = None,
 ) -> MeshArrays:
-    """Return validated ``(vertices, faces, edges)`` arrays."""
+    """Return coerced ``(vertices, faces, edges)`` arrays."""
     if faces is None and _is_mesh_arrays(mesh_or_vertices):
         vertices_value = mesh_or_vertices[0]
         faces_value = mesh_or_vertices[1]
@@ -64,12 +60,17 @@ def coerce_mesh(
 
     if faces is None:
         raise TypeError("faces must be provided when passing vertices directly")
-    vertices_np = as_points3(mesh_or_vertices, name="vertices")
-    faces_np = as_faces(faces, name="faces")
-    edges_np = as_edges(
+    vertices_np = _points3_array(mesh_or_vertices, name="vertices")
+    faces_np = np.array(faces, dtype=np.int64, copy=True)
+    edges_np = np.array(
         np.empty((0, 2), dtype=np.int64) if edges is None else edges,
-        name="edges",
+        dtype=np.int64,
+        copy=True,
     )
+    if faces_np.size == 0:
+        faces_np = np.empty((0, 3), dtype=np.int64)
+    if edges_np.size == 0:
+        edges_np = np.empty((0, 2), dtype=np.int64)
     return vertices_np, faces_np, edges_np
 
 
@@ -80,6 +81,34 @@ def _is_mesh_arrays(
         return False
     values = cast(tuple[object, ...], value)
     return len(values) in {2, 3}
+
+
+def _float_array(value: object, *, name: str) -> NDArray[np.float64]:
+    try:
+        array = np.array(value, dtype=np.float64, copy=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must contain only finite values")
+    return array
+
+
+def _points2_array(value: object, *, name: str) -> PointArray2:
+    array = _float_array(value, name=name)
+    if array.ndim != 2:
+        raise ValueError(f"{name} must have rank 2")
+    if array.shape[1] != 2:
+        raise ValueError(f"{name} must have shape (n, 2)")
+    return array
+
+
+def _points3_array(value: object, *, name: str) -> PointArray3:
+    array = _float_array(value, name=name)
+    if array.ndim != 2:
+        raise ValueError(f"{name} must have rank 2")
+    if array.shape[1] != 3:
+        raise ValueError(f"{name} must have shape (n, 3)")
+    return array
 
 
 def boundary_edges(mesh: MeshArrays) -> list[Segment]:
@@ -1557,7 +1586,7 @@ def mesh_from_triangles(triangles: tuple[Triangle3, ...]) -> Mesh3:
 
 
 def _points2(points: object) -> tuple[Point2, ...]:
-    array = as_points2(points, name="vertices")
+    array = _points2_array(points, name="vertices")
     return tuple((float(point[0]), float(point[1])) for point in array)
 
 

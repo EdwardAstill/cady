@@ -120,10 +120,6 @@ change the operation result.
 |---|---:|---|
 | `as_points2` | `(n, 2)` finite numeric | `float64` point array |
 | `as_points3` | `(n, 3)` finite numeric | `float64` point array |
-| `as_faces` | `(n, 3)` integer-like numeric | `int64` triangle indices |
-| `as_edges` | `(n, 2)` integer-like numeric | `int64` edge indices |
-| `as_matrix3` | `(3, 3)` finite numeric | `float64` matrix |
-| `as_matrix4` | `(4, 4)` finite numeric | `float64` matrix |
 
 `bounds2(points)` and `bounds3(points)` compute axis-aligned bounding corners:
 
@@ -296,58 +292,75 @@ $$
 
 ## Transform Operations
 
-`transforms.py` has two layers:
+`transforms.py` has exactly two public objects: `Transform2` and `Transform3`.
+Each object can be used in two ways:
 
-1. direct point helpers for individual tuple points
-2. immutable homogeneous transform containers for array application and
-   composition
+```python
+Transform2(points).rotate(angle).translate(dx, dy).array
+Transform3(points).rotate(axis_dir=axis, angle=angle).translate(dx, dy, dz).array
+```
 
-### Direct 2D Transforms
+or as a delayed transform when the points are not known yet:
 
-`translate_point2(point, dx, dy)` computes:
+```python
+transform = Transform3().translate(1.0, 2.0, 3.0)
+vertices = transform.apply_points(vertices)
+```
 
-$$
-p' = (x + dx,\ y + dy)
-$$
+The delayed form is what products, scenes, planes, bodies, and meshable values
+use when they need to store or compose placement before applying it to concrete
+arrays.
 
-`rotate_point2(point, centre, angle)` rotates around a centre:
+Internally, `Transform2` stores a homogeneous `3x3` matrix and `Transform3`
+stores a homogeneous `4x4` matrix. This is still needed because translation
+cannot be represented by a plain `2x2` or `3x3` linear matrix.
 
-$$
-p' = c + R(\theta)(p-c)
-$$
-
-with:
-
-$$
-R(\theta) =
-\begin{bmatrix}
-\cos\theta & -\sin\theta \\
-\sin\theta & \cos\theta
-\end{bmatrix}
-$$
-
-`scale_point2(point, sx, sy, centre)` computes:
+Points are converted to homogeneous coordinates, multiplied by `matrix.T`, then
+converted back to ordinary point arrays:
 
 $$
-p' = c + (s_x(x-c_x),\ s_y(y-c_y))
+[x,\ y] \rightarrow [x,\ y,\ 1]
 $$
 
-`mirror_point2(point, a, b)` reflects across the line through `a` and `b`. It
-normalizes the line direction, projects `point-a` onto that axis, then mirrors
-across the projected point:
-
 $$
-p' = 2q - p
+[x,\ y,\ z] \rightarrow [x,\ y,\ z,\ 1]
 $$
 
-where `q` is the closest point on the mirror line.
+Both transform classes expose the same pattern:
 
-### Direct 3D Transforms
+| Method | Meaning |
+|---|---|
+| `Transform2(points=None)` | Create a 2D transform, optionally bound to point data. |
+| `Transform3(points=None)` | Create a 3D transform, optionally bound to point data. |
+| `.array` | Apply the current transform to the bound points. |
+| `with_points(points)` | Attach points to an existing delayed transform. |
+| `translate(...)` | Translation. |
+| `rotate(...)` | Rotation around a centre or axis. |
+| `scale(...)` | Uniform or per-axis scaling about a centre. |
+| `mirror(...)` | Reflection across a line in 2D or plane in 3D. |
+| `transform(matrix)` | Apply a linear `2x2` or `3x3` matrix. |
+| `compose(other)` | Compose two transforms. |
+| `inverse()` | Numeric matrix inverse. |
+| `apply_points(points)` | Apply to supplied points without rebinding. |
 
-`translate_point3(point, dx, dy, dz)` computes component-wise translation.
+Chained calls are applied in the order they are written. This is why:
 
-`rotate_point3(point, axis_origin, axis_dir, angle)` uses Rodrigues' rotation
-formula. For unit axis `k` and relative vector `v = p - o`:
+```python
+Transform2([[1.0, 0.0]]).rotate(pi / 2).translate(1.0, 0.0).array
+```
+
+rotates the point first, then translates it.
+
+`Transform3.coerce(value, allow_none=False)` is the only coercion entry point.
+It accepts:
+
+- an existing `Transform3`
+- any object whose `to_transform3()` returns a `Transform3`
+- a 3-number translation tuple
+- `None` only when `allow_none=True`, in which case it returns identity
+
+`Transform3.rotate(...)` uses Rodrigues' rotation formula. For unit axis `k` and
+relative vector `v = p - o`:
 
 $$
 v' =
@@ -357,59 +370,6 @@ v\cos\theta
 $$
 
 The final point is `axis_origin + v'`.
-
-`mirror_point3(point, plane_origin, plane_normal)` reflects across a plane:
-
-$$
-p' = p - 2((p-o)\cdot \hat{n})\hat{n}
-$$
-
-### Homogeneous Transforms
-
-`Transform2` wraps a validated `3x3` matrix. Points are converted to homogeneous
-coordinates `[x, y, 1]`, multiplied by `matrix.T`, then converted back to `x,y`.
-
-`Transform3` wraps a validated `4x4` matrix. Points are converted to
-`[x, y, z, 1]`.
-
-Both transform classes provide:
-
-| Method | Meaning |
-|---|---|
-| `identity()` | Unit transform. |
-| `translation(...)` | Translation matrix. |
-| `rotation(...)` | Rotation around a centre or axis. |
-| `scale(...)` | Uniform or per-axis scaling about a centre. |
-| `mirror(...)` | Reflection across a line in 2D or plane in 3D. |
-| `compose(other)` | Matrix product `self.matrix @ other.matrix`. |
-| `inverse()` | Numeric matrix inverse. |
-| `apply_points(points)` | Vectorized point transformation. |
-
-Because `compose` multiplies `self @ other`, applying the composed transform to
-column-style homogeneous points corresponds to `self(other(point))`. The
-implementation applies row arrays with `matrix.T`, which gives the same mapping.
-
-`rotation_matrix3(axis_dir, angle)` is Rodrigues' rotation matrix:
-
-$$
-R =
-\cos\theta I
-+ (1-\cos\theta)kk^T
-+ \sin\theta [k]_\times
-$$
-
-where `k` is the unit axis and `[k]x` is the skew-symmetric cross-product matrix.
-
-`coerce_transform3(value, allow_none=False)` accepts:
-
-- an existing `Transform3`
-- any object whose `to_transform3()` returns a `Transform3`
-- a 3-number translation tuple
-- `None` only when `allow_none=True`, in which case it returns identity
-
-`Pose3` is a frozen pose value with `position` and `orientation`. Its
-`to_transform3()` creates a translation transform from the pose position. The
-current implementation does not apply orientation in the transform matrix.
 
 ## Plane Projection Operations
 
@@ -1099,7 +1059,6 @@ Current algorithmic limits:
 - `close_boundary` only closes planar holes
 - `revolution_triangles` only supports the positive Z axis
 - `mesh_from_triangles` does not merge shared vertices
-- `Pose3.to_transform3()` currently applies position only
 - linesplan meshing is a coarse section grid, not a fairing solver
 
 The package is therefore best understood as a lightweight geometry operation

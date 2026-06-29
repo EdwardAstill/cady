@@ -19,7 +19,7 @@ def test_mesh_triangles_bounds_and_transform() -> None:
     assert mesh.triangles == (((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),)
     assert mesh.bounds() == ((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
 
-    moved = mesh.transformed(Transform3.translation(0.0, 0.0, 2.0))
+    moved = mesh.transformed(Transform3(mesh.vertices).translate(0.0, 0.0, 2.0))
     assert moved.bounds() == ((0.0, 0.0, 2.0), (1.0, 1.0, 2.0))
 
 
@@ -73,7 +73,7 @@ def test_mesh_edges_round_trip_through_array_transform_and_merge() -> None:
     )
 
     _vertices, _faces, edges = mesh.to_array(tolerance=1e-3)
-    moved = mesh.transformed(Transform3.translation(0.0, 0.0, 2.0))
+    moved = mesh.transformed(Transform3(mesh.vertices).translate(0.0, 0.0, 2.0))
     merged = Mesh3.merged((mesh, moved))
 
     np.testing.assert_array_equal(edges, [[0, 1]])
