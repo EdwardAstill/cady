@@ -73,12 +73,14 @@ def test_preferred_package_imports() -> None:
     from cady.drawing import Drawing2
     from cady.files import dxf, step, stl
     from cady.geometry import Body3, Line2, Mesh3, Region2, Surface2, Surface3
+    from cady.measurement import distance, intersection
     from cady.operations import box, cut_mesh_by_plane, region_rectangle
     from cady.product import Assembly, Part
     from cady.view import Camera, Scene
 
     assert all((Drawing2, Line2, Region2, Surface2, Surface3, Body3, Mesh3, Part, Assembly))
     assert all((Camera, Scene, region_rectangle, box, files))
+    assert all((distance, intersection))
     assert cut_mesh_by_plane
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
     assert all((stl.write, step.render, step.write, step.read_faces))

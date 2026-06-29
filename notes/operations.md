@@ -1,10 +1,9 @@
 # Cady Operations
 
 The operations package is the numeric layer between semantic CAD values and
-meshable or array-backed results. It owns tuple coordinate math, NumPy validation,
-sampling, transforms, projections, distances, intersections, polygon
-triangulation, mesh construction, mesh clipping, capping, lofting, and smart
-dispatch.
+meshable or array-backed results. It owns tuple coordinate math, local NumPy
+conversion, transforms, polygon triangulation, mesh construction, mesh clipping,
+capping, and lofting.
 
 The important boundary is:
 
@@ -21,15 +20,9 @@ explicitly instead of hiding a package-wide modelling resolution.
 Sources:
 
 - `src/cady/operations/coordinates.py`
-- `src/cady/operations/arrays.py`
-- `src/cady/operations/sampling.py`
 - `src/cady/operations/transforms.py`
-- `src/cady/operations/projections.py`
-- `src/cady/operations/distances.py`
-- `src/cady/operations/intersections.py`
 - `src/cady/operations/triangulation.py`
 - `src/cady/operations/meshes.py`
-- `src/cady/operations/dispatch.py`
 - `src/cady/operations/__init__.py`
 
 ## Package Map
@@ -37,15 +30,9 @@ Sources:
 | Module | Role |
 |---|---|
 | `coordinates` | Pure tuple vector arithmetic in 2D and 3D. |
-| `arrays` | NumPy array validation, bounds, Bezier sampling, and polyline measurements. |
-| `sampling` | Analytic 2D curve sampling for circles, arcs, cubic Beziers, and offsets. |
 | `transforms` | Point transforms plus immutable homogeneous affine transform containers. |
-| `projections` | Plane fitting, plane bases, and projection into plane-local coordinates. |
-| `distances` | Distances and closest points for points, bounded segments, and planes. |
-| `intersections` | Segment/segment, segment/plane, plane/plane, and planar surface intersections. |
 | `triangulation` | Pure-Python polygon triangulation with ear clipping and hole bridging. |
 | `meshes` | Mesh coercion, boundaries, caps, clipping, primitives, extrusion, lofts, linesplans. |
-| `dispatch` | User-facing operation dispatch for `discretise`, `mesh`, and `triangulate`. |
 | `__init__` | Re-exports operations and lightweight semantic constructors. |
 
 ## Coordinate Operations
@@ -110,185 +97,31 @@ $$
 The projected point is not returned by this helper; callers can reconstruct it
 as `line_point + t * line_dir`.
 
-## Array Validation And Measurements
+## Local Array Conversion
 
-`arrays.py` converts arbitrary point-like input into copied, finite NumPy arrays.
-The copy matters: callers cannot mutate the original input and accidentally
-change the operation result.
+There is no central `operations/arrays.py` module. Geometry values keep tuple
+data while being authored, then convert to copied NumPy arrays only at explicit
+boundaries such as `to_array(...)`, `to_mesh(...)`, transforms, and file/view
+preparation.
 
-| Helper | Accepted shape | Result |
-|---|---:|---|
-| `as_points2` | `(n, 2)` finite numeric | `float64` point array |
-| `as_points3` | `(n, 3)` finite numeric | `float64` point array |
+When a module returns arrays, define the narrow type alias in that file, for
+example `PointArray3: TypeAlias = NDArray[np.float64]`. Keep validation local
+and minimal: public constructors and conversion boundaries should reject obvious
+invalid input, but operation code should not be routed through broad validator
+helpers just to satisfy type checking.
 
-`bounds2(points)` and `bounds3(points)` compute axis-aligned bounding corners:
+Bounds and exact curve length should live with the semantic object that owns the
+geometry. Two-geometry queries such as distance and intersection belong in
+`cady.measurement`, not `cady.operations`.
 
-$$
-\min(P) = \left(\min_i x_i,\ \min_i y_i,\ \min_i z_i\right)
-$$
+## Sampling
 
-$$
-\max(P) = \left(\max_i x_i,\ \max_i y_i,\ \max_i z_i\right)
-$$
-
-The 2D version uses only `x,y`. Empty point arrays are rejected because bounds
-are undefined without at least one point.
-
-### Polygon Area And Centroid
-
-`polyline2_area(vertices)` uses the shoelace formula on a closed ring. If the
-first point is repeated as the last point, the duplicate closing point is removed
-first.
-
-$$
-A_s =
-\frac{1}{2}
-\sum_i
-\left(x_i y_{i+1} - x_{i+1} y_i\right)
-$$
-
-The public area is `abs(A_s)`. The sign is still useful internally because it
-encodes winding direction.
-
-`polyline2_centroid(vertices)` uses the standard polygon centroid:
-
-$$
-C_x =
-\frac{1}{6A_s}
-\sum_i
-(x_i+x_{i+1})(x_i y_{i+1}-x_{i+1}y_i)
-$$
-
-$$
-C_y =
-\frac{1}{6A_s}
-\sum_i
-(y_i+y_{i+1})(x_i y_{i+1}-x_{i+1}y_i)
-$$
-
-If the signed area is exactly zero, the centroid falls back to the arithmetic
-mean of the points. This handles degenerate rings without dividing by zero.
-
-`polyline2_length(vertices, closed=False)` sums Euclidean segment lengths. When
-`closed=True`, it adds the final segment from the last vertex back to the first
-vertex.
-
-### Array Bezier Spline
-
-`ArrayBezierSpline2` stores piecewise cubic Bezier control points as a validated
-`(n, 2)` array. The control-point count must be `3k + 1`, where `k >= 1`.
-
-Each segment uses four control points:
-
-$$
-B(t) =
-(1-t)^3P_0
-+ 3(1-t)^2tP_1
-+ 3(1-t)t^2P_2
-+ t^3P_3
-,\quad 0 \le t \le 1
-$$
-
-`evaluate_bezier_spline2(spline, t_values)` treats `t_values` as normalized
-parameters across the whole spline. For `segment_count = k`, it scales each
-global parameter by `k`, floors it to choose the segment, then evaluates the
-local cubic.
-
-`sample_bezier_spline2(...)` samples the spline either by explicit `samples` or
-by a tolerance-derived density:
-
-$$
-\text{samples_per_segment} =
-\max\left(4,\ \left\lceil\frac{1}{\sqrt{\text{tolerance}}}\right\rceil\right)
-$$
-
-If neither `samples` nor `tolerance` is supplied, it uses 16 samples per segment.
-Closed splines append the first vertex if the sampled final vertex does not
-already match it.
-
-`polyline3_transformed(vertices, transform)` validates 3D vertices and delegates
-the numeric mapping to any object with `apply_points(points)`.
-
-## Sampling Operations
-
-`sampling.py` turns analytic 2D curves into point sequences. The key control is
-the circle chord error.
-
-For a circle of radius `r` and sagitta tolerance `e`, the half-angle satisfies:
-
-$$
-e = r(1-\cos(\alpha))
-$$
-
-So the full segment angle is:
-
-$$
-\Delta\theta =
-2\arccos\left(1-\frac{e}{r}\right)
-$$
-
-`segments_for_circle(radius, tolerance)` returns:
-
-$$
-n =
-\max\left(12,\ \left\lceil \frac{2\pi}{\Delta\theta} \right\rceil\right)
-$$
-
-If `tolerance >= radius`, it returns the minimum 12 segments. Tolerance is
-clamped internally to at least `1e-9` for this calculation.
-
-`circle_points(centre, radius, tolerance=...)` samples:
-
-$$
-p_i =
-\left(
-c_x + r\cos\frac{2\pi i}{n},\
-c_y + r\sin\frac{2\pi i}{n}
-\right)
-$$
-
-for `i = 0 ... n-1`.
-
-`arc_points(centre, radius, start_rad, end_rad, tolerance=...)` samples both
-endpoints. It scales the full-circle segment count by the absolute sweep angle:
-
-$$
-n =
-\max\left(
-2,
-\left\lceil
-\frac{|\theta_1-\theta_0|}{2\pi}
-\text{segments_for_circle}(r,e)
-\right\rceil
-\right)
-$$
-
-`cubic_bezier_points(control_points, tolerance=...)` samples chained cubic
-Bezier segments with:
-
-$$
-\text{samples} =
-\max\left(8,\ \left\lceil\frac{1}{\sqrt{\text{tolerance}}}\right\rceil\right)
-$$
-
-It skips the first point of later segments so shared segment endpoints do not
-appear twice.
-
-`midpoint(a, b)` returns `(a+b)/2`.
-
-`perpendicular(vector)` normalizes the input and returns the left-hand
-perpendicular:
-
-$$
-\operatorname{perp}(x,y) = (-y,\ x)
-$$
-
-`offset_point(point, direction, distance)` moves the point along that unit
-perpendicular:
-
-$$
-p' = p + d\operatorname{perp}(\hat{v})
-$$
+Curve sampling lives on the semantic curve objects that own the shape:
+`Arc2`, `Arc3`, `Circle2`, `Ellipse2`, `Spline2`, and `Spline3` implement
+`to_array(tolerance=...)` directly. `Arc2.discretise(...)` and
+`Spline2.discretise(...)` return `Polyline2` values made from `Line2` segments.
+Mesh-specific sampling, such as primitive segment counts, lives inside
+`operations.meshes` next to the mesh algorithms that use it.
 
 ## Transform Operations
 
@@ -371,240 +204,19 @@ $$
 
 The final point is `axis_origin + v'`.
 
-## Plane Projection Operations
-
-`projections.py` is used by mesh capping and clipping when 3D loops need a 2D
-working plane.
-
-`vector3(value, name=...)` validates one finite 3D vector. `unit3(...)` also
-normalizes it.
-
-`basis_for_plane(normal)` builds an orthonormal basis `(u, v)` in a plane:
-
-1. choose a reference axis that is not nearly parallel to the normal
-2. compute `u = normal x reference`
-3. normalize `u`
-4. compute `v = normal x u`
-
-This gives two perpendicular in-plane axes.
-
-`project_loop(loop, vertices, origin, normal)` maps vertex indices into 2D
-plane coordinates:
-
-$$
-(u_i, v_i) =
-\left(
-(p_i-o)\cdot \hat{u},\
-(p_i-o)\cdot \hat{v}
-\right)
-$$
-
-`fit_plane_svd(points)` fits a best-fit plane:
-
-1. compute the centroid
-2. subtract it from the points
-3. run SVD on the centered points
-4. take the last right-singular vector as the plane normal
-5. flip the normal toward positive global Z when needed
-
-The last singular vector is the direction of least variance, so it is the normal
-of the best-fit plane in a least-squares sense.
-
-`max_plane_deviation(points, origin, normal)` returns:
-
-$$
-\max_i |(p_i-o)\cdot n|
-$$
-
-`project_point_to_plane(point, distance, normal)` subtracts the signed normal
-offset:
-
-$$
-p' = p - d n
-$$
-
-## Distance And Closest-Point Operations
-
-`distances.py` supports point/point, point/plane, line/line, and line/plane
-distances. Line-like inputs are treated as bounded segments.
-
-Result records:
-
-| Record | Meaning |
-|---|---|
-| `ClosestPoints2` | Distance, closest 2D endpoints, and both segment parameters. |
-| `ClosestPoints3` | Distance, closest 3D endpoints, and both segment parameters. |
-| `LinePlaneClosestPoint` | Minimum line-plane distance, closest point, segment parameter. |
-
-`distance(left, right, tolerance=...)` dispatches by shape and attributes:
-
-- point-like sequences of length 2 or 3
-- line-like objects with `start` and `end`, or a pair of point-like values
-- plane-like objects with `origin` and `normal`
-
-`signed_distance_to_plane(point, origin, normal)` computes:
-
-$$
-d_s = (p-o)\cdot \hat{n}
-$$
-
-The public point-plane distance uses `abs(d_s)`.
-
-`closest_line_plane(line, origin, normal)` evaluates the signed distances at
-both segment endpoints:
-
-- if either endpoint is on the plane, that endpoint is the closest point
-- if the signs differ, the segment crosses the plane and the distance is zero
-- otherwise the closer endpoint is returned
-
-For a crossing segment, the intersection parameter is:
-
-$$
-t = \frac{d_0}{d_0-d_1}
-$$
-
-and the point is linearly interpolated:
-
-$$
-p(t)=p_0+t(p_1-p_0)
-$$
-
-`closest_points_between_segments3(left, right, tolerance=...)` is the bounded
-segment closest-point algorithm. With:
-
-$$
-d_1=q_1-p_1,\quad d_2=q_2-p_2,\quad r=p_1-p_2
-$$
-
-and scalar terms:
-
-$$
-a=d_1\cdot d_1,\quad e=d_2\cdot d_2,\quad f=d_2\cdot r
-$$
-
-it solves for segment parameters `s,t` in `[0,1]`. Degenerate segments collapse
-to endpoint cases when their squared length is within `tolerance^2`.
-
-For non-degenerate segments it uses:
-
-$$
-b=d_1\cdot d_2,\quad c=d_1\cdot r,\quad D=ae-b^2
-$$
-
-$$
-s = \frac{bf-ce}{D}
-$$
-
-then clamps `s` and `t` to the bounded segment interval. Parallel segments use
-`s = 0` as the initial fallback before endpoint correction.
-
-`closest_points_between_segments2(...)` lifts 2D segments into `z=0`, runs the
-3D algorithm, then drops the `z` coordinate.
-
-## Intersection Operations
-
-`intersections.py` returns unique intersections for supported pairs and `None`
-when there is no unique hit.
-
-Result records:
-
-| Record | Meaning |
-|---|---|
-| `LineIntersection2` | Point plus both segment parameters. |
-| `LineIntersection3` | Point plus both segment parameters. |
-| `LinePlaneIntersection` | Point plus line parameter. |
-| `InfiniteLine3` | Plane-plane intersection line as point plus direction. |
-
-`intersect(left, right, tolerance=...)` dispatches:
-
-- planar `Surface3` against planar `Surface3`
-- plane against plane
-- line segment against line segment
-- line segment against plane
-
-Planar surfaces are recognized by `kind == "plane"` and `base_plane`.
-
-### 2D Segment Intersection
-
-For two bounded 2D segments:
-
-$$
-p + tr = q + us
-$$
-
-where `r = p_end - p` and `s = q_end - q`.
-
-The denominator is the 2D cross product:
-
-$$
-D = r \times s
-$$
-
-If `|D| <= tolerance`, the segments are parallel or collinear and the helper
-returns `None`. Otherwise:
-
-$$
-t = \frac{(q-p)\times s}{D}
-$$
-
-$$
-u = \frac{(q-p)\times r}{D}
-$$
-
-The result is accepted only if both parameters lie in `[0,1]` within tolerance.
-
-### 3D Segment Intersection
-
-`line3_line3_intersection(...)` delegates to
-`closest_points_between_segments3(...)`. If the closest-point distance is within
-tolerance, the returned intersection point is the midpoint of the two closest
-points.
-
-This makes skew lines return `None`, while nearly coincident bounded hits are
-accepted according to the supplied tolerance.
-
-### Line-Plane Intersection
-
-For segment `p0 -> p1`, direction `d = p1-p0`, plane origin `o`, and normal `n`:
-
-$$
-t = \frac{n\cdot(o-p_0)}{n\cdot d}
-$$
-
-If the denominator is near zero, the line is parallel to the plane and returns
-`None`. If `bounded=True`, `t` must lie in `[0,1]` within tolerance.
-
-### Plane-Plane Intersection
-
-Two planes intersect in an infinite line unless their normals are parallel.
-
-The direction is:
-
-$$
-d = \hat{n}_1 \times \hat{n}_2
-$$
-
-If `||d||^2 <= tolerance^2`, the planes are treated as parallel and the helper
-returns `None`.
-
-For planes in Hessian-style form:
-
-$$
-\hat{n}_1\cdot x = d_1,\quad \hat{n}_2\cdot x = d_2
-$$
-
-the implementation computes one point on the intersection line as:
-
-$$
-p =
-\frac{
-\left(d_1\hat{n}_2 - d_2\hat{n}_1\right)\times d
-}{
-d\cdot d
-}
-$$
-
-The returned direction is normalized.
+Plane-local semantic projection lives on `Plane3`: `coordinates(...)` maps a 3D
+point into local `(u, v)`, `signed_distance(...)` measures point offset from the
+plane, `project(...)` returns the orthogonal projection, and `fit(...)` builds a
+best-fit plane for planar 3D loops. Mesh-only array projection helpers live
+inside `operations.meshes` next to the capping and boundary-closing algorithms
+that use them.
+
+## Measurement Queries
+
+Distance, intersection, and future area/volume entry points live in
+`cady.measurement`. Exact curve length is a `.length` property on geometry
+values. See `src/cady/measurement/PLAN.md` for the package plan and current
+public surface.
 
 ## Polygon Triangulation
 

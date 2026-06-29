@@ -82,6 +82,16 @@ def test_line3_factory_and_sampling() -> None:
     ]
 
 
+def test_curve3_length_properties_are_exact_for_lines_and_arcs() -> None:
+    line = Line3((0.0, 0.0, 0.0), (2.0, 3.0, 6.0))
+    arc = Arc3((0.0, 0.0, 0.0), 2.0, 0.0, pi / 2.0)
+    polyline = Polyline3((line, arc))
+
+    assert line.length == pytest.approx(7.0)
+    assert arc.length == pytest.approx(pi)
+    assert polyline.length == pytest.approx(7.0 + pi)
+
+
 def test_spline3_factory_and_adaptive_sampling() -> None:
     spline = spline3(
         (

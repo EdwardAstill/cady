@@ -4,19 +4,30 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from math import ceil, sqrt
 from typing import TYPE_CHECKING, TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
 
 from cady.operations.coordinates import cross3, length3, scale3, sub3
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
-    from cady.operations.arrays import PointArray2, PointArray3
+    from cady.geometry.polyline import Polyline2
 
 
 def _append_unique_point(points: list[Point3], point: Point3) -> None:
+    if not points or points[-1] != point:
+        points.append(point)
+
+
+def _append_unique_point2(points: list[Point2], point: Point2) -> None:
     if not points or points[-1] != point:
         points.append(point)
 
@@ -58,14 +69,20 @@ class Spline2:
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         tolerance = positive_tolerance(tolerance)
-        from cady.operations import ArrayBezierSpline2
-        from cady.operations.arrays import as_points2
 
-        spline = ArrayBezierSpline2(
-            as_points2(self.control_points, name="control_points"),
-            closed=self.closed,
-        )
-        return spline.sample(tolerance=tolerance)
+        points = _cubic_bezier_points2(self.control_points, tolerance=tolerance)
+        if self.closed and points[0] != points[-1]:
+            points = (*points, points[0])
+        return np.array(points, dtype=np.float64, copy=True)
+
+    def discretise(self, *, tolerance: float) -> Polyline2:
+        from cady.geometry.polyline import Polyline2
+
+        points = tuple((float(x), float(y)) for x, y in self.to_array(tolerance=tolerance))
+        return Polyline2(points, closed=self.closed)
+
+    def discretize(self, *, tolerance: float) -> Polyline2:
+        return self.discretise(tolerance=tolerance)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -115,9 +132,37 @@ class Spline3:
                 tolerance=tolerance,
                 depth=0,
             )
-        from cady.operations.arrays import as_points3
+        return np.array(points, dtype=np.float64, copy=True)
 
-        return as_points3(points, name="vertices")
+
+def _cubic_bezier_points2(
+    control_points: tuple[Point2, ...],
+    *,
+    tolerance: float,
+) -> tuple[Point2, ...]:
+    points: list[Point2] = []
+    samples = max(8, ceil(1.0 / sqrt(tolerance)))
+    for start in range(0, len(control_points) - 1, 3):
+        p0, p1, p2, p3 = control_points[start : start + 4]
+        for index in range(samples + 1):
+            if points and index == 0:
+                continue
+            t = index / samples
+            u = 1.0 - t
+            _append_unique_point2(
+                points,
+                (
+                    p0[0] * (u**3)
+                    + p1[0] * (3.0 * u * u * t)
+                    + p2[0] * (3.0 * u * t * t)
+                    + p3[0] * (t**3),
+                    p0[1] * (u**3)
+                    + p1[1] * (3.0 * u * u * t)
+                    + p2[1] * (3.0 * u * t * t)
+                    + p3[1] * (t**3),
+                ),
+            )
+    return tuple(points)
 
 
 def _append_cubic_points(

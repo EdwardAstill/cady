@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
+
 from cady.geometry import Polyline2, Region2, Region3, Surface2, Surface3
 from cady.geometry.surface import Surface2 as Surface2FromModule
-from cady.operations.arrays import PointArray2, as_points2
+
+PointArray2: TypeAlias = NDArray[np.float64]
 
 
 class TriangleRegion:
@@ -15,7 +21,11 @@ class TriangleRegion:
         return True
 
     def to_array(self, *, tolerance: float) -> PointArray2:
-        return as_points2(((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)), name="vertices")
+        return np.array(
+            ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+            dtype=np.float64,
+            copy=True,
+        )
 
 
 def test_surface2_parametric_functions_define_points() -> None:

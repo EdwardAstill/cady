@@ -16,8 +16,7 @@ not the older `Line2D`/`Body3D`/`Drawing2D` style.
   transform, and metadata objects should return new values rather than mutate
   existing instances.
 - Keep authoring objects semantic until an explicit boundary: `to_array(...)`,
-  `to_mesh(...)`, operation dispatch (`discretise`, `mesh`, `triangulate`),
-  file write/render functions, or view preparation.
+  `to_mesh(...)`, file write/render functions, or view preparation.
 - Sampling, meshing, and export APIs must expose `tolerance` as a keyword
   argument. Domain `to_array(...)` and `to_mesh(...)` methods should require it;
   facades that default it must still pass it through explicitly.
@@ -34,7 +33,7 @@ not the older `Line2D`/`Body3D`/`Drawing2D` style.
   `Shape3`, `Sphere`, `StlMesh`, `Vec2`, `Vec3`, `profile_circle`,
   `profile_rectangle`, or `write_model(...)`.
 - Prefer current local patterns over new abstractions. This codebase uses frozen
-  dataclasses, tuple-backed immutable fields, local validation helpers, operation
+  dataclasses, tuple-backed immutable fields, minimal local validation, operation
   modules for numeric work, and late imports to maintain boundaries.
 
 ## Current Package Layout
@@ -42,7 +41,8 @@ not the older `Line2D`/`Body3D`/`Drawing2D` style.
 ```text
 src/cady/
   geometry/      semantic 2D/3D values: curves, regions, surfaces, meshes, bodies
-  operations/    NumPy-backed arrays, transforms, dispatch, sampling, meshing
+  operations/    NumPy-backed transforms, triangulation, meshing
+  measurement/   two-geometry distance/intersection and future area/volume queries
   drawing/       Drawing2 documents, layers, text, hatches, inserts, dimensions
   product/       Part, Assembly, Material, flattening
   view/          backend-independent Scene API and optional Vispy viewer helpers
@@ -71,21 +71,19 @@ Authoring layer:
 
 Evaluation layer:
 
-- `operations.arrays` owns `PointArray2`, `PointArray3`, `EdgeArray`,
-  `FaceArray`, `ArrayBezierSpline2`, validators such as `as_points2(...)`, and
-  small array helpers.
+- Array and primitive helpers should live in the operation module that uses
+  them. For type-checking clarity and safety, define small type aliases near the
+  top of that file when they make the code easier to read.
 - `operations.transforms` owns `Transform2` and `Transform3`.
-- `operations.dispatch` owns generic semantic dispatch:
-  `discretise(...)`/`discretize(...)`, `mesh(...)`, and `triangulate(...)`.
-- `operations.meshes`, `sampling`, `triangulation`, `projections`,
-  `distances`, `intersections`, and `coordinates` own numeric algorithms.
+- `operations.meshes`, `triangulation`, and `coordinates` own numeric algorithms.
+- `measurement` owns object-level distance, intersection, area, and volume-style
+  queries. It may import `geometry` objects.
 
 Allowed flow:
 
 ```text
 semantic value -> to_array(tolerance=...) -> array value
 semantic value -> to_mesh(tolerance=...)  -> Mesh2 or Mesh3
-semantic value -> operations.dispatch.*(...) -> semantic or array result
 semantic value -> files.*.write/render(...) or view.prepare_scene(...)
 ```
 
@@ -139,9 +137,10 @@ Top-level `cady` re-exports currently include:
 
 Subpackage exports are broader than top-level exports:
 
-- `cady.operations` also exports `Transform2`, `Transform3`, array validators,
-  transform helpers, distance/intersection helpers, mesh helpers, and dispatch
-  functions.
+- `cady.operations` also exports `Transform2`, `Transform3`, transform helpers,
+  mesh helpers, triangulation helpers, and lightweight semantic constructors.
+- `cady.measurement` exports object-level query helpers such as `distance(...)`
+  and `intersection(...)`, plus their small result dataclasses.
 - `cady.drawing` also exports `DrawingItem`, `Dimension2`, and
   `format_measurement`.
 - `cady.product` also exports `FlattenedPart`, `ProductError`, and
@@ -188,26 +187,29 @@ direction change first.
 
 Use `cady.operations` for array and primitive algorithms:
 
-- `arrays.py` contains NumPy-backed point/face/edge validators, bounds helpers,
-  Bezier spline evaluation, and polyline measurements.
+- Do not recreate a central `operations/arrays.py` module. Keep NumPy-backed
+  helper logic close to the operation that needs it, and use file-local type
+  aliases at the top of the file when that improves type checking and safety.
+- Keep validation minimal. Validate public construction inputs and explicit
+  conversion boundaries, but avoid broad helper layers that make the code harder
+  to read or complicate straightforward geometry logic.
 - `coordinates.py` contains low-level tuple/vector math.
-- `dispatch.py` contains generic `discretise`, `discretize`, `mesh`, and
-  `triangulate` entry points for supported semantic values.
-- `distances.py` and `intersections.py` contain geometric query helpers and
-  result dataclasses.
 - `meshes.py` contains mesh construction, primitive meshing, clipping, capping,
-  boundary closure, topology, region-loop extraction, and loft/wireframe helpers.
-- `projections.py` contains plane fitting and 2D projection helpers for planar
-  3D geometry.
-- `sampling.py` contains point sampling helpers such as circle/arc sampling and
-  segment count selection.
+  boundary closure, topology, region-loop extraction, mesh-local projection
+  helpers, mesh-local sampling helpers, and loft/wireframe helpers.
 - `transforms.py` contains `Transform2` and `Transform3`.
 - `triangulation.py` contains polygon triangulation and deduplication helpers.
 
 Operations code may import `numpy` and standard library modules. Keep it free of
-application-level package imports so it remains reusable and testable. Local
-imports of semantic classes are acceptable only at conversion boundaries where
-`operations.dispatch` must return a semantic value.
+application-level package imports so it remains reusable and testable.
+
+Use `cady.measurement` for object-level geometric queries:
+
+- `distance.py` contains distances and closest-point result records.
+- `intersection.py` contains `intersection(...)` dispatch and result records.
+- exact curve length belongs on geometry values as `.length`, not in a
+  measurement module.
+- `volume.py` is reserved for future meshable volume measurement.
 
 ## Files And I/O
 
@@ -307,7 +309,8 @@ Test areas:
 - `tests/geometry/`: geometry values, regions, body meshing, point clouds,
   wireframes, linesplan behavior
 - `tests/operations/`: validation, transforms, mesh clipping/capping, sampling,
-  numeric mesh helpers, generic dispatch
+  and numeric mesh helpers
+- `tests/measurement/`: distance, intersection, and future measurement queries
 - `tests/drawing/`: drawings, layers, dimensions, entities
 - `tests/product/`: parts, assemblies, flattening
 - `tests/view/`: scene model and viewer smoke coverage

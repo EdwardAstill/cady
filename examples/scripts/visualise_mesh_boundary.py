@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import argparse
 from math import cos, sin
+from typing import TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
 
 from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Wireframe3
-from cady.operations.arrays import PointArray3
 
 MESH_STYLE = DisplayStyle(color=(0.46, 0.52, 0.50), opacity=0.9)
 BOUNDARY_STYLES = (
@@ -22,6 +25,7 @@ BOUNDARY_STYLES = (
 )
 LIGHT = DirectionalLight(direction=(0.35, -0.65, -0.55), intensity=1.0)
 Point3 = tuple[float, float, float]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 
 def main() -> None:

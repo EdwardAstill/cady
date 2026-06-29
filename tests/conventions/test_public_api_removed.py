@@ -1,6 +1,6 @@
 import cady
+import cady.measurement as measurement
 import cady.operations as operations
-import cady.operations.arrays as arrays
 from cady.files import dxf, step, stl
 
 
@@ -34,7 +34,6 @@ def test_removed_file_facade_functions_are_absent() -> None:
 
 
 def test_array_mesh_wrapper_is_not_public_api() -> None:
-    assert not hasattr(arrays, "ArrayMesh3")
     assert not hasattr(operations, "ArrayMesh3")
     assert "ArrayMesh3" not in operations.__all__
 
@@ -43,3 +42,26 @@ def test_removed_vec_module_is_absent() -> None:
     import importlib.util
 
     assert importlib.util.find_spec("cady.vec") is None
+
+
+def test_removed_operations_arrays_module_is_absent() -> None:
+    import importlib.util
+
+    assert importlib.util.find_spec("cady.operations.arrays") is None
+
+
+def test_measurement_queries_are_not_operations_modules() -> None:
+    import importlib.util
+
+    assert importlib.util.find_spec("cady.operations.distances") is None
+    assert importlib.util.find_spec("cady.operations.intersections") is None
+    assert not hasattr(operations, "distance")
+    assert not hasattr(operations, "intersect")
+
+
+def test_length_is_not_a_measurement_function() -> None:
+    import importlib.util
+
+    assert importlib.util.find_spec("cady.measurement.length") is None
+    assert not hasattr(measurement, "length")
+    assert not hasattr(measurement, "intersect")

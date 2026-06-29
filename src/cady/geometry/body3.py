@@ -12,9 +12,9 @@ from cady.geometry.plane3 import Plane3
 from cady.operations.meshes import (
     box_mesh,
     cylinder_mesh,
-    extrusion_mesh,
     sphere_mesh,
 )
+from cady.operations.meshing import extrusion_mesh
 from cady.operations.transforms import Transform3
 from cady.utils import finite, positive
 

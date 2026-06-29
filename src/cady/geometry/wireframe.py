@@ -10,7 +10,8 @@ import numpy as np
 
 from cady.geometry.mesh import EdgeIndex, Mesh3
 from cady.geometry.polyline import Polyline3
-from cady.operations.meshes import LoftMesh, loft_section_polylines, prune_dangling_edges
+from cady.operations.lofting import LoftMesh, loft_section_polylines
+from cady.operations.mesh_topology import prune_dangling_edges
 from cady.operations.transforms import Transform3
 
 Point3: TypeAlias = tuple[float, float, float]
@@ -140,8 +141,7 @@ class Wireframe3:
 
         vertices = list(self.vertices)
         split_points: list[list[tuple[float, int]]] = [
-            [(0.0, edge[0]), (1.0, edge[1])]
-            for edge in self.edges
+            [(0.0, edge[0]), (1.0, edge[1])] for edge in self.edges
         ]
         edge_bounds = tuple(_edge_bounds(self.vertices, edge) for edge in self.edges)
 
@@ -184,9 +184,7 @@ class Wireframe3:
         tolerance: float = 1e-3,
     ) -> Wireframe3:
         """Split crossings, remove dangling branches, and triangulate loops."""
-        return _wireframe_from_triangulation(
-            _triangulate_wireframe(self, tolerance=tolerance)
-        )
+        return _wireframe_from_triangulation(_triangulate_wireframe(self, tolerance=tolerance))
 
     def triangulate_loops(
         self,
@@ -400,9 +398,7 @@ def _loft_section_wireframe_to_triangulation(
     tolerance: float,
 ) -> _WireframeTriangulation | None:
     loft_mesh = loft_section_polylines(
-        (
-            vertices for vertices in _wireframe_polylines(wireframe)
-        ),
+        (vertices for vertices in _wireframe_polylines(wireframe)),
         tolerance=tolerance,
     )
     if loft_mesh is None:
@@ -497,8 +493,8 @@ def _triangulate_loops_to_triangulation(
     tolerance: float,
 ) -> _WireframeTriangulation:
     from cady.errors import GeometryError
-    from cady.operations.meshes import triangulate_loop
-    from cady.operations.projections import fit_plane_svd, max_plane_deviation, project_loop
+    from cady.geometry.plane3 import Plane3
+    from cady.operations.triangulation import triangulate2
 
     neighbours: dict[int, set[int]] = {}
     for a, b in wireframe.edges:
@@ -540,21 +536,25 @@ def _triangulate_loops_to_triangulation(
     if not cycles:
         raise GeometryError("no closed edge loops of length >= 3 found")
 
-    vertices_list = [np.array(vertex, dtype=np.float64) for vertex in wireframe.vertices]
-
     faces: list[tuple[int, int, int]] = []
     for loop in cycles:
-        loop_points = np.array([vertices_list[index] for index in loop], dtype=np.float64)
-        loop_origin, loop_normal = fit_plane_svd(loop_points)
-        deviation = max_plane_deviation(loop_points, loop_origin, loop_normal)
+        loop_points = tuple(wireframe.vertices[index] for index in loop)
+        plane = Plane3.fit(loop_points)
+        deviation = plane.max_deviation(loop_points)
         if deviation > tolerance:
             raise GeometryError(
                 f"edge loop is non-planar (max deviation {deviation:.3e} > "
                 f"tolerance {tolerance:.3e})"
             )
-        projected = project_loop(loop, vertices_list, loop_origin, loop_normal)
-        for a, b, c in triangulate_loop(projected, tolerance):
-            faces.append((loop[a], loop[c], loop[b]))
+        projected = [plane.coordinates(point) for point in loop_points]
+        projected_array = np.asarray(projected, dtype=np.float64)
+        edges = np.asarray(
+            tuple((index, (index + 1) % len(projected)) for index in range(len(projected))),
+            dtype=np.int64,
+        )
+        _nodes, face_array = triangulate2(projected_array, edges, tolerance=tolerance)
+        for a, b, c in face_array:
+            faces.append((loop[int(a)], loop[int(c)], loop[int(b)]))
 
     return _triangulation_without_dangling_source_edges(
         wireframe.vertices,
@@ -719,10 +719,7 @@ def _triangulation_without_dangling_source_edges(
     ordered_vertices = tuple(sorted(used_vertices))
     remap = {old: new for new, old in enumerate(ordered_vertices)}
     compact_vertices = tuple(vertices[index] for index in ordered_vertices)
-    compact_faces = tuple(
-        (remap[a], remap[b], remap[c])
-        for a, b, c in faces
-    )
+    compact_faces = tuple((remap[a], remap[b], remap[c]) for a, b, c in faces)
     return _WireframeTriangulation(compact_vertices, compact_faces)
 
 

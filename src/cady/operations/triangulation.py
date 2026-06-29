@@ -1,154 +1,390 @@
-"""Small fallback triangulation helpers for flat vertex buffers."""
+"""Triangulation for closed 2D and planar 3D curve or edge loops."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from math import ceil
 from typing import TypeAlias
 
-from cady.errors import WriteError
-from cady.operations.sampling import Point2
+import numpy as np
+from numpy.typing import NDArray
 
-Triangle2: TypeAlias = tuple[Point2, Point2, Point2]
+from cady.operations.mesh_topology import edge_loops
+from cady.utils import loop_edges
 
-
-def triangulate_float32(
-    vertices: list[float],
-    hole_indices: list[int] | None = None,
-    dimensions: int = 2,
-) -> list[int]:
-    """Triangulate a flat 2D vertex buffer as triangle indices.
-
-    This is a small pure-Python helper for the simple outer-ring cases cady
-    currently needs. Holes are handled by higher-level tessellation before this
-    function is called.
-    """
-    if dimensions != 2:
-        raise ValueError("only 2D vertices are supported")
-    if hole_indices:
-        raise ValueError("hole indices are handled by triangulate_polygon")
-    count = len(vertices) // dimensions
-    if count < 3:
-        return []
-    return [index for i in range(1, count - 1) for index in (0, i, i + 1)]
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
+FaceIndex: TypeAlias = tuple[int, int, int]
+PointArray2 = NDArray[np.float64]
+PointArray3 = NDArray[np.float64]
+EdgeArray = NDArray[np.int64]
+FaceArray = NDArray[np.int64]
 
 
-def dedupe_closed(points: tuple[Point2, ...]) -> tuple[Point2, ...]:
-    """Remove a repeated closing point from a ring if present."""
-    if len(points) > 1 and points[0] == points[-1]:
-        return points[:-1]
-    return points
+@dataclass(frozen=True, slots=True)
+class TriangulationGuide:
+    """Optional constraints for simple boundary-guided triangulation."""
+
+    target_edge_length: float | None = None
+    max_edge_length: float | None = None
+    max_area: float | None = None
+    min_angle_degrees: float | None = None
 
 
-def area2(points: tuple[Point2, ...]) -> float:
-    """Return the signed area of a 2D ring."""
-    return sum(
-        a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1], strict=True)
-    ) / 2
-
-
-def is_self_intersecting(points: tuple[Point2, ...]) -> bool:
-    """Return whether a ring crosses itself away from adjacent edges."""
-    def ccw(a: Point2, b: Point2, c: Point2) -> bool:
-        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
-
-    edges = list(zip(points, points[1:] + points[:1], strict=True))
-    for i, (a, b) in enumerate(edges):
-        for j, (c, d) in enumerate(edges):
-            if abs(i - j) <= 1 or {i, j} == {0, len(edges) - 1}:
-                continue
-            if ccw(a, c, d) != ccw(b, c, d) and ccw(a, b, c) != ccw(a, b, d):
-                return True
-    return False
-
-
-def triangulate_polygon(
-    outer: tuple[Point2, ...],
-    holes: tuple[tuple[Point2, ...], ...] = (),
+def triangulate_curve2(
+    curve: object,
     *,
     tolerance: float,
-) -> list[Triangle2]:
-    """Triangulate a simple polygon, bridging holes into the outer ring first."""
-    outer = dedupe_closed(outer)
-    holes = tuple(dedupe_closed(hole) for hole in holes)
-    if is_self_intersecting(outer):
-        preview = ", ".join(str(point) for point in outer[:3])
-        raise WriteError(f"self-intersecting region near first 3 points: {preview}")
-    if not holes:
-        return _triangulate_simple_polygon(outer, tolerance=tolerance)
-    return _triangulate_polygon_with_holes(outer, holes, tolerance=tolerance)
+    guide: TriangulationGuide | None = None,
+):
+    """Fill a closed 2D curve and return a ``Mesh2``."""
+    from cady.geometry.mesh import Mesh2
 
-
-def _point_in_poly(point: Point2, poly: tuple[Point2, ...]) -> bool:
-    inside = False
-    j = len(poly) - 1
-    for i, pi_ in enumerate(poly):
-        pj = poly[j]
-        if ((pi_[1] > point[1]) != (pj[1] > point[1])) and (
-            point[0] < (pj[0] - pi_[0]) * (point[1] - pi_[1]) / (pj[1] - pi_[1]) + pi_[0]
-        ):
-            inside = not inside
-        j = i
-    return inside
-
-
-def _cross2(a: Point2, b: Point2, c: Point2) -> float:
-    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-
-
-def _geometry_tolerance(points: tuple[Point2, ...], tolerance: float) -> float:
-    span = max(
-        max(point[0] for point in points) - min(point[0] for point in points),
-        max(point[1] for point in points) - min(point[1] for point in points),
+    if not getattr(curve, "closed", False):
+        raise ValueError("curve must be closed to triangulate")
+    to_array = getattr(curve, "to_array", None)
+    if not callable(to_array):
+        raise TypeError("curve must provide to_array(tolerance=...)")
+    nodes = _coerce_points2(to_array(tolerance=tolerance))
+    boundary_edges = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
+    nodes_out, boundary_edges = _refine_edges2(
+        nodes,
+        boundary_edges,
+        _validate_guide(guide),
     )
-    return max(span * 1e-12, tolerance * 1e-6, 1e-12)
+    _nodes_out, _all_edges, faces = triangulate_mesh2(
+        nodes_out,
+        boundary_edges,
+        tolerance=tolerance,
+    )
+    vertices = tuple((float(x), float(y)) for x, y in nodes_out)
+    edge_values = tuple((int(a), int(b)) for a, b in boundary_edges)
+    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
+    return Mesh2(vertices, face_values, edge_values)
 
 
-def _same_point(a: Point2, b: Point2, tolerance: float) -> bool:
-    return abs(a[0] - b[0]) <= tolerance and abs(a[1] - b[1]) <= tolerance
+def triangulate_curve3(
+    curve: object,
+    *,
+    tolerance: float,
+    guide: TriangulationGuide | None = None,
+):
+    """Fill a closed planar 3D curve and return a ``Mesh3``."""
+    from cady.geometry.mesh import Mesh3
+
+    if not getattr(curve, "closed", False):
+        raise ValueError("curve must be closed to triangulate")
+    to_array = getattr(curve, "to_array", None)
+    if not callable(to_array):
+        raise TypeError("curve must provide to_array(tolerance=...)")
+    nodes = _coerce_points3(to_array(tolerance=tolerance))
+    boundary_edges = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
+    nodes_out, boundary_edges = _refine_edges3(
+        nodes,
+        boundary_edges,
+        _validate_guide(guide),
+    )
+    _nodes_out, _all_edges, faces = triangulate_mesh3(
+        nodes_out,
+        boundary_edges,
+        tolerance=tolerance,
+    )
+    vertices = tuple((float(x), float(y), float(z)) for x, y, z in nodes_out)
+    edge_values = tuple((int(a), int(b)) for a, b in boundary_edges)
+    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
+    return Mesh3(vertices, face_values, edge_values)
 
 
-def _point_on_segment(point: Point2, a: Point2, b: Point2, tolerance: float) -> bool:
-    if abs(_cross2(a, b, point)) > tolerance:
-        return False
-    return (
-        min(a[0], b[0]) - tolerance <= point[0] <= max(a[0], b[0]) + tolerance
-        and min(a[1], b[1]) - tolerance <= point[1] <= max(a[1], b[1]) + tolerance
+def triangulate_mesh2(
+    nodes: object,
+    edges: object,
+    *,
+    tolerance: float = 1e-9,
+    guide: TriangulationGuide | None = None,
+) -> tuple[PointArray2, EdgeArray, FaceArray]:
+    """Triangulate closed 2D edge loops and return nodes, edges, and faces."""
+    guide = _validate_guide(guide)
+    nodes_out, edges_out = _refine_edges2(
+        _coerce_points2(nodes),
+        _coerce_edges(edges),
+        guide,
+    )
+    faces: list[FaceIndex] = []
+    for loop in edge_loops(edges_out):
+        faces.extend(_triangulate_loop2(nodes_out, loop, tolerance))
+    faces_array = _face_array(faces)
+    return nodes_out, _add_internal_edges(edges_out, faces_array), faces_array
+
+
+def triangulate_mesh3(
+    nodes: object,
+    edges: object,
+    *,
+    tolerance: float = 1e-9,
+    guide: TriangulationGuide | None = None,
+) -> tuple[PointArray3, EdgeArray, FaceArray]:
+    """Project planar 3D edge loops and return nodes, edges, and faces."""
+    guide = _validate_guide(guide)
+    nodes_out, edges_out = _refine_edges3(
+        _coerce_points3(nodes),
+        _coerce_edges(edges),
+        guide,
+    )
+    faces: list[FaceIndex] = []
+    for loop in edge_loops(edges_out):
+        projected = _project_loop3(nodes_out, loop, tolerance)
+        local_faces = _triangulate_loop2(projected, tuple(range(len(loop))), tolerance)
+        faces.extend((loop[a], loop[b], loop[c]) for a, b, c in local_faces)
+    faces_array = _face_array(faces)
+    return nodes_out, _add_internal_edges(edges_out, faces_array), faces_array
+
+
+def triangulate2(
+    nodes: object,
+    edges: object,
+    *,
+    tolerance: float = 1e-9,
+    guide: TriangulationGuide | None = None,
+) -> tuple[PointArray2, FaceArray]:
+    """Compatibility wrapper returning ``(nodes, faces)`` for 2D loops."""
+    nodes_out, _edges, faces = triangulate_mesh2(
+        nodes,
+        edges,
+        tolerance=tolerance,
+        guide=guide,
+    )
+    return nodes_out, faces
+
+
+def triangulate3(
+    nodes: object,
+    edges: object,
+    *,
+    tolerance: float = 1e-9,
+    guide: TriangulationGuide | None = None,
+) -> tuple[PointArray3, FaceArray]:
+    """Compatibility wrapper returning ``(nodes, faces)`` for planar 3D loops."""
+    nodes_out, _edges, faces = triangulate_mesh3(
+        nodes,
+        edges,
+        tolerance=tolerance,
+        guide=guide,
+    )
+    return nodes_out, faces
+
+
+def _coerce_points2(value: object) -> PointArray2:
+    array = np.asarray(value, dtype=np.float64)
+    if array.ndim != 2 or array.shape[1] != 2:
+        raise ValueError("nodes must have shape (n, 2)")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("nodes must contain only finite values")
+    return np.array(array, dtype=np.float64, copy=True)
+
+
+def _coerce_points3(value: object) -> PointArray3:
+    array = np.asarray(value, dtype=np.float64)
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError("nodes must have shape (n, 3)")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("nodes must contain only finite values")
+    return np.array(array, dtype=np.float64, copy=True)
+
+
+def _coerce_edges(value: object) -> EdgeArray:
+    array = np.asarray(value, dtype=np.int64)
+    if array.size == 0:
+        return np.empty((0, 2), dtype=np.int64)
+    if array.ndim != 2 or array.shape[1] != 2:
+        raise ValueError("edges must have shape (n, 2)")
+    return np.array(array, dtype=np.int64, copy=True)
+
+
+def _validate_guide(guide: TriangulationGuide | None) -> TriangulationGuide | None:
+    if guide is None:
+        return None
+    for name in ("target_edge_length", "max_edge_length"):
+        value = getattr(guide, name)
+        if value is not None and value <= 0.0:
+            raise ValueError(f"{name} must be positive")
+    if guide.max_area is not None:
+        raise NotImplementedError("TriangulationGuide.max_area is not implemented")
+    if guide.min_angle_degrees is not None:
+        raise NotImplementedError("TriangulationGuide.min_angle_degrees is not implemented")
+    return guide
+
+
+def _guide_edge_length(guide: TriangulationGuide | None) -> float | None:
+    if guide is None:
+        return None
+    values = [value for value in (guide.max_edge_length, guide.target_edge_length) if value]
+    return min(values) if values else None
+
+
+def _refine_edges2(
+    nodes: PointArray2,
+    edges: EdgeArray,
+    guide: TriangulationGuide | None,
+) -> tuple[PointArray2, EdgeArray]:
+    return _refine_edges(nodes, edges, _guide_edge_length(guide))
+
+
+def _refine_edges3(
+    nodes: PointArray3,
+    edges: EdgeArray,
+    guide: TriangulationGuide | None,
+) -> tuple[PointArray3, EdgeArray]:
+    return _refine_edges(nodes, edges, _guide_edge_length(guide))
+
+
+def _refine_edges(
+    nodes: NDArray[np.float64],
+    edges: EdgeArray,
+    max_length: float | None,
+) -> tuple[NDArray[np.float64], EdgeArray]:
+    if max_length is None or len(edges) == 0:
+        return nodes, edges
+
+    vertices = [np.array(node, dtype=np.float64, copy=True) for node in nodes]
+    refined_edges: list[tuple[int, int]] = []
+    for start_raw, end_raw in edges:
+        start = int(start_raw)
+        end = int(end_raw)
+        length = float(np.linalg.norm(nodes[end] - nodes[start]))
+        segments = max(1, int(ceil(length / max_length)))
+        previous = start
+        for segment in range(1, segments):
+            ratio = segment / segments
+            point = nodes[start] + (nodes[end] - nodes[start]) * ratio
+            current = len(vertices)
+            vertices.append(np.array(point, dtype=np.float64, copy=True))
+            refined_edges.append((previous, current))
+            previous = current
+        refined_edges.append((previous, end))
+    return np.asarray(vertices, dtype=np.float64), np.asarray(refined_edges, dtype=np.int64)
+
+
+def _face_array(faces: list[FaceIndex]) -> FaceArray:
+    if not faces:
+        return np.empty((0, 3), dtype=np.int64)
+    return np.asarray(faces, dtype=np.int64)
+
+
+def _add_internal_edges(edges: EdgeArray, faces: FaceArray) -> EdgeArray:
+    edge_set = {
+        (min(int(start), int(end)), max(int(start), int(end)))
+        for start, end in edges
+        if int(start) != int(end)
+    }
+    for a, b, c in faces:
+        for start, end in ((int(a), int(b)), (int(b), int(c)), (int(c), int(a))):
+            if start != end:
+                edge_set.add((min(start, end), max(start, end)))
+    if not edge_set:
+        return np.empty((0, 2), dtype=np.int64)
+    return np.asarray(sorted(edge_set), dtype=np.int64)
+
+
+def _triangulate_loop2(
+    nodes: PointArray2,
+    loop: tuple[int, ...],
+    tolerance: float,
+) -> list[FaceIndex]:
+    indices = list(loop)
+    if len(indices) < 3:
+        return []
+    if _signed_area2(nodes, indices) < 0.0:
+        indices.reverse()
+
+    faces: list[FaceIndex] = []
+    guard = len(indices) * len(indices)
+    while len(indices) > 3 and guard > 0:
+        guard -= 1
+        clipped = False
+        for position, current in enumerate(indices):
+            previous = indices[position - 1]
+            following = indices[(position + 1) % len(indices)]
+            if _cross2(nodes[previous], nodes[current], nodes[following]) <= tolerance:
+                continue
+            if any(
+                candidate not in {previous, current, following}
+                and _point_in_triangle(
+                    nodes[candidate],
+                    nodes[previous],
+                    nodes[current],
+                    nodes[following],
+                    tolerance,
+                )
+                for candidate in indices
+            ):
+                continue
+            faces.append((previous, current, following))
+            del indices[position]
+            clipped = True
+            break
+        if clipped:
+            continue
+
+        for position, current in enumerate(indices):
+            previous = indices[position - 1]
+            following = indices[(position + 1) % len(indices)]
+            if abs(_cross2(nodes[previous], nodes[current], nodes[following])) <= tolerance:
+                del indices[position]
+                clipped = True
+                break
+        if not clipped:
+            break
+
+    if len(indices) == 3 and abs(_cross2(nodes[indices[0]], nodes[indices[1]], nodes[indices[2]])):
+        faces.append((indices[0], indices[1], indices[2]))
+    return faces
+
+
+def _project_loop3(
+    nodes: PointArray3,
+    loop: tuple[int, ...],
+    tolerance: float,
+) -> PointArray2:
+    points = nodes[list(loop)]
+    origin = points.mean(axis=0)
+    centered = points - origin
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    normal = vt[-1]
+    deviations = np.abs(centered @ normal)
+    if len(deviations) and float(np.max(deviations)) > tolerance:
+        raise ValueError(
+            "3D edge loop is non-planar "
+            f"(max deviation {float(np.max(deviations)):.3e} > tolerance {tolerance:.3e})"
+        )
+    reference = (
+        np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        if abs(float(normal[0])) < 0.9
+        else np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    )
+    x_axis = np.cross(normal, reference)
+    x_axis = x_axis / np.linalg.norm(x_axis)
+    y_axis = np.cross(normal, x_axis)
+    return np.column_stack((centered @ x_axis, centered @ y_axis)).astype(np.float64)
+
+
+def _signed_area2(nodes: PointArray2, indices: list[int]) -> float:
+    return 0.5 * sum(
+        float(nodes[start, 0] * nodes[end, 1] - nodes[end, 0] * nodes[start, 1])
+        for start, end in zip(indices, indices[1:] + indices[:1], strict=True)
     )
 
 
-def _segments_intersect(a: Point2, b: Point2, c: Point2, d: Point2, tolerance: float) -> bool:
-    if (
-        max(a[0], b[0]) + tolerance < min(c[0], d[0])
-        or max(c[0], d[0]) + tolerance < min(a[0], b[0])
-        or max(a[1], b[1]) + tolerance < min(c[1], d[1])
-        or max(c[1], d[1]) + tolerance < min(a[1], b[1])
-    ):
-        return False
-
-    ab_c = _cross2(a, b, c)
-    ab_d = _cross2(a, b, d)
-    cd_a = _cross2(c, d, a)
-    cd_b = _cross2(c, d, b)
-    if (
-        (ab_c > tolerance and ab_d < -tolerance)
-        or (ab_c < -tolerance and ab_d > tolerance)
-    ) and (
-        (cd_a > tolerance and cd_b < -tolerance)
-        or (cd_a < -tolerance and cd_b > tolerance)
-    ):
-        return True
-    return (
-        abs(ab_c) <= tolerance
-        and _point_on_segment(c, a, b, tolerance)
-        or abs(ab_d) <= tolerance
-        and _point_on_segment(d, a, b, tolerance)
-        or abs(cd_a) <= tolerance
-        and _point_on_segment(a, c, d, tolerance)
-        or abs(cd_b) <= tolerance
-        and _point_on_segment(b, c, d, tolerance)
-    )
+def _cross2(a: NDArray[np.float64], b: NDArray[np.float64], c: NDArray[np.float64]) -> float:
+    return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
 
 
-def _point_in_triangle(point: Point2, a: Point2, b: Point2, c: Point2, tolerance: float) -> bool:
+def _point_in_triangle(
+    point: NDArray[np.float64],
+    a: NDArray[np.float64],
+    b: NDArray[np.float64],
+    c: NDArray[np.float64],
+    tolerance: float,
+) -> bool:
     return (
         _cross2(a, b, point) >= -tolerance
         and _cross2(b, c, point) >= -tolerance
@@ -156,163 +392,12 @@ def _point_in_triangle(point: Point2, a: Point2, b: Point2, c: Point2, tolerance
     )
 
 
-def _clean_ring(points: tuple[Point2, ...]) -> tuple[Point2, ...]:
-    clean: list[Point2] = []
-    for point in dedupe_closed(points):
-        if clean and point == clean[-1]:
-            continue
-        clean.append(point)
-    if len(clean) > 1 and clean[0] == clean[-1]:
-        clean.pop()
-    return tuple(clean)
-
-
-def _triangulate_simple_polygon(points: tuple[Point2, ...], *, tolerance: float) -> list[Triangle2]:
-    points = _clean_ring(points)
-    if len(points) < 3:
-        return []
-    if area2(points) < 0:
-        points = tuple(reversed(points))
-
-    eps = _geometry_tolerance(points, tolerance)
-    remaining = list(points)
-    triangles: list[Triangle2] = []
-    guard = len(remaining) * len(remaining)
-
-    while len(remaining) > 3 and guard > 0:
-        guard -= 1
-        clipped = False
-        for index, point in enumerate(remaining):
-            previous_index = (index - 1) % len(remaining)
-            following_index = (index + 1) % len(remaining)
-            previous = remaining[previous_index]
-            following = remaining[following_index]
-            if _cross2(previous, point, following) <= eps:
-                continue
-            if any(
-                not (
-                    candidate_index in {previous_index, index, following_index}
-                    or _same_point(candidate, previous, eps)
-                    or _same_point(candidate, point, eps)
-                    or _same_point(candidate, following, eps)
-                )
-                and _point_in_triangle(candidate, previous, point, following, eps)
-                for candidate_index, candidate in enumerate(remaining)
-            ):
-                continue
-            triangles.append((previous, point, following))
-            del remaining[index]
-            clipped = True
-            break
-
-        if clipped:
-            continue
-
-        for index, point in enumerate(remaining):
-            previous = remaining[index - 1]
-            following = remaining[(index + 1) % len(remaining)]
-            if _same_point(point, previous, eps) or abs(_cross2(previous, point, following)) <= eps:
-                del remaining[index]
-                clipped = True
-                break
-        if not clipped:
-            raise WriteError("could not triangulate polygon region; check for invalid boundaries")
-
-    if len(remaining) == 3 and abs(_cross2(remaining[0], remaining[1], remaining[2])) > eps:
-        triangles.append((remaining[0], remaining[1], remaining[2]))
-    return triangles
-
-
-def _bridge_is_visible(
-    start: Point2,
-    end: Point2,
-    polygon: tuple[Point2, ...],
-    outer: tuple[Point2, ...],
-    holes: tuple[tuple[Point2, ...], ...],
-    current_hole: int,
-    tolerance: float,
-) -> bool:
-    if _same_point(start, end, tolerance):
-        return False
-
-    for fraction in (0.25, 0.5, 0.75):
-        sample = (
-            start[0] + (end[0] - start[0]) * fraction,
-            start[1] + (end[1] - start[1]) * fraction,
-        )
-        if not _point_in_poly(sample, outer):
-            return False
-        if any(_point_in_poly(sample, hole) for hole in holes):
-            return False
-
-    for a, b in zip(polygon, polygon[1:] + polygon[:1], strict=True):
-        if _same_point(a, end, tolerance) or _same_point(b, end, tolerance):
-            continue
-        if _segments_intersect(start, end, a, b, tolerance):
-            return False
-
-    for hole_index, hole in enumerate(holes):
-        for a, b in zip(hole, hole[1:] + hole[:1], strict=True):
-            if hole_index == current_hole and (
-                _same_point(a, start, tolerance) or _same_point(b, start, tolerance)
-            ):
-                continue
-            if _segments_intersect(start, end, a, b, tolerance):
-                return False
-    return True
-
-
-def _bridge_hole(
-    polygon: tuple[Point2, ...],
-    outer: tuple[Point2, ...],
-    holes: tuple[tuple[Point2, ...], ...],
-    hole_index: int,
-    *,
-    tolerance: float,
-) -> tuple[Point2, ...]:
-    hole = holes[hole_index]
-    eps = _geometry_tolerance(outer + tuple(point for hole in holes for point in hole), tolerance)
-    start_index = max(range(len(hole)), key=lambda index: (hole[index][0], -abs(hole[index][1])))
-    start = hole[start_index]
-    candidate_indices = list(range(len(polygon)))
-    candidate_indices.sort(
-        key=lambda index: (
-            polygon[index][0] < start[0] - eps,
-            (polygon[index][0] - start[0]) ** 2 + (polygon[index][1] - start[1]) ** 2,
-        )
-    )
-
-    for end_index in candidate_indices:
-        end = polygon[end_index]
-        if not _bridge_is_visible(start, end, polygon, outer, holes, hole_index, eps):
-            continue
-        # Splice the hole into the working polygon by duplicating the bridge endpoint.
-        hole_path = hole[start_index:] + hole[:start_index] + (start,)
-        return polygon[: end_index + 1] + hole_path + (end,) + polygon[end_index + 1 :]
-
-    raise WriteError("could not connect polygon hole to outer boundary")
-
-
-def _triangulate_polygon_with_holes(
-    outer: tuple[Point2, ...],
-    holes: tuple[tuple[Point2, ...], ...],
-    *,
-    tolerance: float,
-) -> list[Triangle2]:
-    if area2(outer) < 0:
-        outer = tuple(reversed(outer))
-    oriented_holes = tuple(tuple(reversed(hole)) if area2(hole) > 0 else hole for hole in holes)
-    polygon = outer
-    for hole_index in sorted(
-        range(len(oriented_holes)),
-        key=lambda index: max(point[0] for point in oriented_holes[index]),
-        reverse=True,
-    ):
-        polygon = _bridge_hole(
-            polygon,
-            outer,
-            oriented_holes,
-            hole_index,
-            tolerance=tolerance,
-        )
-    return _triangulate_simple_polygon(polygon, tolerance=tolerance)
+__all__ = [
+    "TriangulationGuide",
+    "triangulate2",
+    "triangulate3",
+    "triangulate_curve2",
+    "triangulate_curve3",
+    "triangulate_mesh2",
+    "triangulate_mesh3",
+]

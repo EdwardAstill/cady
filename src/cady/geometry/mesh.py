@@ -5,25 +5,27 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeAlias, cast
+from math import fsum
+from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
+from numpy.typing import NDArray
 
 from cady.errors import GeometryError
-from cady.operations.meshes import (
+from cady.operations.mesh_topology import (
     boundary_edges_from_faces,
     compact_mesh_data,
-    project_point_to_plane,
     prune_dangling_edges,
 )
 from cady.operations.transforms import Transform2, Transform3
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
     from cady.geometry.wireframe import Wireframe3
-    from cady.operations.arrays import PointArray2, PointArray3
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -80,6 +82,11 @@ class Mesh2:
         return tuple(
             (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
         )
+
+    @property
+    def area(self) -> float:
+        """Sum of triangle face areas."""
+        return float(_mesh2_area(self.vertices, self.faces))
 
     @property
     def boundary(self) -> tuple[Point2, Point2]:
@@ -177,6 +184,22 @@ class Mesh3:
         )
 
     @property
+    def area(self) -> float:
+        """Sum of triangle face surface areas."""
+        return float(_mesh3_area(self.vertices, self.faces))
+
+    @property
+    def volume(self) -> float:
+        """Signed-volume tetrahedron integration.
+
+        Computes the enclosed volume by summing signed tetrahedron
+        volumes formed from a shared reference point (mean vertex) and
+        each triangular face.  Returns the absolute value so the result
+        is always non-negative regardless of face winding.
+        """
+        return float(_mesh3_volume(self.vertices, self.faces))
+
+    @property
     def boundary(self) -> tuple[Point3, Point3]:
         return self.bounds()
 
@@ -249,7 +272,7 @@ class Mesh3:
         originals stay connected, creating thin gaps that ``close_boundary``
         can fill.
         """
-        from cady.operations.meshes import close_planar_cap
+        from cady.operations.mesh_clipping import close_planar_cap
 
         _validate_tolerance(tolerance)
         if snap_tolerance is not None and snap_tolerance <= 0.0:
@@ -280,26 +303,25 @@ class Mesh3:
         edges. Dangling degree-1 edge branches are pruned before wall faces are
         generated.
         """
-        from cady.errors import GeometryError
-        from cady.operations.projections import unit3, vector3
+        from cady.geometry.plane3 import Plane3
 
         _validate_tolerance(tolerance)
         if max_distance <= 0.0:
             raise ValueError("max_distance must be positive")
 
-        origin_np = vector3(plane_origin, name="plane_origin")
-        normal_np = unit3(plane_normal, name="plane_normal")
+        plane = Plane3.from_normal(
+            _point3(plane_origin, name="plane_origin"),
+            _point3(plane_normal, name="plane_normal"),
+        )
         source_edges = self.edges if self.edges else boundary_edges_from_faces(self.faces)
         live_edges = prune_dangling_edges(source_edges)
 
-        near_edges: list[tuple[int, int, float, float]] = []
+        near_edges: list[tuple[int, int]] = []
         for a, b in live_edges:
-            va = np.array(self.vertices[a], dtype=np.float64)
-            vb = np.array(self.vertices[b], dtype=np.float64)
-            dist_a = float(np.dot(va - origin_np, normal_np))
-            dist_b = float(np.dot(vb - origin_np, normal_np))
+            dist_a = plane.signed_distance(self.vertices[a])
+            dist_b = plane.signed_distance(self.vertices[b])
             if abs(dist_a) <= max_distance and abs(dist_b) <= max_distance:
-                near_edges.append((a, b, dist_a, dist_b))
+                near_edges.append((a, b))
 
         if not near_edges:
             raise GeometryError("no edges found within max_distance of the plane")
@@ -307,24 +329,18 @@ class Mesh3:
         projected_index: dict[int, int] = {}
         all_vertices = list(self.vertices)
 
-        for a, b, dist_a, dist_b in near_edges:
+        for a, b in near_edges:
             if a not in projected_index:
-                projected = tuple(
-                    float(value)
-                    for value in project_point_to_plane(self.vertices[a], dist_a, normal_np)
-                )
+                projected = plane.project(self.vertices[a])
                 projected_index[a] = len(all_vertices)
-                all_vertices.append(cast(Point3, projected))
+                all_vertices.append(projected)
             if b not in projected_index:
-                projected = tuple(
-                    float(value)
-                    for value in project_point_to_plane(self.vertices[b], dist_b, normal_np)
-                )
+                projected = plane.project(self.vertices[b])
                 projected_index[b] = len(all_vertices)
-                all_vertices.append(cast(Point3, projected))
+                all_vertices.append(projected)
 
         wall_faces: list[FaceIndex] = []
-        for a, b, _, _ in near_edges:
+        for a, b in near_edges:
             pa = projected_index[a]
             pb = projected_index[b]
             wall_faces.append((a, b, pb))
@@ -355,7 +371,7 @@ class Mesh3:
 
         Raises ``ValueError`` if any boundary loop is non-planar.
         """
-        from cady.operations.meshes import close_boundary as _close_boundary_ops
+        from cady.operations.mesh_clipping import close_boundary as _close_boundary_ops
 
         _validate_tolerance(tolerance)
         vertices, faces, edges = self.to_array(tolerance=tolerance)
@@ -511,15 +527,96 @@ def _boundary_loops(halfedges: list[tuple[int, int]]) -> list[list[int]]:
 
 
 def _polyline_from_loop(vertices: tuple[Point3, ...], loop: list[int]) -> PointArray3:
-    from cady.operations.arrays import as_points3
-
-    return as_points3([vertices[index] for index in loop + [loop[0]]], name="vertices")
+    return np.array([vertices[index] for index in loop + [loop[0]]], dtype=np.float64)
 
 
 def _polyline2_from_loop(vertices: tuple[Point2, ...], loop: list[int]) -> PointArray2:
-    from cady.operations.arrays import as_points2
+    return np.array([vertices[index] for index in loop + [loop[0]]], dtype=np.float64)
 
-    return as_points2([vertices[index] for index in loop + [loop[0]]], name="vertices")
+
+def _point3(value: object, *, name: str) -> Point3:
+    array = np.array(value, dtype=np.float64, copy=True)
+    if array.shape != (3,) or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must be a finite 3D point")
+    return (float(array[0]), float(array[1]), float(array[2]))
+
+
+def _triangle_area2(
+    a: Point2,
+    b: Point2,
+    c: Point2,
+) -> float:
+    """Signed area of a 2D triangle (positive for CCW winding)."""
+    return 0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]))
+
+
+def _mesh2_area(
+    vertices: tuple[Point2, ...],
+    faces: tuple[FaceIndex, ...],
+) -> float:
+    if not faces:
+        return 0.0
+    return float(
+        fsum(
+            abs(
+                _triangle_area2(
+                    vertices[a],
+                    vertices[b],
+                    vertices[c],
+                )
+            )
+            for a, b, c in faces
+        )
+    )
+
+
+def _triangle_area3(
+    a: Point3,
+    b: Point3,
+    c: Point3,
+) -> float:
+    """Area of a 3D triangle via half the cross-product magnitude."""
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ac = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    cross = (
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    )
+    return 0.5 * (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]) ** 0.5
+
+
+def _mesh3_area(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+) -> float:
+    if not faces:
+        return 0.0
+    return float(fsum(_triangle_area3(vertices[a], vertices[b], vertices[c]) for a, b, c in faces))
+
+
+def _mesh3_volume(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+) -> float:
+    """Tetrahedron integration volume (absolute value).
+
+    Constructs a tetrahedron [origin, v_a, v_b, v_c] for each face
+    and sums signed volumes.  Returns the absolute enclosed volume.
+    """
+    if not faces or not vertices:
+        return 0.0
+
+    signed_sum = fsum(
+        (
+            vertices[a][0] * (vertices[b][1] * vertices[c][2] - vertices[b][2] * vertices[c][1])
+            - vertices[a][1] * (vertices[b][0] * vertices[c][2] - vertices[b][2] * vertices[c][0])
+            + vertices[a][2] * (vertices[b][0] * vertices[c][1] - vertices[b][1] * vertices[c][0])
+        )
+        / 6.0
+        for a, b, c in faces
+    )
+    return abs(signed_sum)
 
 
 def _validate_tolerance(tolerance: float) -> None:

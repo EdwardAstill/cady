@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import atan2, ceil, cos, pi, sin
+from math import acos, atan2, ceil, cos, pi, sin
 from typing import TYPE_CHECKING, TypeAlias
 
+import numpy as np
+from numpy.typing import NDArray
+
 from cady.operations.coordinates import add3, dot3, length3, scale3
-from cady.operations.sampling import arc_points, segments_for_circle
 from cady.utils import finite, positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
-    from cady.operations.arrays import PointArray2, PointArray3
+    from cady.geometry.polyline import Polyline2
 
 
 def _unit_axis(axis: Point3, name: str) -> Point3:
@@ -31,6 +35,14 @@ def _angle_in_sweep(angle: float, start_rad: float, end_rad: float) -> bool:
     if sweep > 0.0:
         return (angle - start_rad) % (2.0 * pi) <= sweep
     return (start_rad - angle) % (2.0 * pi) <= -sweep
+
+
+def _segments_for_circle(radius: float, tolerance: float) -> int:
+    tolerance = max(float(tolerance), 1e-9)
+    if tolerance >= radius:
+        return 12
+    angle = 2.0 * acos(max(-1.0, min(1.0, 1.0 - tolerance / radius)))
+    return max(12, ceil((2.0 * pi) / angle))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -81,24 +93,35 @@ class Arc2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        return abs(self.end_rad - self.start_rad) * self.radius
+
     def points(self) -> tuple[Point2, ...]:
         return (self._point(self.start_rad), self._point(self.end_rad))
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         tolerance = positive_tolerance(tolerance)
-        from cady.operations.arrays import as_points2
 
-        points = tuple(
-            (x, y)
-            for x, y in arc_points(
-                self.centre,
-                self.radius,
-                self.start_rad,
-                self.end_rad,
-                tolerance=tolerance,
-            )
+        sweep = self.end_rad - self.start_rad
+        segment_count = max(
+            2,
+            ceil(abs(sweep) / (2.0 * pi) * _segments_for_circle(self.radius, tolerance)),
         )
-        return as_points2(points, name="vertices")
+        points = tuple(
+            self._point(self.start_rad + sweep * index / segment_count)
+            for index in range(segment_count + 1)
+        )
+        return np.array(points, dtype=np.float64, copy=True)
+
+    def discretise(self, *, tolerance: float) -> Polyline2:
+        from cady.geometry.polyline import Polyline2
+
+        points = tuple((float(x), float(y)) for x, y in self.to_array(tolerance=tolerance))
+        return Polyline2(points)
+
+    def discretize(self, *, tolerance: float) -> Polyline2:
+        return self.discretise(tolerance=tolerance)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -176,13 +199,15 @@ class Arc3:
     def boundary(self) -> tuple[Point3, Point3]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        return abs(self.end_rad - self.start_rad) * self.radius
+
     def points(self) -> tuple[Point3, Point3]:
         return (self._point(self.start_rad), self._point(self.end_rad))
 
     def to_array(self, *, tolerance: float) -> PointArray3:
         tolerance = positive_tolerance(tolerance)
-
-        from cady.operations.arrays import as_points3
 
         sweep = self.end_rad - self.start_rad
         segment_count = max(
@@ -190,14 +215,14 @@ class Arc3:
             ceil(
                 abs(sweep)
                 / (2.0 * pi)
-                * segments_for_circle(self.radius, tolerance)
+                * _segments_for_circle(self.radius, tolerance)
             ),
         )
         points = [
             self._point(self.start_rad + sweep * index / segment_count)
             for index in range(segment_count + 1)
         ]
-        return as_points3(points, name="vertices")
+        return np.array(points, dtype=np.float64, copy=True)
 
 
 __all__ = ["Arc2", "Arc3"]

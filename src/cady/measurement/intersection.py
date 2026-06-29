@@ -1,4 +1,4 @@
-"""Intersection algorithms for numeric geometry values."""
+"""Intersection measurements for geometry values."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from math import sqrt
 from typing import TypeAlias
 
-from cady.operations.coordinates import cross3, dot3, scale3, sub3
-from cady.operations.distances import (
+from cady.measurement.distance import (
     closest_points_between_segments3,
     line_points,
     plane_origin_normal,
 )
+from cady.operations.coordinates import cross3, dot3, scale3, sub3
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
@@ -48,13 +48,13 @@ class LinePlaneIntersection:
 
 @dataclass(frozen=True, slots=True)
 class InfiniteLine3:
-    """Operation-level infinite 3D line represented by point and direction."""
+    """Infinite 3D line represented by point and direction."""
 
     point: Point3
     direction: Point3
 
 
-def intersect(
+def intersection(
     left: object,
     right: object,
     *,
@@ -70,7 +70,7 @@ def intersect(
     left_surface_plane = _surface_plane(left)
     right_surface_plane = _surface_plane(right)
     if left_surface_plane is not None and right_surface_plane is not None:
-        return plane_plane_intersection(
+        return _plane_plane_intersection(
             left_surface_plane[0],
             left_surface_plane[1],
             right_surface_plane[0],
@@ -81,7 +81,7 @@ def intersect(
     left_plane = plane_origin_normal(left)
     right_plane = plane_origin_normal(right)
     if left_plane is not None and right_plane is not None:
-        return plane_plane_intersection(
+        return _plane_plane_intersection(
             left_plane[0],
             left_plane[1],
             right_plane[0],
@@ -95,25 +95,25 @@ def intersect(
         if len(left_line[0]) != len(right_line[0]):
             raise TypeError("line dimensions must match")
         if len(left_line[0]) == 2:
-            return line2_line2_intersection(
+            return _line2_line2_intersection(
                 _as_line2(left_line),
                 _as_line2(right_line),
                 tolerance=tolerance,
             )
-        return line3_line3_intersection(
+        return _line3_line3_intersection(
             _as_line3(left_line, "left line"),
             _as_line3(right_line, "right line"),
             tolerance=tolerance,
         )
 
     if left_line is not None and right_plane is not None:
-        return line3_plane_intersection(
+        return _line3_plane_intersection(
             _as_line3(left_line, "left line"),
             *right_plane,
             tolerance=tolerance,
         )
     if right_line is not None and left_plane is not None:
-        return line3_plane_intersection(
+        return _line3_plane_intersection(
             _as_line3(right_line, "right line"),
             *left_plane,
             tolerance=tolerance,
@@ -124,7 +124,7 @@ def intersect(
     )
 
 
-def line2_line2_intersection(
+def _line2_line2_intersection(
     left: Line2Points,
     right: Line2Points,
     *,
@@ -149,7 +149,7 @@ def line2_line2_intersection(
     return LineIntersection2((p[0] + r[0] * t, p[1] + r[1] * t), t, u)
 
 
-def line3_line3_intersection(
+def _line3_line3_intersection(
     left: Line3Points,
     right: Line3Points,
     *,
@@ -167,7 +167,7 @@ def line3_line3_intersection(
     return LineIntersection3(point, result.left_parameter, result.right_parameter)
 
 
-def line3_plane_intersection(
+def _line3_plane_intersection(
     line: Line3Points,
     origin: Point3,
     normal: Point3,
@@ -189,7 +189,7 @@ def line3_plane_intersection(
     return LinePlaneIntersection(_lerp3(start, end, t), t)
 
 
-def plane_plane_intersection(
+def _plane_plane_intersection(
     left_origin: Point3,
     left_normal: Point3,
     right_origin: Point3,
@@ -276,9 +276,5 @@ __all__ = [
     "LineIntersection2",
     "LineIntersection3",
     "LinePlaneIntersection",
-    "intersect",
-    "line2_line2_intersection",
-    "line3_line3_intersection",
-    "line3_plane_intersection",
-    "plane_plane_intersection",
+    "intersection",
 ]

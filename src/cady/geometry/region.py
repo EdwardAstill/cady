@@ -6,19 +6,22 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias, TypeGuard, cast
 
+import numpy as np
+from numpy.typing import NDArray
+
 from cady.geometry.conic2 import Circle2
 from cady.geometry.mesh import Mesh3
 from cady.geometry.plane3 import Plane3
 from cady.geometry.polyline import Curve2, Polyline2
 from cady.geometry.surface import Surface3
-from cady.operations.coordinates import cross3, dot3, normalised3, sub3
-from cady.operations.meshes import surface_region_mesh
+from cady.operations.coordinates import cross3, normalised3, sub3
+from cady.operations.meshing import surface_region_mesh
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
-    from cady.operations.arrays import PointArray2
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
@@ -155,7 +158,7 @@ class Region3:
     def convex_hull(cls, points: object) -> Region3:
         point_tuple = _points(points)
         plane = _plane_from_points(point_tuple)
-        projected = tuple(_project(point, plane) for point in point_tuple)
+        projected = tuple(plane.coordinates(point) for point in point_tuple)
         hull = _convex_hull(projected)
         return cls(_ProjectedRegion(hull), Surface3.plane(plane=plane))
 
@@ -199,7 +202,7 @@ class _ProjectedRegion:
 
     @classmethod
     def from_points(cls, points: tuple[Point3, ...], plane: Plane3) -> _ProjectedRegion:
-        return cls(tuple(_project(point, plane) for point in points))
+        return cls(tuple(plane.coordinates(point) for point in points))
 
     @property
     def closed(self) -> bool:
@@ -222,9 +225,7 @@ class _ProjectedRegion:
         return self.bounds()
 
     def to_array(self, *, tolerance: float) -> PointArray2:
-        from cady.operations.arrays import as_points2
-
-        return as_points2(self.outer, name="vertices")
+        return np.array(self.outer, dtype=np.float64, copy=True)
 
 
 def _region_parameter_bounds(region: object) -> tuple[Point2, Point2]:
@@ -302,11 +303,6 @@ def _plane_from_points(points: tuple[Point3, ...]) -> Plane3:
             except ValueError:
                 continue
     raise ValueError("region points must not be collinear")
-
-
-def _project(point: Point3, plane: Plane3) -> tuple[float, float]:
-    offset = sub3(point, plane.origin)
-    return (dot3(offset, plane.x_axis), dot3(offset, plane.y_axis))
 
 
 def _convex_hull(points: tuple[tuple[float, float], ...]) -> tuple[tuple[float, float], ...]:

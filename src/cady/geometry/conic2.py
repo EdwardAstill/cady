@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, pi, sin
-from typing import TYPE_CHECKING, TypeAlias
+from math import acos, ceil, cos, pi, sin, sqrt
+from typing import TypeAlias
 
-from cady.operations.sampling import circle_points, segments_for_circle
+import numpy as np
+from numpy.typing import NDArray
+
 from cady.utils import finite, positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
 
-if TYPE_CHECKING:
-    from cady.operations.arrays import PointArray2
+
+def _segments_for_circle(radius: float, tolerance: float) -> int:
+    tolerance = max(float(tolerance), 1e-9)
+    if tolerance >= radius:
+        return 12
+    angle = 2.0 * acos(max(-1.0, min(1.0, 1.0 - tolerance / radius)))
+    return max(12, ceil((2.0 * pi) / angle))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -36,6 +44,10 @@ class Circle2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        return 2.0 * pi * self.radius
+
     def points(self) -> tuple[Point2, ...]:
         point = (self.centre[0] + self.radius, self.centre[1])
         return (point, point)
@@ -46,17 +58,17 @@ class Circle2:
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         tolerance = positive_tolerance(tolerance)
-        from cady.operations.arrays import as_points2
 
+        count = _segments_for_circle(self.radius, tolerance)
+        cx, cy = self.centre
         points = tuple(
-            (x, y)
-            for x, y in circle_points(
-                self.centre,
-                self.radius,
-                tolerance=tolerance,
+            (
+                cx + self.radius * cos(2.0 * pi * index / count),
+                cy + self.radius * sin(2.0 * pi * index / count),
             )
+            for index in range(count)
         )
-        return as_points2(points, name="vertices")
+        return np.array(points, dtype=np.float64, copy=True)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -94,6 +106,13 @@ class Ellipse2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        a = max(self.radius_x, self.radius_y)
+        b = min(self.radius_x, self.radius_y)
+        h = ((a - b) * (a - b)) / ((a + b) * (a + b))
+        return pi * (a + b) * (1.0 + (3.0 * h) / (10.0 + sqrt(4.0 - 3.0 * h)))
+
     def points(self) -> tuple[Point2, ...]:
         cr = cos(self.rotation_rad)
         sr = sin(self.rotation_rad)
@@ -106,9 +125,8 @@ class Ellipse2:
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         tolerance = positive_tolerance(tolerance)
-        from cady.operations.arrays import as_points2
 
-        count = segments_for_circle(max(self.radius_x, self.radius_y), tolerance)
+        count = _segments_for_circle(max(self.radius_x, self.radius_y), tolerance)
         cr = cos(self.rotation_rad)
         sr = sin(self.rotation_rad)
         points: list[Point2] = []
@@ -117,7 +135,7 @@ class Ellipse2:
             x = self.radius_x * cos(angle)
             y = self.radius_y * sin(angle)
             points.append((self.centre[0] + x * cr - y * sr, self.centre[1] + x * sr + y * cr))
-        return as_points2(tuple(points), name="vertices")
+        return np.array(tuple(points), dtype=np.float64, copy=True)
 
 
 __all__ = ["Circle2", "Ellipse2"]

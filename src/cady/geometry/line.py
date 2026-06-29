@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeAlias
+from math import sqrt
+from typing import TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
 
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
-
-if TYPE_CHECKING:
-    from cady.operations.arrays import PointArray2, PointArray3
+PointArray2: TypeAlias = NDArray[np.float64]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -37,14 +40,19 @@ class Line2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        dx = self.end[0] - self.start[0]
+        dy = self.end[1] - self.start[1]
+        return sqrt(dx * dx + dy * dy)
+
     def points(self) -> tuple[Point2, ...]:
         return (self.start, self.end)
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         positive_tolerance(tolerance)
-        from cady.operations.arrays import as_points2
 
-        return as_points2((self.start, self.end), name="vertices")
+        return np.array((self.start, self.end), dtype=np.float64, copy=True)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -78,15 +86,20 @@ class Line3:
     def boundary(self) -> tuple[Point3, Point3]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        dx = self.end[0] - self.start[0]
+        dy = self.end[1] - self.start[1]
+        dz = self.end[2] - self.start[2]
+        return sqrt(dx * dx + dy * dy + dz * dz)
+
     def points(self) -> tuple[Point3, Point3]:
         return (self.start, self.end)
 
     def to_array(self, *, tolerance: float) -> PointArray3:
         positive_tolerance(tolerance)
 
-        from cady.operations.arrays import as_points3
-
-        return as_points3((self.start, self.end), name="vertices")
+        return np.array((self.start, self.end), dtype=np.float64, copy=True)
 
 
 __all__ = [

@@ -1,4 +1,4 @@
-"""Distance and closest-point algorithms for numeric geometry values."""
+"""Distance and closest-point measurements for geometry values."""
 
 from __future__ import annotations
 
@@ -59,8 +59,8 @@ def distance(left: object, right: object, *, tolerance: float = 1e-9) -> float:
     """
     tolerance = positive_tolerance(tolerance)
 
-    left_point = point_tuple(left)
-    right_point = point_tuple(right)
+    left_point = _point_tuple(left)
+    right_point = _point_tuple(right)
     if left_point is not None and right_point is not None:
         if len(left_point) != len(right_point):
             raise TypeError("point dimensions must match")
@@ -74,9 +74,9 @@ def distance(left: object, right: object, *, tolerance: float = 1e-9) -> float:
     left_plane = plane_origin_normal(left)
     right_plane = plane_origin_normal(right)
     if left_point is not None and right_plane is not None:
-        return abs(signed_distance_to_plane(_as_point3(left_point, "left point"), *right_plane))
+        return abs(_signed_distance_to_plane(_as_point3(left_point, "left point"), *right_plane))
     if right_point is not None and left_plane is not None:
-        return abs(signed_distance_to_plane(_as_point3(right_point, "right point"), *left_plane))
+        return abs(_signed_distance_to_plane(_as_point3(right_point, "right point"), *left_plane))
 
     left_line = line_points(left)
     right_line = line_points(right)
@@ -84,7 +84,7 @@ def distance(left: object, right: object, *, tolerance: float = 1e-9) -> float:
         if len(left_line[0]) != len(right_line[0]):
             raise TypeError("line dimensions must match")
         if len(left_line[0]) == 2:
-            return closest_points_between_segments2(
+            return _closest_points_between_segments2(
                 _as_line2(left_line),
                 _as_line2(right_line),
                 tolerance=tolerance,
@@ -96,20 +96,20 @@ def distance(left: object, right: object, *, tolerance: float = 1e-9) -> float:
         ).distance
 
     if left_line is not None and right_plane is not None:
-        return closest_line_plane(_as_line3(left_line, "left line"), *right_plane).distance
+        return _closest_line_plane(_as_line3(left_line, "left line"), *right_plane).distance
     if right_line is not None and left_plane is not None:
-        return closest_line_plane(_as_line3(right_line, "right line"), *left_plane).distance
+        return _closest_line_plane(_as_line3(right_line, "right line"), *left_plane).distance
 
     raise TypeError(f"unsupported distance operands: {type(left).__name__}, {type(right).__name__}")
 
 
-def signed_distance_to_plane(point: Point3, origin: Point3, normal: Point3) -> float:
+def _signed_distance_to_plane(point: Point3, origin: Point3, normal: Point3) -> float:
     """Return the signed perpendicular distance from ``point`` to a plane."""
     unit = _normalised3(normal, "normal")
     return dot3(sub3(point, origin), unit)
 
 
-def closest_line_plane(line: Line3Points, origin: Point3, normal: Point3) -> LinePlaneClosestPoint:
+def _closest_line_plane(line: Line3Points, origin: Point3, normal: Point3) -> LinePlaneClosestPoint:
     """Return the closest point on a bounded segment to a plane."""
     unit = _normalised3(normal, "normal")
     start, end = line
@@ -127,7 +127,7 @@ def closest_line_plane(line: Line3Points, origin: Point3, normal: Point3) -> Lin
     return LinePlaneClosestPoint(abs(end_distance), end, 1.0)
 
 
-def closest_points_between_segments2(
+def _closest_points_between_segments2(
     left: Line2Points,
     right: Line2Points,
     *,
@@ -196,14 +196,14 @@ def line_points(value: object) -> tuple[tuple[float, ...], tuple[float, ...]] | 
     start = getattr(value, "start", None)
     end = getattr(value, "end", None)
     if start is not None and end is not None:
-        start_point = point_tuple(start)
-        end_point = point_tuple(end)
+        start_point = _point_tuple(start)
+        end_point = _point_tuple(end)
         if start_point is None or end_point is None or len(start_point) != len(end_point):
             raise ValueError("line endpoints must be finite points with matching dimensions")
         return start_point, end_point
-    if is_sequence(value) and len(value) == 2:
-        first = point_tuple(value[0])
-        second = point_tuple(value[1])
+    if _is_sequence(value) and len(value) == 2:
+        first = _point_tuple(value[0])
+        second = _point_tuple(value[1])
         if first is not None and second is not None and len(first) == len(second):
             return first, second
     return None
@@ -214,8 +214,8 @@ def plane_origin_normal(value: object) -> tuple[Point3, Point3] | None:
     normal = getattr(value, "normal", None)
     if origin is None or normal is None:
         return None
-    origin_point = point_tuple(origin)
-    normal_point = point_tuple(normal)
+    origin_point = _point_tuple(origin)
+    normal_point = _point_tuple(normal)
     if origin_point is None or normal_point is None:
         raise ValueError("plane origin and normal must be finite 3D points")
     if len(origin_point) != 3 or len(normal_point) != 3:
@@ -223,8 +223,8 @@ def plane_origin_normal(value: object) -> tuple[Point3, Point3] | None:
     return origin_point, normal_point
 
 
-def point_tuple(value: object) -> tuple[float, ...] | None:
-    if not is_sequence(value) or len(value) not in {2, 3}:
+def _point_tuple(value: object) -> tuple[float, ...] | None:
+    if not _is_sequence(value) or len(value) not in {2, 3}:
         return None
     values: list[float] = []
     for item in value:
@@ -280,7 +280,7 @@ def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def is_sequence(value: object) -> TypeGuard[Sequence[object]]:
+def _is_sequence(value: object) -> TypeGuard[Sequence[object]]:
     return isinstance(value, Sequence) and not isinstance(value, str | bytes)
 
 
@@ -288,12 +288,5 @@ __all__ = [
     "ClosestPoints2",
     "ClosestPoints3",
     "LinePlaneClosestPoint",
-    "closest_line_plane",
-    "closest_points_between_segments2",
-    "closest_points_between_segments3",
     "distance",
-    "line_points",
-    "plane_origin_normal",
-    "point_tuple",
-    "signed_distance_to_plane",
 ]

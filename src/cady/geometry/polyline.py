@@ -5,18 +5,24 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
+from math import fsum
+from numbers import Real
 from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
+import numpy as np
+from numpy.typing import NDArray
+
 from cady.errors import GeometryError
-from cady.geometry.line import Line3
-from cady.utils import loop_edges, positive_tolerance
+from cady.geometry.line import Line2, Line3
+from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+PointArray2: TypeAlias = NDArray[np.float64]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
     from cady.geometry.mesh import Mesh2, Mesh3
-    from cady.operations.arrays import PointArray2, PointArray3
 
 
 FaceIndex = tuple[int, int, int]
@@ -33,35 +39,86 @@ class Curve2(Protocol):
     def to_array(self, *, tolerance: float) -> PointArray2: ...
 
 
+def _is_curve2(value: object) -> bool:
+    return (
+        callable(getattr(value, "bounds", None))
+        and callable(getattr(value, "points", None))
+        and callable(getattr(value, "to_array", None))
+    )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class Polyline2:
     """2D path made from straight segments, optionally closed."""
 
-    vertices: tuple[Point2, ...]
+    curves: tuple[Curve2, ...]
     closed: bool = False
 
-    def __init__(self, vertices: tuple[Point2, ...], closed: bool = False) -> None:
-        vertices = tuple(vertices)
+    def __init__(self, items: Iterable[Curve2 | Point2], closed: bool = False) -> None:
+        items = tuple(items)
+        if not items:
+            raise ValueError("Polyline2 requires at least one curve or two vertices")
+
         closed = bool(closed)
-        if closed and len(vertices) > 1 and vertices[0] == vertices[-1]:
-            vertices = vertices[:-1]
-        object.__setattr__(self, "vertices", vertices)
+        curve_flags = tuple(_is_curve2(item) for item in items)
+        if all(curve_flags):
+            curves = tuple(cast(Curve2, item) for item in items)
+            if closed:
+                vertices = _vertices2_from_curves(curves)
+                if len(set(vertices)) < 3:
+                    raise ValueError("closed Polyline2 requires at least three unique vertices")
+                if vertices[0] != vertices[-1]:
+                    curves = (*curves, Line2(vertices[-1], vertices[0]))
+        elif any(curve_flags):
+            raise TypeError("Polyline2 requires all items to be curves or all items to be vertices")
+        else:
+            vertices = tuple(cast(Point2, item) for item in items)
+            if closed and len(vertices) > 1 and vertices[0] == vertices[-1]:
+                vertices = vertices[:-1]
+            if closed and len(set(vertices)) < 3:
+                raise ValueError("closed Polyline2 requires at least three unique vertices")
+            if len(vertices) < 2:
+                raise ValueError("Polyline2 requires at least two vertices")
+            segment_vertices = vertices + (vertices[0],) if closed else vertices
+            curves = tuple(
+                Line2(start, end) for start, end in pairwise(segment_vertices) if start != end
+            )
+            if not curves:
+                raise ValueError("Polyline2 requires at least two distinct vertices")
+
+        object.__setattr__(self, "curves", curves)
         object.__setattr__(self, "closed", closed)
-        if closed:
-            if len(vertices) < 3:
-                raise ValueError("closed Polyline2 requires at least three vertices")
-        elif len(vertices) < 2:
-            raise ValueError("Polyline2 requires at least two vertices")
+
+    @classmethod
+    def from_curves(
+        cls,
+        curves: Iterable[Curve2],
+        *,
+        closed: bool = False,
+        tolerance: float | None = None,
+    ) -> Polyline2:
+        polyline = cls(tuple(curves), closed=closed)
+        if tolerance is None:
+            return polyline
+        return polyline.discretise(tolerance=tolerance)
+
+    @property
+    def vertices(self) -> tuple[Point2, ...]:
+        points = list(_vertices2_from_curves(self.curves))
+        if self.closed and len(points) > 1 and points[0] == points[-1]:
+            points.pop()
+        return tuple(points)
 
     def bounds(self) -> tuple[Point2, Point2]:
+        points = tuple(bound for curve in self.curves for bound in curve.bounds())
         return (
             (
-                min(point[0] for point in self.vertices),
-                min(point[1] for point in self.vertices),
+                min(point[0] for point in points),
+                min(point[1] for point in points),
             ),
             (
-                max(point[0] for point in self.vertices),
-                max(point[1] for point in self.vertices),
+                max(point[0] for point in points),
+                max(point[1] for point in points),
             ),
         )
 
@@ -69,35 +126,72 @@ class Polyline2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        return sum(_curve_length(curve) for curve in self.curves)
+
+    @property
+    def area(self) -> float:
+        """Signed area of a closed polyline via the shoelace formula.
+
+        Raises ``GeometryError`` when the polyline is not closed.
+        The area is positive for counter-clockwise vertex order.
+        """
+        if not self.closed:
+            raise GeometryError("Polyline2 must be closed to compute area")
+        vertices = self.vertices
+        if len(vertices) < 3:
+            raise GeometryError("Polyline2 must have at least three vertices for area")
+        return abs(
+            fsum(
+                vertices[i][0] * vertices[(i + 1) % len(vertices)][1]
+                - vertices[(i + 1) % len(vertices)][0] * vertices[i][1]
+                for i in range(len(vertices))
+            )
+            * 0.5
+        )
+
     def points(self) -> tuple[Point2, ...]:
         if self.closed:
             return self.vertices + (self.vertices[0],)
         return self.vertices
 
-    def to_array(self, *, tolerance: float) -> PointArray2:
-        positive_tolerance(tolerance)
-        from cady.operations.arrays import as_points2
+    def discretise(self, *, tolerance: float) -> Polyline2:
+        tolerance = positive_tolerance(tolerance)
+        points: list[Point2] = []
+        for curve in self.curves:
+            array = curve.to_array(tolerance=tolerance)
+            for x, y in array:
+                point = (float(x), float(y))
+                if not points or points[-1] != point:
+                    points.append(point)
+        return Polyline2(tuple(points), closed=self.closed)
 
-        return as_points2(self.vertices, name="vertices")
+    def discretize(self, *, tolerance: float) -> Polyline2:
+        return self.discretise(tolerance=tolerance)
+
+    def to_array(self, *, tolerance: float) -> PointArray2:
+        tolerance = positive_tolerance(tolerance)
+
+        points: list[Point2] = []
+        for curve in self.curves:
+            array = curve.to_array(tolerance=tolerance)
+            for x, y in array:
+                point = (float(x), float(y))
+                if not points or points[-1] != point:
+                    points.append(point)
+        if self.closed and len(points) > 1 and points[0] == points[-1]:
+            points.pop()
+
+        return np.array(points, dtype=np.float64, copy=True)
 
     def to_mesh(self, *, tolerance: float) -> Mesh2:
         if not self.closed:
             raise GeometryError("Polyline2 must be closed to create a mesh")
         tolerance = positive_tolerance(tolerance)
-        from cady.geometry.mesh import Mesh2
-        from cady.operations.triangulation import triangulate_polygon
+        from cady.operations.meshing import closed_polyline_mesh2
 
-        point_to_index = {point: index for index, point in enumerate(self.vertices)}
-        triangles = triangulate_polygon(self.vertices, tolerance=tolerance)
-        faces = tuple(
-            (
-                point_to_index[a],
-                point_to_index[b],
-                point_to_index[c],
-            )
-            for a, b, c in triangles
-        )
-        return Mesh2(self.vertices, faces, loop_edges(len(self.vertices)))
+        return closed_polyline_mesh2(self, tolerance=tolerance)
 
 
 class Curve3(Protocol):
@@ -146,9 +240,7 @@ class Polyline3:
                 if vertices[0] != vertices[-1]:
                     curves = (*curves, Line3(vertices[-1], vertices[0]))
         elif any(curve_flags):
-            raise TypeError(
-                "Polyline3 requires all items to be curves or all items to be vertices"
-            )
+            raise TypeError("Polyline3 requires all items to be curves or all items to be vertices")
         else:
             vertices = tuple(cast(Point3, item) for item in items)
             if closed and len(vertices) > 1 and vertices[0] == vertices[-1]:
@@ -159,9 +251,7 @@ class Polyline3:
                 raise ValueError("Polyline3 requires at least two vertices")
             segment_vertices = vertices + (vertices[0],) if closed else vertices
             curves = tuple(
-                Line3(start, end)
-                for start, end in pairwise(segment_vertices)
-                if start != end
+                Line3(start, end) for start, end in pairwise(segment_vertices) if start != end
             )
             if not curves:
                 raise ValueError("Polyline3 requires at least two distinct vertices")
@@ -208,6 +298,39 @@ class Polyline3:
     def boundary(self) -> tuple[Point3, Point3]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        return sum(_curve_length(curve) for curve in self.curves)
+
+    @property
+    def area(self) -> float:
+        """Area of a closed planar 3D polyline via Newell's method.
+
+        Computes the polygon area from the magnitude of the summed
+        cross products of consecutive vertex position vectors.
+
+        Raises ``GeometryError`` when the polyline is not closed.
+        """
+        if not self.closed:
+            raise GeometryError("Polyline3 must be closed to compute area")
+        vertices = self.vertices
+        if len(vertices) < 3:
+            raise GeometryError("Polyline3 must have at least three vertices for area")
+        n = len(vertices)
+        cx = fsum(
+            vertices[i][1] * vertices[(i + 1) % n][2] - vertices[i][2] * vertices[(i + 1) % n][1]
+            for i in range(n)
+        )
+        cy = fsum(
+            vertices[i][2] * vertices[(i + 1) % n][0] - vertices[i][0] * vertices[(i + 1) % n][2]
+            for i in range(n)
+        )
+        cz = fsum(
+            vertices[i][0] * vertices[(i + 1) % n][1] - vertices[i][1] * vertices[(i + 1) % n][0]
+            for i in range(n)
+        )
+        return 0.5 * (cx * cx + cy * cy + cz * cz) ** 0.5
+
     def points(self) -> tuple[Point3, ...]:
         if self.closed:
             return self.vertices + (self.vertices[0],)
@@ -246,35 +369,30 @@ class Polyline3:
         if self.closed and len(points) > 1 and points[0] == points[-1]:
             points.pop()
 
-        from cady.operations.arrays import as_points3
-
-        return as_points3(points, name="vertices")
+        return np.array(points, dtype=np.float64, copy=True)
 
     def to_mesh(self, *, tolerance: float) -> Mesh3:
         if not self.closed:
             raise GeometryError("Polyline3 must be closed to create a mesh")
         tolerance = positive_tolerance(tolerance)
 
-        import numpy as np
+        from cady.operations.meshing import closed_polyline_mesh3
 
-        from cady.geometry.mesh import Mesh3
-        from cady.operations.meshes import triangulate_loop
-        from cady.operations.projections import fit_plane_svd, max_plane_deviation, project_loop
+        try:
+            return closed_polyline_mesh3(self, tolerance=tolerance)
+        except ValueError as exc:
+            if "non-planar" in str(exc):
+                raise GeometryError(str(exc)) from exc
+            raise
 
-        vertex_arrays = [np.array(vertex, dtype=np.float64) for vertex in self.vertices]
-        loop_points = np.array(vertex_arrays, dtype=np.float64)
-        origin, normal = fit_plane_svd(loop_points)
-        deviation = max_plane_deviation(loop_points, origin, normal)
-        if deviation > tolerance:
-            raise GeometryError(
-                f"closed polyline is non-planar (max deviation {deviation:.3e} > "
-                f"tolerance {tolerance:.3e})"
-            )
 
-        loop = list(range(len(self.vertices)))
-        projected = project_loop(loop, vertex_arrays, origin, normal)
-        faces = tuple(triangulate_loop(projected, tolerance))
-        return Mesh3(self.vertices, faces, loop_edges(len(self.vertices)))
+def _vertices2_from_curves(curves: Iterable[Curve2]) -> tuple[Point2, ...]:
+    points: list[Point2] = []
+    for curve in curves:
+        for point in curve.points():
+            if not points or points[-1] != point:
+                points.append(point)
+    return tuple(points)
 
 
 def _vertices_from_curves(curves: Iterable[Curve3]) -> tuple[Point3, ...]:
@@ -286,9 +404,17 @@ def _vertices_from_curves(curves: Iterable[Curve3]) -> tuple[Point3, ...]:
     return tuple(points)
 
 
+def _curve_length(curve: object) -> float:
+    value = getattr(curve, "length", None)
+    if not isinstance(value, Real):
+        raise TypeError(f"{type(curve).__name__} does not expose an exact length")
+    return float(value)
+
+
 __all__ = [
     "Curve2",
     "Curve3",
+    "Line2",
     "Line3",
     "Polyline2",
     "Polyline3",

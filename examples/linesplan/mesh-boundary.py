@@ -10,10 +10,13 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
 
 from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, Wireframe3
 from cady.files import dxf
-from cady.operations.arrays import PointArray3
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -27,6 +30,7 @@ BOUNDARY_STYLES = (
 LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
 
 Point3 = tuple[float, float, float]
+PointArray3: TypeAlias = NDArray[np.float64]
 
 
 def main() -> None:

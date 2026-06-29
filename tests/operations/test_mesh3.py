@@ -5,16 +5,15 @@ import pytest
 
 from cady.errors import GeometryError
 from cady.geometry import Mesh3
-from cady.operations.arrays import as_points3, bounds3, polyline3_transformed
 from cady.operations.transforms import Transform3
 
 
 def test_polyline3_bounds_and_transform() -> None:
-    polyline = as_points3([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], name="vertices")
+    polyline = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], dtype=np.float64)
 
-    np.testing.assert_allclose(bounds3(polyline)[1], [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(np.max(polyline, axis=0), [1.0, 2.0, 3.0])
     np.testing.assert_allclose(
-        polyline3_transformed(polyline, Transform3().translate(1.0, 0.0, -1.0)),
+        Transform3().translate(1.0, 0.0, -1.0).apply_points(polyline),
         [[1.0, 0.0, -1.0], [2.0, 2.0, 2.0]],
     )
 

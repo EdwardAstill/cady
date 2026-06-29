@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from typing import TypeAlias
+
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from cady.geometry import Body3, Plane3
 from cady.operations import box, cylinder, sphere
-from cady.operations.arrays import PointArray2, as_points2
 from cady.operations.transforms import Transform3
+
+PointArray2: TypeAlias = NDArray[np.float64]
 
 
 class RectangleRegion:
@@ -19,14 +23,15 @@ class RectangleRegion:
         return True
 
     def to_array(self, *, tolerance: float) -> PointArray2:
-        return as_points2(
+        return np.array(
             (
                 (0.0, 0.0),
                 (self.width, 0.0),
                 (self.width, self.depth),
                 (0.0, self.depth),
             ),
-            name="vertices",
+            dtype=np.float64,
+            copy=True,
         )
 
 

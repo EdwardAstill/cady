@@ -58,6 +58,21 @@ def test_arc2_samples_with_tolerance() -> None:
     np.testing.assert_allclose(array[0], [2, 0])
     np.testing.assert_allclose(array[-1], [0, 2], atol=1e-12)
 
+    polyline = arc.discretise(tolerance=0.01)
+    assert isinstance(polyline, Polyline2)
+    assert all(isinstance(curve, Line2) for curve in polyline.curves)
+    np.testing.assert_allclose(polyline.vertices[0], [2, 0])
+    np.testing.assert_allclose(polyline.vertices[-1], [0, 2], atol=1e-12)
+
+
+def test_curve2_length_properties_are_exact_for_segments_and_circular_curves() -> None:
+    assert Line2((0.0, 0.0), (3.0, 4.0)).length == pytest.approx(5.0)
+    assert Arc2((0.0, 0.0), 2.0, 0.0, pi / 2.0).length == pytest.approx(pi)
+    assert Circle2((0.0, 0.0), 2.0).length == pytest.approx(4.0 * pi)
+    assert Polyline2(((0.0, 0.0), (3.0, 0.0), (3.0, 4.0)), closed=True).length == (
+        pytest.approx(12.0)
+    )
+
 
 def test_polyline2_open_and_closed_array_flags() -> None:
     open_polyline = Polyline2(((0, 0), (1, 0), (1, 1)))
@@ -119,6 +134,11 @@ def test_spline2_samples_cubic_bezier_to_polyline() -> None:
     assert len(array) > 4
     np.testing.assert_allclose(array[0], [0, 0])
     np.testing.assert_allclose(array[-1], [3, 0])
+
+    polyline = spline.discretize(tolerance=0.01)
+    assert isinstance(polyline, Polyline2)
+    assert all(isinstance(curve, Line2) for curve in polyline.curves)
+    assert len(polyline.vertices) == len(array)
 
 
 @pytest.mark.parametrize(
