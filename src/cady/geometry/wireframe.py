@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, TypeAlias, cast
 import numpy as np
 
 from cady.geometry.mesh import EdgeIndex, Mesh3
-from cady.geometry.polyline import ClosedPolyline3, Polyline3
+from cady.geometry.polyline import Polyline3
 from cady.operations.meshes import LoftMesh, loft_section_polylines, prune_dangling_edges
 from cady.operations.transforms import Transform3
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
 
-WirePolyline = Polyline3 | ClosedPolyline3
+WirePolyline = Polyline3
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -168,11 +168,11 @@ class Wireframe3:
                     split_points[right_index].append((right_param, vertex_index))
 
         edges: list[EdgeIndex] = []
+        edge_keys: set[EdgeIndex] = set()
         for points in split_points:
             ordered = _unique_split_points(points, tolerance)
             for (_, start), (_, end) in zip(ordered, ordered[1:], strict=False):
-                if start != end:
-                    edges.append((start, end))
+                _append_unique_edge(edges, edge_keys, start, end)
 
         return Wireframe3.from_edges(tuple(vertices), tuple(edges))
 
@@ -255,9 +255,9 @@ def _validate_edge(vertices: tuple[Point3, ...], value: tuple[int, int]) -> Edge
 
 
 def _coerce_polyline(value: object) -> WirePolyline:
-    if isinstance(value, (Polyline3, ClosedPolyline3)):
+    if isinstance(value, Polyline3):
         return value
-    raise TypeError("wireframe polylines must be Polyline3 or ClosedPolyline3")
+    raise TypeError("wireframe polylines must be Polyline3")
 
 
 def _edge_polylines(

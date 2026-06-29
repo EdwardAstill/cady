@@ -33,11 +33,11 @@ def discretise(target: object, *, tolerance: float) -> object:
         vertices2 = tuple((float(x), float(y)) for x, y in points)
         return Polyline2(vertices2, closed=bool(getattr(target, "closed", False)))
     if points.shape[1] == 3:
-        from cady.geometry.polyline import ClosedPolyline3, Polyline3
+        from cady.geometry.polyline import Polyline3
 
         vertices3 = tuple((float(x), float(y), float(z)) for x, y, z in points)
         if bool(getattr(target, "closed", False)):
-            return ClosedPolyline3(vertices3)
+            return Polyline3(vertices3, closed=True)
         return Polyline3(vertices3)
     raise TypeError("discretise expects 2D or 3D point data")
 
@@ -151,10 +151,10 @@ def _mesh_from_closed_curve(target: object, *, tolerance: float) -> object:
         vertices2 = tuple((float(x), float(y)) for x, y in points)
         return Polyline2(vertices2, closed=True).to_mesh(tolerance=tolerance)
     if points.shape[1] == 3:
-        from cady.geometry.polyline import ClosedPolyline3
+        from cady.geometry.polyline import Polyline3
 
         vertices3 = tuple((float(x), float(y), float(z)) for x, y, z in points)
-        return ClosedPolyline3(vertices3).to_mesh(tolerance=tolerance)
+        return Polyline3(vertices3, closed=True).to_mesh(tolerance=tolerance)
     raise TypeError("closed curve mesh expects 2D or 3D point data")
 
 

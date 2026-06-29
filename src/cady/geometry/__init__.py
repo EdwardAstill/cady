@@ -8,8 +8,6 @@ from cady.geometry.mesh import Mesh2, Mesh3
 from cady.geometry.plane3 import Plane3
 from cady.geometry.pointcloud import PointCloud2, PointCloud3
 from cady.geometry.polyline import (
-    ClosedCurve2,
-    ClosedPolyline3,
     Curve2,
     Curve3,
     Polyline2,
@@ -25,8 +23,6 @@ __all__ = [
     "Arc3",
     "Body3",
     "Circle2",
-    "ClosedCurve2",
-    "ClosedPolyline3",
     "Curve2",
     "Curve3",
     "Ellipse2",

@@ -6,7 +6,6 @@ from cady.geometry import (
     Arc2,
     Arc3,
     Circle2,
-    ClosedPolyline3,
     Ellipse2,
     Line2,
     Line3,
@@ -33,7 +32,10 @@ def test_finite_geometry_boundary_matches_bounds() -> None:
         Ellipse2((1.0, 2.0), 3.0, 1.0),
         Polyline2(((0.0, 0.0), (2.0, 1.0))),
         Polyline3(((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))),
-        ClosedPolyline3(((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))),
+        Polyline3(
+            ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            closed=True,
+        ),
         Spline2(((0.0, 0.0), (1.0, 2.0), (2.0, 1.0), (3.0, 0.0))),
         Spline3(
             (

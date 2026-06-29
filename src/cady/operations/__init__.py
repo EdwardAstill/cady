@@ -141,10 +141,10 @@ def spline3(control_points: Iterable[Point3]) -> "Spline3":
     return Spline3(control_points)
 
 
-def polyline3(items: Iterable["Curve3 | Point3"]) -> "Polyline3":
+def polyline3(items: Iterable["Curve3 | Point3"], *, closed: bool = False) -> "Polyline3":
     from cady.geometry.polyline import Polyline3
 
-    return Polyline3(items)
+    return Polyline3(items, closed=closed)
 
 
 def circle2(centre: Point2, radius: float) -> "Circle2":

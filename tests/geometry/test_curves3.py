@@ -10,7 +10,6 @@ from cady.errors import GeometryError
 from cady.geometry.arc import Arc3
 from cady.geometry.mesh import Mesh3
 from cady.geometry.polyline import (
-    ClosedPolyline3,
     Line3,
     Polyline3,
 )
@@ -25,13 +24,14 @@ def _face_normal_z(mesh: Mesh3, face: tuple[int, int, int]) -> float:
 
 
 def test_closed_polyline3_planar_square_to_mesh() -> None:
-    polyline = ClosedPolyline3(
+    polyline = Polyline3(
         (
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
             (1.0, 1.0, 0.0),
             (0.0, 1.0, 0.0),
-        )
+        ),
+        closed=True,
     )
 
     mesh = polyline.to_mesh(tolerance=1e-3)
@@ -151,13 +151,14 @@ def test_arc3_factory_and_polyline_from_curves() -> None:
 
 
 def test_closed_polyline3_rejects_non_planar_loop() -> None:
-    polyline = ClosedPolyline3(
+    polyline = Polyline3(
         (
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
             (1.0, 1.0, 1.0),
             (0.0, 1.0, 0.0),
-        )
+        ),
+        closed=True,
     )
 
     with pytest.raises(GeometryError, match="non-planar"):
@@ -168,17 +169,19 @@ def test_polyline3_is_open_wire_data_without_to_mesh() -> None:
     polyline = Polyline3(((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)))
 
     assert polyline.points() == ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
-    assert not hasattr(polyline, "to_mesh")
+    with pytest.raises(GeometryError, match="must be closed"):
+        polyline.to_mesh(tolerance=1e-3)
 
 
 def test_closed_polyline3_dedupes_repeated_final_vertex() -> None:
-    polyline = ClosedPolyline3(
+    polyline = Polyline3(
         (
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 0.0),
-        )
+        ),
+        closed=True,
     )
 
     assert polyline.vertices == (
@@ -193,3 +196,22 @@ def test_closed_polyline3_dedupes_repeated_final_vertex() -> None:
         (0.0, 0.0, 0.0),
     )
     assert len(polyline.to_mesh(tolerance=1e-3).vertices) == 3
+
+
+def test_closed_polyline3_to_array_omits_repeated_closing_vertex() -> None:
+    polyline = Polyline3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        closed=True,
+    )
+
+    array = polyline.to_array(tolerance=1e-3)
+
+    assert array.tolist() == [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+    ]

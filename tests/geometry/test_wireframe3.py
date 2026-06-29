@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady import ClosedPolyline3, GeometryError, Polyline3, Wireframe3
+from cady import GeometryError, Polyline3, Wireframe3
 from cady.operations.transforms import Transform3
 
 # -- Construction ----------------------------------------------------------
@@ -60,12 +60,13 @@ def test_wireframe_from_polylines_dedupes_shared_vertices_and_edges() -> None:
 def test_wireframe_from_polylines_closes_closed_polylines() -> None:
     wf = Wireframe3.from_polylines(
         (
-            ClosedPolyline3(
+            Polyline3(
                 (
                     (0, 0, 0),
                     (1, 0, 0),
                     (0, 1, 0),
-                )
+                ),
+                closed=True,
             ),
         )
     )
@@ -274,7 +275,7 @@ def test_wireframe_split_crossing_edges_splits_collinear_overlap_endpoints() -> 
     split = wf.split_crossing_edges(tolerance=1e-6)
 
     assert split.vertices == wf.vertices
-    assert split.edges == ((0, 2), (2, 3), (3, 1), (2, 3))
+    assert split.edges == ((0, 2), (2, 3), (3, 1))
 
 
 def test_wireframe_does_not_expose_mesh_closing_methods() -> None:

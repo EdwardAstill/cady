@@ -13,7 +13,6 @@ def test_smoke_import() -> None:
         "Body3",
         "Camera",
         "Circle2",
-        "ClosedPolyline3",
         "Curve2",
         "Curve3",
         "DirectionalLight",
@@ -57,6 +56,8 @@ def test_smoke_import() -> None:
         assert hasattr(cady, name), name
 
     removed = (
+        "ClosedCurve2",
+        "ClosedPolyline3",
         "ClosedPolyline2",
         "Face3",
         "Frame3",

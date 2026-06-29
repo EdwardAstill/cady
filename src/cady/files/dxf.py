@@ -11,7 +11,6 @@ from typing import TypeAlias, cast
 from cady.drawing import Drawing2, DrawingEntity, Text2
 from cady.errors import ReadError, WriteError
 from cady.geometry import Arc2, Circle2, Line2, Mesh3, Polyline2, Wireframe3
-from cady.operations.meshes import loft_section_polylines
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
@@ -156,89 +155,6 @@ def _line_mesh_requested(
             max_distance,
         )
     )
-
-
-def _mesh_from_line_geometry(  # pyright: ignore[reportUnusedFunction]
-    wireframes: tuple[Wireframe3, ...],
-    *,
-    mirror_origin: object | None,
-    mirror_normal: object | None,
-    close_origin: object | None,
-    close_normal: object | None,
-    tolerance: float,
-    max_distance: float | None,
-) -> Mesh3:
-    if (mirror_origin is None) != (mirror_normal is None):
-        raise ValueError("mirror_origin and mirror_normal must be provided together")
-    has_close_plane = (
-        close_origin is not None or close_normal is not None or max_distance is not None
-    )
-    if has_close_plane and (
-        close_origin is None or close_normal is None or max_distance is None
-    ):
-        raise ValueError(
-            "line-geometry mesh conversion requires close_origin, close_normal, "
-            "and max_distance"
-        )
-    if not wireframes:
-        raise ReadError("DXF contained no supported line geometry for mesh conversion")
-
-    if not has_close_plane:
-        mesh = _loft_section_wireframes_to_mesh(wireframes, tolerance=tolerance)
-        if mesh is None:
-            raise ReadError("DXF line geometry could not be converted to mesh faces")
-        mesh = _mesh_with_wireframe_display_edges(mesh, wireframes)
-        if mirror_origin is not None and mirror_normal is not None:
-            mesh = mesh.mirror(mirror_origin, mirror_normal)
-        return mesh
-    assert close_origin is not None
-    assert close_normal is not None
-    assert max_distance is not None
-    wireframe = _merge_wireframes(wireframes)
-    if mirror_origin is not None and mirror_normal is not None:
-        wireframe = wireframe.mirror(mirror_origin, mirror_normal)
-    mesh = Mesh3(wireframe.vertices, (), wireframe.edges).close_to_plane(
-        close_origin,
-        close_normal,
-        tolerance=tolerance,
-        max_distance=max_distance,
-    )
-    return Mesh3(mesh.vertices, mesh.faces)
-
-
-def _loft_section_wireframes_to_mesh(
-    wireframes: tuple[Wireframe3, ...],
-    *,
-    tolerance: float,
-) -> Mesh3 | None:
-    loft_mesh = loft_section_polylines(
-        (
-            tuple(wireframe.vertices)
-            for wireframe in wireframes
-        ),
-        tolerance=tolerance,
-    )
-    if loft_mesh is None:
-        return None
-    return Mesh3(
-        tuple((float(x), float(y), float(z)) for x, y, z in loft_mesh.vertices),
-        loft_mesh.faces,
-        loft_mesh.edges,
-    )
-
-
-def _mesh_with_wireframe_display_edges(
-    mesh: Mesh3,
-    wireframes: tuple[Wireframe3, ...],
-) -> Mesh3:
-    vertices = list(mesh.vertices)
-    edges = list(mesh.edges)
-    offset = len(vertices)
-    for wireframe in wireframes:
-        vertices.extend(wireframe.vertices)
-        edges.extend((a + offset, b + offset) for a, b in wireframe.edges)
-        offset += len(wireframe.vertices)
-    return Mesh3(tuple(vertices), mesh.faces, tuple(edges))
 
 
 def render(drawing: Drawing2, *, tolerance: float = 1e-3) -> str:

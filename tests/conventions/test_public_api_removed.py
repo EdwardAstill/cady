@@ -6,6 +6,8 @@ from cady.files import dxf, step, stl
 
 def test_removed_top_level_api_names_are_not_exported() -> None:
     removed = {
+        "ClosedCurve2",
+        "ClosedPolyline3",
         "DxfDrawing",
         "Extrusion",
         "Model",
