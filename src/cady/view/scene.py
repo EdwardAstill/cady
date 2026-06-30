@@ -209,6 +209,9 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
         transform = (
             transform_from_pose(scene_object.pose) if scene_object.pose is not None else None
         )
+
+        # Point clouds and explicit polylines are already render primitives, so
+        # recognise them before falling back to the mesh conversion boundary.
         point_cloud = _point_cloud_from_target(target)
         if point_cloud is not None:
             if transform is not None:
@@ -337,6 +340,8 @@ def _line_from_target(
     *,
     transform: Transform3 | None,
 ) -> tuple[np.ndarray, np.ndarray] | None:
+    # Bare (N, 3) sequences are accepted as polylines; failures simply mean this
+    # target should continue through the other scene preparation paths.
     try:
         vertices, indices = prepare_polyline(target)  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -372,6 +377,8 @@ def _style_color(target: object, style: DisplayStyle) -> tuple[float, float, flo
 def _lighting(
     scene: Scene,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    # The current shader consumes one ambient term and one directional term.
+    # Defaults keep ad-hoc scenes readable even when all custom lights are absent.
     ambient = np.array((0.28, 0.28, 0.28), dtype=np.float32)
     diffuse = np.array((0.72, 0.72, 0.72), dtype=np.float32)
     direction = np.array((0.2, 0.45, 0.9), dtype=np.float32)

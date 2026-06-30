@@ -6,6 +6,8 @@ from math import cos, radians
 
 import numpy as np
 
+# These thresholds affect view-only smoothing and generated display edges; they
+# do not mutate or simplify the source Mesh3 topology.
 EDGE_ANGLE_TOLERANCE_DEGREES = 15.0
 CURVED_PATCH_ANGLE_TOLERANCE_DEGREES = 35.0
 MIN_CURVED_PATCH_ROOTS = 4
@@ -25,6 +27,8 @@ def orientation_edges(
 
     normals, valid_normals = _face_normals(vertices, faces)
     edge_faces, edge_indices = _coordinate_edge_ownership(vertices, faces, valid_normals)
+    # Smooth roots group adjacent faces that should read as one surface, so only
+    # edges crossing groups or open boundaries remain visible.
     smooth_roots = _smooth_face_roots(
         normals,
         edge_faces,
@@ -77,6 +81,8 @@ def shaded_face_buffers(
         face_render_indices: list[int] = []
         for vertex_index in face:
             original_index = int(vertex_index)
+            # Include the smooth root in the key so hard edges get duplicated
+            # vertices with independent normals, while smooth patches share them.
             key = (_vertex_key(vertices[original_index], coordinate_tolerance), root)
             render_index = render_indices_by_key.get(key)
             if render_index is None:
@@ -190,6 +196,8 @@ def _smooth_face_roots(
                 if abs(float(np.dot(normals[left], normals[right]))) >= cos_tolerance:
                     union(left, right)
 
+    # Curved primitives can arrive as many tiny flat patches. Merge only small
+    # neighboring roots, and only when enough of them form a curved component.
     cos_curved_tolerance = cos(radians(curved_patch_angle_tolerance_degrees))
     if cos_curved_tolerance < cos_tolerance:
         roots = [find(face_index) for face_index in range(len(normals))]

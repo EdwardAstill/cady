@@ -7,8 +7,8 @@ packages unless a viewer is actually launched.
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable, Sequence, Sized
-from math import sqrt
+from collections.abc import Callable, Iterable, Sequence, Sized
+from math import isfinite, sqrt
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -16,7 +16,6 @@ import numpy as np
 from cady.document import Document
 from cady.geometry import Mesh3
 from cady.utils import positive_tolerance
-from cady.view._coordinates import finite_point3
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight, Light
@@ -46,6 +45,19 @@ DEFAULT_FOV_DEGREES = 35.0
 FIT_PADDING = 1.18
 
 
+def finite_point3(value: object, *, name: str = "point") -> tuple[float, float, float]:
+    """Coerce a tuple-like value into a finite 3D point."""
+    as_tuple = getattr(value, "tuple", None)
+    raw = as_tuple() if callable(as_tuple) else value
+    try:
+        point = tuple(float(component) for component in cast(Iterable[Any], raw))
+    except (TypeError, ValueError) as exc:
+        raise ViewError(f"{name} must be a finite 3D coordinate") from exc
+    if len(point) != 3 or any(not isfinite(component) for component in point):
+        raise ViewError(f"{name} must be a finite 3D coordinate")
+    return (point[0], point[1], point[2])
+
+
 def view_scene(scene: Scene, *, tolerance: float = 1e-3, title: str | None = None) -> object:
     """Open an interactive window for a prepared scene."""
     _require_vispy()
@@ -55,23 +67,11 @@ def view_scene(scene: Scene, *, tolerance: float = 1e-3, title: str | None = Non
     return None
 
 
-def view_target(
-    target: object,
-    *,
-    tolerance: float = 1e-3,
-    title: str | None = None,
-) -> object:
-    """Open an interactive window for a single target."""
-    scene = Scene.from_target(
-        target,
-        name=title or "cady 3D viewer",
-    )
-    return view_scene(scene, tolerance=tolerance, title=title)
-
-
 def view_mesh(mesh: object, *, tolerance: float = 1e-3, title: str | None = None) -> object:
     """Open an interactive window for one mesh-like target."""
-    return view_target(mesh, tolerance=tolerance, title=title or "cady 3D mesh")
+    resolved_title = title or "cady 3D mesh"
+    scene = Scene.from_target(mesh, name=resolved_title)
+    return view_scene(scene, tolerance=tolerance, title=resolved_title)
 
 
 def view_meshes(
@@ -150,6 +150,8 @@ def open_target_view(
         raise ViewError("tolerance must be positive")
 
     bounds, wire_only = _target_bounds_and_wire_mode(target, tolerance=tolerance)
+    # Centering applies only as a scene pose, leaving the original target value
+    # unchanged while giving the default camera a stable origin to orbit.
     pose = _origin_pose(bounds) if center else None
     camera_bounds = _centred_bounds(bounds) if center else bounds
     resolved_style = style or _default_style(
@@ -210,6 +212,8 @@ def _target_bounds_and_wire_mode(
 
 
 def _mesh_like(target: object, *, tolerance: float) -> object:
+    # Prefer a target's own bounds when available so viewer launch does not
+    # force an avoidable mesh conversion.
     if callable(getattr(target, "bounds", None)):
         return target
     if isinstance(target, (Document, Mesh3)) or callable(getattr(target, "to_mesh", None)):
@@ -338,5 +342,4 @@ __all__ = [
     "view_mesh",
     "view_meshes",
     "view_scene",
-    "view_target",
 ]

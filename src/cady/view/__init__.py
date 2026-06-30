@@ -22,22 +22,15 @@ if TYPE_CHECKING:
         view_mesh,
         view_meshes,
         view_scene,
-        view_target,
-)
+    )
 _VIEWER_EXPORTS = frozenset(
     {
         "view_lines",
         "view_mesh",
         "view_meshes",
         "view_scene",
-        "view_target",
     }
 )
-
-
-def scene_from_target(target: object, *, name: str = "scene") -> Scene:
-    """Build a single-object scene from any supported view target."""
-    return Scene.from_target(target, name=name)
 
 
 def __getattr__(name: str) -> object:
@@ -70,10 +63,8 @@ __all__ = [
     "SceneOverlay",
     "ViewError",
     "prepare_scene",
-    "scene_from_target",
     "view_lines",
     "view_mesh",
     "view_meshes",
     "view_scene",
-    "view_target",
 ]

@@ -97,6 +97,8 @@ def face_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
 def edge_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
     if mesh.render_mode not in {"shaded", "wireframe"}:
         return None
+    # Semantic display edges take precedence; otherwise derive only visible
+    # orientation edges so triangulation diagonals do not dominate the view.
     edge_indices = (
         mesh.edges
         if len(mesh.edges) > 0
@@ -133,6 +135,8 @@ def scene_bounds(geometry_vertices: Sequence[np.ndarray]) -> SceneBounds:
     all_vertices = np.vstack(geometry_vertices)
     local_centre = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2.0
     spans = all_vertices.max(axis=0) - all_vertices.min(axis=0)
+    # The viewer orbits around the local centre; padding the largest span gives
+    # short and flat geometry enough radius for clipping and overlay sizing.
     radius = float(np.max(spans)) * 1.2 or 1.0
     return SceneBounds(local_centre=local_centre, radius=radius)
 

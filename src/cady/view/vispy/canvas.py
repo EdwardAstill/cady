@@ -111,6 +111,8 @@ def _make_vispy_canvas(
 ) -> object:
     _require_vispy()
 
+    # Keep concrete VisPy imports inside the launch path so cady.view remains a
+    # lightweight, backend-agnostic import for geometry and file workflows.
     app = cast(Any, importlib.import_module("vispy.app"))
     gloo = cast(Any, importlib.import_module("vispy.gloo"))
     transforms = cast(Any, importlib.import_module("vispy.util.transforms"))
@@ -229,6 +231,8 @@ def _make_vispy_canvas(
             self._program.draw(batch.primitive, batch.index_buffer)
 
         def _draw_face_batches(self) -> None:
+            # Draw filled triangles first with polygon offset; edge batches are
+            # layered afterward to avoid z-fighting with coplanar faces.
             gloo.set_state(
                 blend=False,
                 depth_test=True,
@@ -240,6 +244,8 @@ def _make_vispy_canvas(
                 self._draw_batch(batch)
 
         def _draw_edge_batches(self) -> None:
+            # Edges are overlays on the geometry, so they read depth but do not
+            # write it before point batches and screen-space overlays render.
             gloo.set_state(
                 blend=True,
                 depth_test=True,

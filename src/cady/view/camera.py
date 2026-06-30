@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import acos, degrees, isfinite
-from typing import Literal, cast
+from typing import Any, Literal, TypeAlias, cast
 
 from cady.operations.coordinates import dot3, length3, sub3
-from cady.view._coordinates import Point3, finite_point3
 from cady.view.errors import ViewError
 
+Point3: TypeAlias = tuple[float, float, float]
 Projection = Literal["perspective", "orthographic"]
+
+
+def finite_point3(value: object, *, name: str = "point") -> Point3:
+    """Coerce a tuple-like value into a finite 3D point."""
+    as_tuple = getattr(value, "tuple", None)
+    raw = as_tuple() if callable(as_tuple) else value
+    try:
+        point = tuple(float(component) for component in cast(Iterable[Any], raw))
+    except (TypeError, ValueError) as exc:
+        raise ViewError(f"{name} must be a finite 3D coordinate") from exc
+    if len(point) != 3 or any(not isfinite(component) for component in point):
+        raise ViewError(f"{name} must be a finite 3D coordinate")
+    return (point[0], point[1], point[2])
 
 
 def _reject_degenerate_basis(position: Point3, target: Point3, up: Point3) -> None:

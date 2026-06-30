@@ -87,6 +87,7 @@ def scale_bar_visible_height(
 ) -> float | None:
     if camera.projection == "orthographic":
         return max(float(orthographic_scale), 1e-12)
+    # Perspective views do not have one stable world-units-per-pixel scale.
     return None
 
 
@@ -138,6 +139,8 @@ def scale_bar_line_vertices(
         ],
         dtype=np.float32,
     )
+    # The overlay shader consumes clip-space positions, so pixel coordinates are
+    # normalised here instead of going through the scene projection matrices.
     clip = np.empty_like(vertices)
     clip[:, 0] = (vertices[:, 0] / width_px) * 2.0 - 1.0
     clip[:, 1] = (vertices[:, 1] / height_px) * 2.0 - 1.0
@@ -283,6 +286,8 @@ class ScaleBarRenderer:
 
         width, height = viewport_size
         logical_width, logical_height = logical_size
+        # VisPy line buffers use physical pixels, but TextVisual positions use
+        # logical canvas coordinates on high-DPI displays.
         x_scale = max(float(logical_width), 1.0) / max(float(width), 1.0)
         y_scale = max(float(logical_height), 1.0) / max(float(height), 1.0)
         self.text_visual.pos = (

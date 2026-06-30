@@ -60,9 +60,9 @@ from cady.view.vispy.overlays import (
 
 
 def test_vispy_viewer_module_imports_without_opening_window() -> None:
-    from cady.view import prepare_scene, view_mesh, view_scene, view_target
+    from cady.view import prepare_scene, view_mesh, view_scene
 
-    assert all((prepare_scene, view_mesh, view_scene, view_target))
+    assert all((prepare_scene, view_mesh, view_scene))
 
 
 def test_require_vispy_raises_when_missing() -> None:

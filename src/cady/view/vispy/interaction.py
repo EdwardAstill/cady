@@ -10,6 +10,8 @@ import numpy as np
 from cady.view.camera import Camera
 
 ISOMETRIC_PITCH_DEGREES = 35.26438968
+# Numeric shortcuts mirror common CAD keypad navigation: 0 resets to front,
+# 1-3 rotate around local axes, and 6-9 jump to isometric corners.
 ISOMETRIC_VIEW_ANGLES: dict[str, tuple[float, float]] = {
     "6": (45.0, ISOMETRIC_PITCH_DEGREES),
     "7": (-45.0, ISOMETRIC_PITCH_DEGREES),
@@ -305,6 +307,7 @@ class ViewerInteractionState:
             orthographic_scale=self.orthographic_scale,
             viewport_size=viewport_size,
         )
+        # Mouse y increases downward, while view-space y increases upward.
         self.pan[0] += dx_pixels * units_per_pixel
         self.pan[1] -= dy_pixels * units_per_pixel
 
