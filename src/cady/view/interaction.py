@@ -102,8 +102,7 @@ def orientation_for_number_key(orientation: np.ndarray, key: str) -> np.ndarray 
 
 
 def number_key_name(key: object) -> str | None:
-    raw_name = getattr(key, "name", key)
-    name = str(raw_name).lower()
+    name = _key_name(key)
     for digit in "0123456789":
         if name in {digit, f"digit{digit}", f"key{digit}", f"num{digit}", f"numpad{digit}"}:
             return digit
@@ -111,8 +110,16 @@ def number_key_name(key: object) -> str | None:
 
 
 def axis_toggle_key_pressed(key: object) -> bool:
+    return _key_name(key) in {"a", "keya"}
+
+
+def space_key_pressed(key: object) -> bool:
+    return _key_name(key) in {"space", " "}
+
+
+def _key_name(key: object) -> str:
     raw_name = getattr(key, "name", key)
-    return str(raw_name).lower() in {"a", "keya"}
+    return str(raw_name).lower()
 
 
 def model_matrix(local_centre: np.ndarray, orientation: np.ndarray) -> np.ndarray:
@@ -153,15 +160,78 @@ def view_relative_orthographic_axis_length(
     return target_pixels * max(float(orthographic_scale), 1e-6) / height_px
 
 
+def perspective_world_units_per_pixel(
+    distance: float,
+    viewport_size: tuple[int, int],
+    *,
+    fov_degrees: float,
+) -> float:
+    _, height = viewport_size
+    height_px = max(float(height), 1.0)
+    visible_world_height = 2.0 * max(float(distance), 1e-6) * tan(radians(fov_degrees) / 2.0)
+    return visible_world_height / height_px
+
+
+def orthographic_world_units_per_pixel(
+    orthographic_scale: float,
+    viewport_size: tuple[int, int],
+) -> float:
+    _, height = viewport_size
+    return max(float(orthographic_scale), 1e-6) / max(float(height), 1.0)
+
+
+def pan_world_units_per_pixel(
+    camera: Camera,
+    *,
+    distance: float,
+    orthographic_scale: float,
+    viewport_size: tuple[int, int],
+) -> float:
+    if camera.projection == "orthographic":
+        return orthographic_world_units_per_pixel(orthographic_scale, viewport_size)
+    return perspective_world_units_per_pixel(
+        distance,
+        viewport_size,
+        fov_degrees=camera.fov_degrees,
+    )
+
+
 def zoomed_orthographic_scale(
     scale: float,
     wheel_delta: float,
-    radius: float,
+    radius: float | None = None,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
 ) -> float:
-    minimum = max(radius * 0.001, 1e-6)
-    maximum = max(radius * 20.0, minimum * 2.0)
     zoomed = scale * (ORTHOGRAPHIC_ZOOM_FACTOR**wheel_delta)
-    return max(minimum, min(float(zoomed), maximum))
+    return _clamp_positive(float(zoomed), minimum=minimum, maximum=maximum)
+
+
+def zoomed_perspective_distance(
+    distance: float,
+    wheel_delta: float,
+    radius: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    zoomed = distance - wheel_delta * radius * 0.1
+    return _clamp_positive(float(zoomed), minimum=minimum, maximum=maximum)
+
+
+def _clamp_positive(
+    value: float,
+    *,
+    minimum: float | None,
+    maximum: float | None,
+) -> float:
+    clamped = max(value, 1e-12)
+    if minimum is not None:
+        clamped = max(clamped, minimum)
+    if maximum is not None:
+        clamped = min(clamped, maximum)
+    return clamped
 
 
 @dataclass(slots=True)
@@ -223,20 +293,37 @@ class ViewerInteractionState:
             dy_pixels * 0.5,
         )
 
-    def pan_by_pixels(self, dx_pixels: float, dy_pixels: float) -> None:
-        self.pan[0] += dx_pixels * self.radius * 0.003
-        self.pan[1] -= dy_pixels * self.radius * 0.003
+    def pan_by_pixels(
+        self,
+        dx_pixels: float,
+        dy_pixels: float,
+        viewport_size: tuple[int, int],
+    ) -> None:
+        units_per_pixel = pan_world_units_per_pixel(
+            self.camera,
+            distance=self.distance,
+            orthographic_scale=self.orthographic_scale,
+            viewport_size=viewport_size,
+        )
+        self.pan[0] += dx_pixels * units_per_pixel
+        self.pan[1] -= dy_pixels * units_per_pixel
 
     def zoom(self, wheel_delta: float) -> None:
         if self.camera.projection == "orthographic":
             self.orthographic_scale = zoomed_orthographic_scale(
                 self.orthographic_scale,
                 wheel_delta,
-                self.radius,
+                minimum=self.camera.min_orthographic_scale,
+                maximum=self.camera.max_orthographic_scale,
             )
             return
-        self.distance -= wheel_delta * self.radius * 0.1
-        self.distance = max(self.radius * 0.5, min(self.distance, self.radius * 20.0))
+        self.distance = zoomed_perspective_distance(
+            self.distance,
+            wheel_delta,
+            self.radius,
+            minimum=self.camera.min_distance,
+            maximum=self.camera.max_distance,
+        )
 
     def set_orientation_for_key(self, key: str) -> bool:
         orientation = orientation_for_number_key(self.orientation, key)
@@ -251,7 +338,12 @@ __all__ = [
     "axis_toggle_key_pressed",
     "camera_orientation",
     "number_key_name",
+    "orthographic_world_units_per_pixel",
+    "pan_world_units_per_pixel",
+    "perspective_world_units_per_pixel",
     "projection_clip_planes",
+    "space_key_pressed",
     "view_relative_orthographic_axis_length",
     "zoomed_orthographic_scale",
+    "zoomed_perspective_distance",
 ]

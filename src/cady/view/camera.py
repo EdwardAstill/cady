@@ -38,6 +38,10 @@ class Camera:
     orthographic_scale: float = 1.0
     near: float = 1e-3
     far: float = 1e6
+    min_distance: float | None = None
+    max_distance: float | None = None
+    min_orthographic_scale: float | None = None
+    max_orthographic_scale: float | None = None
 
     def __post_init__(self) -> None:
         position = finite_point3(self.position, name="position")
@@ -54,9 +58,37 @@ class Camera:
             raise ViewError("near and far clipping planes must be positive finite values")
         if self.far <= self.near:
             raise ViewError("far clipping plane must be greater than near")
+        min_distance = _optional_positive(self.min_distance, "min_distance")
+        max_distance = _optional_positive(self.max_distance, "max_distance")
+        min_orthographic_scale = _optional_positive(
+            self.min_orthographic_scale,
+            "min_orthographic_scale",
+        )
+        max_orthographic_scale = _optional_positive(
+            self.max_orthographic_scale,
+            "max_orthographic_scale",
+        )
+        if (
+            min_distance is not None
+            and max_distance is not None
+            and min_distance > max_distance
+        ):
+            raise ViewError("min_distance must be less than or equal to max_distance")
+        if (
+            min_orthographic_scale is not None
+            and max_orthographic_scale is not None
+            and min_orthographic_scale > max_orthographic_scale
+        ):
+            raise ViewError(
+                "min_orthographic_scale must be less than or equal to max_orthographic_scale"
+            )
         object.__setattr__(self, "position", position)
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "up", up)
+        object.__setattr__(self, "min_distance", min_distance)
+        object.__setattr__(self, "max_distance", max_distance)
+        object.__setattr__(self, "min_orthographic_scale", min_orthographic_scale)
+        object.__setattr__(self, "max_orthographic_scale", max_orthographic_scale)
 
     @classmethod
     def look_at(
@@ -81,6 +113,8 @@ class Camera:
         target: object,
         up: object = (0.0, 0.0, 1.0),
         fov_degrees: float = 45.0,
+        min_distance: float | None = None,
+        max_distance: float | None = None,
     ) -> Camera:
         """Create a perspective camera."""
         return cls(
@@ -89,6 +123,8 @@ class Camera:
             cast(Point3, up),
             projection="perspective",
             fov_degrees=fov_degrees,
+            min_distance=min_distance,
+            max_distance=max_distance,
         )
 
     @classmethod
@@ -99,6 +135,8 @@ class Camera:
         target: object,
         up: object = (0.0, 0.0, 1.0),
         scale: float = 1.0,
+        min_scale: float | None = None,
+        max_scale: float | None = None,
     ) -> Camera:
         """Create an orthographic camera."""
         return cls(
@@ -107,7 +145,17 @@ class Camera:
             cast(Point3, up),
             projection="orthographic",
             orthographic_scale=scale,
+            min_orthographic_scale=min_scale,
+            max_orthographic_scale=max_scale,
         )
+
+
+def _optional_positive(value: float | None, name: str) -> float | None:
+    if value is None:
+        return None
+    if not isfinite(value) or value <= 0.0:
+        raise ViewError(f"{name} must be positive")
+    return float(value)
 
 
 __all__ = ["Camera", "Projection"]

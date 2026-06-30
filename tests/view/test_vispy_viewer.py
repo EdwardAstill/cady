@@ -17,11 +17,21 @@ from cady import (
     Scene,
     box,
 )
-from cady.view.vispy_canvas import _require_vispy, _select_vispy_shader_backend
+from cady.view.interaction import (
+    ViewerInteractionState,
+    pan_world_units_per_pixel,
+    space_key_pressed,
+)
+from cady.view.vispy_canvas import (
+    _drag_mode_for_mouse,
+    _require_vispy,
+    _select_vispy_shader_backend,
+)
 from cady.view.vispy_viewer import (
     _camera_orientation,
     _mesh_edge_color,
     _orientation_edges,
+    _projection_clip_planes,
     _scale_bar_for_camera,
     _scale_bar_for_visible_height,
     _scale_bar_overlay,
@@ -68,6 +78,23 @@ def test_select_vispy_shader_backend_leaves_desktop_context() -> None:
     _select_vispy_shader_backend(gl)
 
     gl.use_gl.assert_not_called()
+
+
+def test_space_key_pressed_accepts_vispy_key_names() -> None:
+    key = mock.Mock()
+    key.name = "Space"
+
+    assert space_key_pressed(key)
+    assert space_key_pressed(" ")
+    assert not space_key_pressed("A")
+
+
+def test_drag_mode_maps_space_primary_drag_to_pan() -> None:
+    assert _drag_mode_for_mouse(1, space_pressed=False) == "orbit"
+    assert _drag_mode_for_mouse(1, space_pressed=True) == "pan"
+    assert _drag_mode_for_mouse(2, space_pressed=False) == "pan"
+    assert _drag_mode_for_mouse(3, space_pressed=False) == "pan"
+    assert _drag_mode_for_mouse(None, space_pressed=True) is None
 
 
 def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
@@ -156,6 +183,24 @@ def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:
     np.testing.assert_array_equal(prepared.meshes[0].edges, [[0, 1], [1, 2]])
 
 
+def test_prepare_scene_triangulates_polygon_mesh_faces_for_viewer() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+    scene = Scene("polygon").add(mesh)
+
+    prepared = prepare_scene(scene, tolerance=1e-9)
+
+    assert mesh.faces == ((0, 1, 2, 3),)
+    np.testing.assert_array_equal(prepared.meshes[0].faces, [[3, 0, 1], [1, 2, 3]])
+
+
 def test_prepare_scene_accepts_document_targets() -> None:
     document = Document("job").add_part(Part("box").with_body(box(1.0, 0.5, 0.25)))
     scene = Scene("document").add(document)
@@ -221,6 +266,81 @@ def test_camera_orientation_maps_camera_position_to_view_z() -> None:
     np.testing.assert_allclose(view_direction, [0.0, 0.0, 2.0], atol=1e-6)
 
 
+def test_pan_moves_view_without_changing_orbit_orientation() -> None:
+    camera = Camera.perspective(
+        position=(0.0, -10.0, 0.0),
+        target=(0.0, 0.0, 0.0),
+    )
+    state = ViewerInteractionState.from_camera(
+        camera,
+        local_centre=np.zeros(3, dtype=np.float32),
+        radius=5.0,
+    )
+    orientation = state.orientation.copy()
+    units_per_pixel = pan_world_units_per_pixel(
+        camera,
+        distance=state.distance,
+        orthographic_scale=state.orthographic_scale,
+        viewport_size=(900, 700),
+    )
+
+    state.pan_by_pixels(70.0, 35.0, (900, 700))
+
+    np.testing.assert_allclose(state.orientation, orientation)
+    np.testing.assert_allclose(
+        state.pan,
+        [70.0 * units_per_pixel, -35.0 * units_per_pixel],
+        rtol=1e-6,
+    )
+    view = state.view_matrix()
+    assert view[3, 0] == pytest.approx(state.pan[0])
+    assert view[3, 1] == pytest.approx(state.pan[1])
+    assert view[3, 2] == pytest.approx(-state.distance)
+
+
+def test_perspective_pan_speed_tracks_camera_distance() -> None:
+    camera = Camera.perspective(
+        position=(0.0, -10.0, 0.0),
+        target=(0.0, 0.0, 0.0),
+    )
+    state = ViewerInteractionState.from_camera(
+        camera,
+        local_centre=np.zeros(3, dtype=np.float32),
+        radius=5.0,
+    )
+
+    state.distance = 10.0
+    state.pan_by_pixels(10.0, 0.0, (900, 700))
+    near_pan = float(state.pan[0])
+    state.pan[:] = 0.0
+    state.distance = 20.0
+    state.pan_by_pixels(10.0, 0.0, (900, 700))
+
+    assert state.pan[0] == pytest.approx(near_pan * 2.0)
+
+
+def test_orthographic_pan_speed_tracks_view_scale() -> None:
+    camera = Camera.orthographic(
+        position=(0.0, -10.0, 0.0),
+        target=(0.0, 0.0, 0.0),
+        scale=100.0,
+    )
+    state = ViewerInteractionState.from_camera(
+        camera,
+        local_centre=np.zeros(3, dtype=np.float32),
+        radius=5.0,
+    )
+
+    state.orthographic_scale = 100.0
+    state.pan_by_pixels(10.0, 0.0, (900, 700))
+    near_pan = float(state.pan[0])
+    state.pan[:] = 0.0
+    state.orthographic_scale = 200.0
+    state.pan_by_pixels(10.0, 0.0, (900, 700))
+
+    assert state.pan[0] == pytest.approx(near_pan * 2.0)
+
+
 def test_orthographic_zoom_changes_scale_instead_of_camera_distance() -> None:
     scale = 152_661.0
     radius = 181_739.0
@@ -230,9 +350,26 @@ def test_orthographic_zoom_changes_scale_instead_of_camera_distance() -> None:
 
     assert zoomed_in < scale
     assert zoomed_out > scale
-    assert _zoomed_orthographic_scale(radius, 1_000.0, radius) == pytest.approx(
-        radius * 0.001
+    assert _zoomed_orthographic_scale(radius, 1_000.0, radius) < radius * 0.001
+    assert _zoomed_orthographic_scale(
+        radius,
+        1_000.0,
+        radius,
+        minimum=radius * 0.001,
+    ) == pytest.approx(radius * 0.001)
+
+
+def test_projection_clip_planes_extend_beyond_camera_far_when_needed() -> None:
+    camera = Camera.orthographic(
+        position=(0.0, -10.0, 0.0),
+        target=(0.0, 0.0, 0.0),
+        scale=1.0,
     )
+
+    near, far = _projection_clip_planes(2_000_000.0, 10.0, camera)
+
+    assert near > 0.0
+    assert far > camera.far
 
 
 def test_orthographic_axis_length_tracks_view_scale() -> None:

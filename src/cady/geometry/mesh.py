@@ -1,4 +1,4 @@
-"""Semantic 2D and 3D triangle meshes."""
+"""Semantic 2D triangle meshes and 3D polygon meshes."""
 
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ if TYPE_CHECKING:
     from cady.view.open_view import Projection
     from cady.view.style import RenderMode
 
-FaceIndex = tuple[int, int, int]
+TriangleIndex = tuple[int, int, int]
+FaceIndex = tuple[int, ...]
 EdgeIndex = tuple[int, int]
 
 
@@ -34,12 +35,12 @@ class Mesh2:
     """Indexed 2D triangle mesh used at numeric conversion boundaries."""
 
     vertices: tuple[Point2, ...]
-    faces: tuple[FaceIndex, ...]
+    faces: tuple[TriangleIndex, ...]
     edges: tuple[EdgeIndex, ...] = ()
 
     def __post_init__(self) -> None:
         vertices = tuple(self.vertices)
-        faces = tuple(_face(face) for face in self.faces)
+        faces = tuple(_triangle_face(face) for face in self.faces)
         edges = tuple(_edge(edge) for edge in self.edges)
         for face in faces:
             if min(face) < 0:
@@ -62,7 +63,7 @@ class Mesh2:
     @classmethod
     def merged(cls, meshes: Iterable[Mesh2]) -> Mesh2:
         vertices: list[Point2] = []
-        faces: list[FaceIndex] = []
+        faces: list[TriangleIndex] = []
         edges: list[EdgeIndex] = []
         offset = 0
         for mesh in meshes:
@@ -131,7 +132,7 @@ class Mesh2:
 
 @dataclass(frozen=True, slots=True)
 class Mesh3:
-    """Indexed 3D triangle mesh with optional explicit display edges."""
+    """Indexed 3D polygon mesh with optional explicit display edges."""
 
     vertices: tuple[Point3, ...]
     faces: tuple[FaceIndex, ...]
@@ -139,7 +140,7 @@ class Mesh3:
 
     def __post_init__(self) -> None:
         vertices = tuple(self.vertices)
-        faces = tuple(_face(face) for face in self.faces)
+        faces = tuple(_polygon_face(face) for face in self.faces)
         edges = tuple(_edge(edge) for edge in self.edges)
         for face in faces:
             if min(face) < 0:
@@ -167,7 +168,7 @@ class Mesh3:
         offset = 0
         for mesh in meshes:
             vertices.extend(mesh.vertices)
-            faces.extend((a + offset, b + offset, c + offset) for a, b, c in mesh.faces)
+            faces.extend(tuple(index + offset for index in face) for face in mesh.faces)
             edges.extend((a + offset, b + offset) for a, b in mesh.edges)
             offset += len(mesh.vertices)
         return cls(tuple(vertices), tuple(faces), tuple(edges))
@@ -191,13 +192,23 @@ class Mesh3:
     @property
     def triangles(self) -> tuple[tuple[Point3, Point3, Point3], ...]:
         return tuple(
-            (self.vertices[a], self.vertices[b], self.vertices[c]) for a, b, c in self.faces
+            (self.vertices[a], self.vertices[b], self.vertices[c])
+            for a, b, c in self.triangulated_faces()
         )
+
+    def triangulated_faces(self, *, tolerance: float = 1e-9) -> tuple[TriangleIndex, ...]:
+        """Return triangular faces for render/export/numeric boundaries."""
+        _validate_tolerance(tolerance)
+        return _triangulated_faces(self.vertices, self.faces, tolerance=tolerance)
+
+    def triangulated(self, *, tolerance: float = 1e-9) -> Mesh3:
+        """Return an equivalent mesh whose faces are all triangles."""
+        return Mesh3(self.vertices, self.triangulated_faces(tolerance=tolerance), self.edges)
 
     @property
     def area(self) -> float:
-        """Sum of triangle face surface areas."""
-        return float(_mesh3_area(self.vertices, self.faces))
+        """Sum of face surface areas after boundary triangulation."""
+        return float(_mesh3_area(self.vertices, self.triangulated_faces()))
 
     @property
     def volume(self) -> float:
@@ -208,7 +219,7 @@ class Mesh3:
         each triangular face.  Returns the absolute value so the result
         is always non-negative regardless of face winding.
         """
-        return float(_mesh3_volume(self.vertices, self.faces))
+        return float(_mesh3_volume(self.vertices, self.triangulated_faces()))
 
     @property
     def boundary(self) -> tuple[Point3, Point3]:
@@ -226,7 +237,7 @@ class Mesh3:
     def to_array(self, *, tolerance: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         _validate_tolerance(tolerance)
         vertices = np.array(self.vertices, dtype=np.float64)
-        faces = np.array(self.faces, dtype=np.int64)
+        faces = np.array(self.triangulated_faces(tolerance=tolerance), dtype=np.int64)
         edges = np.array(self.edges, dtype=np.int64)
         if len(vertices) == 0:
             vertices = np.empty((0, 3), dtype=np.float64)
@@ -374,10 +385,7 @@ class Mesh3:
         """Extract all edges from faces as a Wireframe3."""
         from cady.geometry.wireframe import Wireframe3 as WF
 
-        edge_set: set[tuple[int, int]] = set()
-        for a, b, c in self.faces:
-            for start, end in ((a, b), (b, c), (c, a)):
-                edge_set.add((min(start, end), max(start, end)))
+        edge_set = set(_face_edges(self.faces))
         return WF.from_edges(self.vertices, tuple(sorted(edge_set)))
 
     def view(
@@ -424,10 +432,17 @@ def _mesh_from_arrays(
     return Mesh3(vertex_values, face_values, edge_values)
 
 
-def _face(value: tuple[int, int, int]) -> FaceIndex:
+def _triangle_face(value: tuple[int, int, int]) -> TriangleIndex:
     if len(value) != 3:
         raise ValueError("mesh faces must have exactly three indices")
     return (int(value[0]), int(value[1]), int(value[2]))
+
+
+def _polygon_face(value: tuple[int, ...]) -> FaceIndex:
+    face = tuple(int(index) for index in value)
+    if len(face) < 3:
+        raise ValueError("mesh faces must have at least three indices")
+    return face
 
 
 def _edge(value: tuple[int, int]) -> EdgeIndex:
@@ -437,13 +452,68 @@ def _edge(value: tuple[int, int]) -> EdgeIndex:
 
 
 def _reverse_face_winding(faces: tuple[FaceIndex, ...]) -> tuple[FaceIndex, ...]:
-    return tuple((a, c, b) for a, b, c in faces)
+    return tuple((face[0], *reversed(face[1:])) for face in faces)
+
+
+def _face_edges(faces: tuple[FaceIndex, ...]) -> tuple[EdgeIndex, ...]:
+    edges: set[EdgeIndex] = set()
+    for face in faces:
+        indices = tuple(int(index) for index in face)
+        for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
+            edges.add((min(start, end), max(start, end)))
+    return tuple(sorted(edges))
+
+
+def _fan_triangulated_face(face: FaceIndex) -> tuple[TriangleIndex, ...]:
+    return tuple(
+        (int(face[0]), int(face[index]), int(face[index + 1]))
+        for index in range(1, len(face) - 1)
+    )
+
+
+def _triangulated_faces(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    *,
+    tolerance: float,
+) -> tuple[TriangleIndex, ...]:
+    triangles: list[TriangleIndex] = []
+    for face in faces:
+        if len(face) == 3:
+            triangles.append((int(face[0]), int(face[1]), int(face[2])))
+        else:
+            triangles.extend(_triangulated_polygon_face(vertices, face, tolerance=tolerance))
+    return tuple(triangles)
+
+
+def _triangulated_polygon_face(
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    *,
+    tolerance: float,
+) -> tuple[TriangleIndex, ...]:
+    from cady.geometry.plane3 import Plane3
+    from cady.operations.triangulation import triangulate2
+
+    points = tuple(vertices[index] for index in face)
+    plane = Plane3.fit(points)
+    projected = np.asarray([plane.coordinates(point) for point in points], dtype=np.float64)
+    boundary = np.asarray(
+        tuple((index, (index + 1) % len(face)) for index in range(len(face))),
+        dtype=np.int64,
+    )
+    _nodes, local_faces = triangulate2(projected, boundary, tolerance=tolerance)
+    if len(local_faces) == 0:
+        return _fan_triangulated_face(face)
+    return tuple(
+        (int(face[int(a)]), int(face[int(b)]), int(face[int(c)])) for a, b, c in local_faces
+    )
 
 
 def _boundary_halfedges(faces: tuple[FaceIndex, ...]) -> list[tuple[int, int]]:
     occurrences: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     for face in faces:
-        indices = [int(face[0]), int(face[1]), int(face[2])]
+        indices = [int(index) for index in face]
         for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
             occurrences[(min(start, end), max(start, end))].append((start, end))
 
@@ -531,7 +601,7 @@ def _triangle_area2(
 
 def _mesh2_area(
     vertices: tuple[Point2, ...],
-    faces: tuple[FaceIndex, ...],
+    faces: tuple[TriangleIndex, ...],
 ) -> float:
     if not faces:
         return 0.0
@@ -567,7 +637,7 @@ def _triangle_area3(
 
 def _mesh3_area(
     vertices: tuple[Point3, ...],
-    faces: tuple[FaceIndex, ...],
+    faces: tuple[TriangleIndex, ...],
 ) -> float:
     if not faces:
         return 0.0
@@ -576,7 +646,7 @@ def _mesh3_area(
 
 def _mesh3_volume(
     vertices: tuple[Point3, ...],
-    faces: tuple[FaceIndex, ...],
+    faces: tuple[TriangleIndex, ...],
 ) -> float:
     """Tetrahedron integration volume (absolute value).
 

@@ -65,6 +65,31 @@ def test_mesh_to_array_and_merged_offsets_faces() -> None:
     np.testing.assert_array_equal(faces, [[0, 1, 2], [3, 4, 5]])
 
 
+def test_mesh3_accepts_polygon_faces_and_triangulates_at_array_boundary() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    vertices, faces, _edges = mesh.to_array(tolerance=1e-9)
+    wireframe = mesh.to_wireframe()
+    merged = Mesh3.merged((mesh, mesh))
+
+    assert mesh.faces == ((0, 1, 2, 3),)
+    assert merged.faces == ((0, 1, 2, 3), (4, 5, 6, 7))
+    assert len(mesh.triangles) == 2
+    assert mesh.area == pytest.approx(1.0)
+    assert vertices.shape == (4, 3)
+    assert faces.shape == (2, 3)
+    assert {tuple(face) for face in faces.tolist()} == {(3, 0, 1), (1, 2, 3)}
+    assert wireframe.edges == ((0, 1), (0, 3), (1, 2), (2, 3))
+
+
 def test_mesh_from_points_reconstructs_with_advancing_front() -> None:
     points = (
         (0.0, 0.0, 0.0),

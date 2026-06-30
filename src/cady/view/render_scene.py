@@ -115,18 +115,13 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
         if transform is not None:
             mesh = mesh.transformed(transform)
         if len(mesh.vertices) > 0:
-            faces = np.asarray(mesh.faces, dtype=np.uint32)
-            if faces.size == 0:
-                faces = np.empty((0, 3), dtype=np.uint32)
-            edges = np.asarray(mesh.edges, dtype=np.uint32)
-            if edges.size == 0:
-                edges = np.empty((0, 2), dtype=np.uint32)
+            vertices, faces, edges = mesh.to_array(tolerance=tolerance)
             meshes.append(
                 SceneMesh(
                     scene_object.object_name,
-                    np.asarray(mesh.vertices, dtype=np.float32),
-                    faces,
-                    edges,
+                    vertices.astype(np.float32, copy=False),
+                    faces.astype(np.uint32, copy=False),
+                    edges.astype(np.uint32, copy=False),
                     _style_color(target, style),
                     style.render_mode,
                     style.point_size,

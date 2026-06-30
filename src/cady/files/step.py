@@ -1016,10 +1016,11 @@ def render(target: object, *, tolerance: float = 1e-3) -> str:
         lines.append(
             f"#{vertex_id}=CARTESIAN_POINT('',({vertex[0]:.12g},{vertex[1]:.12g},{vertex[2]:.12g}));"
         )
-    for a, b, c in mesh.faces:
+    for face in mesh.faces:
         face_id = next_id
         next_id += 1
-        lines.append(f"#{face_id}=POLY_LOOP('',(#{vertex_ids[a]},#{vertex_ids[b]},#{vertex_ids[c]}));")
+        loop = ",".join(f"#{vertex_ids[index]}" for index in face)
+        lines.append(f"#{face_id}=POLY_LOOP('',({loop}));")
     lines.extend(["ENDSEC;", "END-ISO-10303-21;"])
     return "\n".join(lines) + "\n"
 

@@ -1,8 +1,8 @@
 """Read DXF wire polylines and draw their intersection nodes as a point cloud.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/linesplan4/mesh_pc_dxf.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/linesplan4/mesh_pc_dxf.py
+    PYTHONPATH=src .venv/bin/python examples/linesplan5/pc_from_dxf.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/linesplan5/pc_from_dxf.py
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
 VIEW_ASPECT = 900.0 / 700.0
 FIT_PADDING = 1.08
 DEFAULT_INTERSECTION_TOLERANCE = 80.0
-DEFAULT_REPEAT_DISTANCE = 90.0
+DEFAULT_REPEAT_DISTANCE = 900.0
 WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe", line_width=1.0)
 POINT_STYLE = DisplayStyle(color=(0.88, 0.45, 0.12), render_mode="points", point_size=7.0)
 LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
@@ -51,15 +51,27 @@ class SegmentRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class IntersectionPoint:
-    measure: float
+class PairIntersection:
+    left_measure: float
+    right_measure: float
+    gap: float
     point: Point3
 
 
 @dataclass(frozen=True, slots=True)
-class IntersectionPointCloud:
+class IntersectionPoint:
+    left_curve_index: int
+    right_curve_index: int
+    left_measure: float
+    right_measure: float
+    point: Point3
+
+
+@dataclass(frozen=True, slots=True)
+class DxfIntersectionPointCloud:
     source: Wireframe3
     cloud: PointCloud3
+    intersections: tuple[IntersectionPoint, ...]
     curve_count: int
     raw_intersection_count: int
     intersecting_pair_count: int
@@ -69,7 +81,7 @@ class IntersectionPointCloud:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build a point cloud from all DXF wire polyline intersection nodes.",
+        description="Build and display a point cloud from DXF wire polyline intersections.",
     )
     parser.add_argument(
         "--input",
@@ -89,7 +101,7 @@ def main() -> None:
         dest="intersection_tolerance",
         type=float,
         default=DEFAULT_INTERSECTION_TOLERANCE,
-        help="Maximum gap between two polylines that counts as an intersection. Defaults to 10.",
+        help="Maximum gap between two polylines that counts as an intersection.",
     )
     parser.add_argument(
         "--repeat-distance",
@@ -99,7 +111,7 @@ def main() -> None:
         dest="repeat_distance",
         type=float,
         default=DEFAULT_REPEAT_DISTANCE,
-        help="Minimum distance before the same two polylines can intersect again. Defaults to 50.",
+        help="Minimum distance before the same two polylines can intersect again.",
     )
     parser.add_argument(
         "--no-view",
@@ -113,11 +125,8 @@ def main() -> None:
     _validate_positive(args.intersection_tolerance, "intersection_tolerance")
     _validate_positive(args.repeat_distance, "repeat_distance")
 
-    curves = read_polyline_curves(args.input)
-    source = wireframe_from_curves(curves)
-    result = mesh_point_cloud_from_intersections(
-        curves,
-        source=source,
+    result = dxf_intersection_pointcloud(
+        args.input,
         tolerance=args.tolerance,
         intersection_tolerance=args.intersection_tolerance,
         repeat_distance=args.repeat_distance,
@@ -153,19 +162,89 @@ def wireframe_from_curves(curves: Iterable[dxf.DxfWireCurve]) -> Wireframe3:
     return Wireframe3.from_polylines(Polyline3(curve.vertices) for curve in curves)
 
 
+def pointcloud_from_dxf(
+    path: str | Path,
+    *,
+    tolerance: float = 1e-3,
+    intersection_tolerance: float = DEFAULT_INTERSECTION_TOLERANCE,
+    repeat_distance: float = DEFAULT_REPEAT_DISTANCE,
+) -> PointCloud3:
+    """Return intersection nodes from a DXF wire drawing as an unconnected point cloud."""
+    return PointCloud3(
+        points_from_dxf(
+            path,
+            tolerance=tolerance,
+            intersection_tolerance=intersection_tolerance,
+            repeat_distance=repeat_distance,
+        )
+    )
+
+
+def points_from_dxf(
+    path: str | Path,
+    *,
+    tolerance: float = 1e-3,
+    intersection_tolerance: float = DEFAULT_INTERSECTION_TOLERANCE,
+    repeat_distance: float = DEFAULT_REPEAT_DISTANCE,
+) -> tuple[Point3, ...]:
+    """Return intersection node coordinates from a DXF wire drawing."""
+    return dxf_intersection_pointcloud(
+        path,
+        tolerance=tolerance,
+        intersection_tolerance=intersection_tolerance,
+        repeat_distance=repeat_distance,
+    ).cloud.vertices
+
+
+def point_cloud_from_dxf(
+    path: str | Path,
+    *,
+    tolerance: float = 1e-3,
+    intersection_tolerance: float = DEFAULT_INTERSECTION_TOLERANCE,
+    repeat_distance: float = DEFAULT_REPEAT_DISTANCE,
+) -> PointCloud3:
+    """Alias for callers who prefer the separated point_cloud spelling."""
+    return pointcloud_from_dxf(
+        path,
+        tolerance=tolerance,
+        intersection_tolerance=intersection_tolerance,
+        repeat_distance=repeat_distance,
+    )
+
+
+def dxf_intersection_pointcloud(
+    path: str | Path,
+    *,
+    tolerance: float = 1e-3,
+    intersection_tolerance: float = DEFAULT_INTERSECTION_TOLERANCE,
+    repeat_distance: float = DEFAULT_REPEAT_DISTANCE,
+) -> DxfIntersectionPointCloud:
+    _validate_positive(tolerance, "tolerance")
+    _validate_positive(intersection_tolerance, "intersection_tolerance")
+    _validate_positive(repeat_distance, "repeat_distance")
+    curves = read_polyline_curves(Path(path))
+    return pointcloud_from_intersections(
+        curves,
+        source=wireframe_from_curves(curves),
+        tolerance=tolerance,
+        intersection_tolerance=intersection_tolerance,
+        repeat_distance=repeat_distance,
+    )
+
+
 def _validate_positive(value: float, name: str) -> None:
     if value <= 0.0 or not isfinite(value):
         raise ValueError(f"{name} must be positive")
 
 
-def mesh_point_cloud_from_intersections(
+def pointcloud_from_intersections(
     curves: tuple[dxf.DxfWireCurve, ...],
     *,
     source: Wireframe3,
     tolerance: float,
     intersection_tolerance: float,
     repeat_distance: float,
-) -> IntersectionPointCloud:
+) -> DxfIntersectionPointCloud:
     intersections, intersecting_pair_count = _all_polyline_intersections(
         curves,
         tolerance=tolerance,
@@ -179,18 +258,19 @@ def mesh_point_cloud_from_intersections(
     if not nodes:
         raise ValueError("no polyline intersection nodes were found")
 
-    return IntersectionPointCloud(
-        source,
-        PointCloud3(nodes),
-        len(curves),
-        len(intersections),
-        intersecting_pair_count,
-        intersection_tolerance,
-        repeat_distance,
+    return DxfIntersectionPointCloud(
+        source=source,
+        cloud=PointCloud3(nodes),
+        intersections=intersections,
+        curve_count=len(curves),
+        raw_intersection_count=len(intersections),
+        intersecting_pair_count=intersecting_pair_count,
+        intersection_tolerance=intersection_tolerance,
+        repeat_distance=repeat_distance,
     )
 
 
-def build_scene(result: IntersectionPointCloud) -> Scene:
+def build_scene(result: DxfIntersectionPointCloud) -> Scene:
     lower, upper = result.source.bounds()
     camera = _fit_profile_camera(lower, upper)
     centre = _bounds_centre(lower, upper)
@@ -223,7 +303,7 @@ def _all_polyline_intersections(
     nodes: list[IntersectionPoint] = []
     intersecting_pair_count = 0
     for left_index, left in enumerate(curves):
-        for right in curves[left_index + 1 :]:
+        for right_index, right in enumerate(curves[left_index + 1 :], start=left_index + 1):
             pair_nodes = _polyline_intersections(
                 left.vertices,
                 right.vertices,
@@ -234,13 +314,22 @@ def _all_polyline_intersections(
             if not pair_nodes:
                 continue
             intersecting_pair_count += 1
-            nodes.extend(pair_nodes)
+            nodes.extend(
+                IntersectionPoint(
+                    left_curve_index=left_index,
+                    right_curve_index=right_index,
+                    left_measure=node.left_measure,
+                    right_measure=node.right_measure,
+                    point=node.point,
+                )
+                for node in pair_nodes
+            )
     return tuple(nodes), intersecting_pair_count
 
 
 def _append_pair_intersection(
-    nodes: list[IntersectionPoint],
-    node: IntersectionPoint,
+    nodes: list[PairIntersection],
+    node: PairIntersection,
     *,
     repeat_distance: float,
 ) -> None:
@@ -257,7 +346,7 @@ def _intersection_point(
     right_segment: SegmentRecord,
     *,
     intersection_tolerance: float,
-) -> tuple[float, float, Point3] | None:
+) -> PairIntersection | None:
     result = closest_points_between_segments3(
         (left_segment.start, left_segment.end),
         (right_segment.start, right_segment.end),
@@ -271,8 +360,9 @@ def _intersection_point(
         (result.left[1] + result.right[1]) * 0.5,
         (result.left[2] + result.right[2]) * 0.5,
     )
-    measure = left_segment.offset + left_segment.length * result.left_parameter
-    return measure, result.distance, point
+    left_measure = left_segment.offset + left_segment.length * result.left_parameter
+    right_measure = right_segment.offset + right_segment.length * result.right_parameter
+    return PairIntersection(left_measure, right_measure, result.distance, point)
 
 
 def _polyline_intersections(
@@ -282,8 +372,8 @@ def _polyline_intersections(
     tolerance: float,
     intersection_tolerance: float,
     repeat_distance: float,
-) -> tuple[IntersectionPoint, ...]:
-    candidates: list[tuple[float, float, Point3]] = []
+) -> tuple[PairIntersection, ...]:
+    candidates: list[PairIntersection] = []
     left_segments = _segment_records(left, tolerance=tolerance)
     right_segments = _segment_records(right, tolerance=tolerance)
     for left_segment in left_segments:
@@ -302,11 +392,11 @@ def _polyline_intersections(
             if intersection is not None:
                 candidates.append(intersection)
 
-    nodes: list[IntersectionPoint] = []
-    for measure, _gap, point in sorted(candidates, key=lambda item: (item[0], item[1])):
+    nodes: list[PairIntersection] = []
+    for node in sorted(candidates, key=lambda item: (item.left_measure, item.gap)):
         _append_pair_intersection(
             nodes,
-            IntersectionPoint(measure, point),
+            node,
             repeat_distance=repeat_distance,
         )
     return tuple(nodes)

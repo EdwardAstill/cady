@@ -193,6 +193,18 @@ def test_stl_write_mesh(tmp_path: Path) -> None:
     assert path.read_text(encoding="ascii").startswith("solid cady")
 
 
+def test_stl_write_triangulates_polygon_mesh_faces(tmp_path: Path) -> None:
+    mesh = Mesh3(
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
+        ((0, 1, 2, 3),),
+    )
+    path = tmp_path / "quad.stl"
+
+    stl.write(mesh, path, ascii=True, tolerance=1e-9)
+
+    assert path.read_text(encoding="ascii").count("facet normal") == 2
+
+
 def test_stl_write_document_with_meshable_parts(tmp_path: Path) -> None:
     document = Document("job").add_part(Part("box").with_body(box(1, 1, 1)))
     path = tmp_path / "job.stl"
@@ -207,6 +219,17 @@ def test_step_render_body() -> None:
 
     assert "ISO-10303-21" in text
     assert "POLY_LOOP" in text
+
+
+def test_step_render_keeps_polygon_mesh_faces_as_poly_loops() -> None:
+    mesh = Mesh3(
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
+        ((0, 1, 2, 3),),
+    )
+
+    text = step.render(mesh, tolerance=1e-9)
+
+    assert "POLY_LOOP('',(#1,#2,#3,#4));" in text
 
 
 def test_step_render_document_with_meshable_parts() -> None:

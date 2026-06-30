@@ -80,7 +80,7 @@ def write(
 ) -> object:
     """Coerce ``target`` to a mesh and write it as ASCII or binary STL."""
     mesh = _mesh_from_target(target, tolerance=tolerance)
-    triangles = list(_triangles(mesh))
+    triangles = list(_triangles(mesh, tolerance=tolerance))
     output = Path(path)
     if ascii:
         write_ascii_stl(triangles, output)
@@ -93,10 +93,10 @@ def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
     return mesh_from_target(target, tolerance=tolerance)
 
 
-def _triangles(mesh: Mesh3) -> tuple[Triangle3, ...]:
+def _triangles(mesh: Mesh3, *, tolerance: float) -> tuple[Triangle3, ...]:
     return tuple(
         (mesh.vertices[a], mesh.vertices[b], mesh.vertices[c])
-        for a, b, c in mesh.faces
+        for a, b, c in mesh.triangulated_faces(tolerance=tolerance)
     )
 
 

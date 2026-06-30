@@ -265,12 +265,16 @@ def test_linesplan_wireframe_scene_draws_only_wireframe() -> None:
 
 
 def test_linesplan4_adds_all_polyline_intersection_nodes() -> None:
-    module = _load_linesplan4_script("mesh_pc_dxf")
+    module = _load_linesplan4_script("pc_from_dxf")
 
-    curves = module.read_polyline_curves(module.LINESPLAN_DXF)
-    result = module.mesh_point_cloud_from_intersections(
-        curves,
-        source=module.wireframe_from_curves(curves),
+    result = module.dxf_intersection_pointcloud(
+        module.LINESPLAN_DXF,
+        tolerance=1e-3,
+        intersection_tolerance=80.0,
+        repeat_distance=90.0,
+    )
+    cloud = module.pointcloud_from_dxf(
+        module.LINESPLAN_DXF,
         tolerance=1e-3,
         intersection_tolerance=80.0,
         repeat_distance=90.0,
@@ -278,6 +282,8 @@ def test_linesplan4_adds_all_polyline_intersection_nodes() -> None:
     scene = module.build_scene(result)
 
     assert not hasattr(result, "node_rows")
+    assert isinstance(cloud, PointCloud3)
+    assert cloud == result.cloud
     assert result.curve_count == 105
     assert result.intersecting_pair_count == 2036
     assert result.raw_intersection_count == 2503
@@ -296,6 +302,136 @@ def test_linesplan4_adds_all_polyline_intersection_nodes() -> None:
     assert len(prepared.meshes[1].vertices) == 2381
 
 
+def test_linesplan4_mesh_from_dxf_pointcloud() -> None:
+    module = _load_linesplan4_script("mesh_from_pc")
+
+    result = module.mesh_from_dxf_pointcloud(
+        module.LINESPLAN_DXF,
+        tolerance=1e-3,
+        intersection_tolerance=80.0,
+        repeat_distance=90.0,
+    )
+    scene = module.build_scene(result)
+
+    assert isinstance(result.cloud, PointCloud3)
+    assert isinstance(result.mesh, Mesh3)
+    assert len(result.cloud.vertices) == 2381
+    assert len(result.mesh.vertices) == 587
+    assert len(result.mesh.edges) == 4985
+    assert len(result.mesh.faces) == 3085
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+    assert [mesh.name for mesh in prepared.meshes] == [
+        "source_wireframe",
+        "mesh_from_point_cloud",
+        "intersection_nodes",
+    ]
+    assert prepared.meshes[0].render_mode == "wireframe"
+    assert prepared.meshes[1].render_mode == "shaded"
+    assert prepared.meshes[2].render_mode == "points"
+
+
+def test_linesplan5_curve_network_mesh_overlays_intersection_nodes() -> None:
+    module = _load_linesplan5_script("curve_network_mesh")
+
+    result = module.curve_network_mesh_from_dxf(
+        module.LINESPLAN_DXF,
+        tolerance=1e-3,
+        intersection_tolerance=80.0,
+        repeat_distance=90.0,
+    )
+    scene = module.build_scene(result)
+
+    assert isinstance(result.cloud, PointCloud3)
+    assert isinstance(result.intersection_wireframe, Wireframe3)
+    assert isinstance(result.mesh, Mesh3)
+    assert len(result.cloud.vertices) == 2381
+    assert len(result.node_result.intersections) == 2503
+    assert result.mesh.vertices == result.cloud.vertices
+    assert module.mesh_uses_only_intersection_nodes(result)
+    assert len(result.network.sections) == 72
+    assert len(result.network.buttocks) == 20
+    assert len(result.network.waterlines) == 9
+    assert len(result.network.knuckles) == 4
+    assert len(result.intersection_wireframe.vertices) == 2381
+    assert len(result.intersection_wireframe.edges) == 4397
+    assert len(result.mesh.vertices) == 2381
+    assert len(result.mesh.edges) == 4397
+    assert len(result.mesh.faces) == 1434
+    assert all(len(face) == 4 for face in result.mesh.faces)
+    assert len(result.mesh.triangulated_faces(tolerance=1e-3)) == 2868
+
+    curve_edges = set(result.intersection_wireframe.edges)
+    face_edges = {
+        (min(start, end), max(start, end))
+        for face in result.mesh.faces
+        for start, end in zip(face, face[1:] + face[:1], strict=True)
+    }
+    assert face_edges <= curve_edges
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+    assert [mesh.name for mesh in prepared.meshes] == [
+        "intersection_patch_mesh",
+        "intersection_node_wireframe",
+        "intersection_nodes",
+    ]
+    assert prepared.meshes[0].faces.shape == (2868, 3)
+    assert prepared.meshes[0].render_mode == "shaded"
+    assert prepared.meshes[1].render_mode == "wireframe"
+    assert prepared.meshes[2].render_mode == "points"
+
+
+def test_linesplan5_ball_pivoting_mesh_uses_intersection_nodes_without_source_edges() -> None:
+    module = _load_linesplan5_script("ball_pivoting")
+
+    result = module.ball_pivoting_mesh_from_dxf(
+        module.LINESPLAN_DXF,
+        tolerance=1e-3,
+        intersection_tolerance=80.0,
+        repeat_distance=90.0,
+        ball_radius=900.0,
+        neighbour_count=18,
+    )
+    scene = module.build_scene(result)
+
+    assert isinstance(result.cloud, PointCloud3)
+    assert isinstance(result.mesh, Mesh3)
+    assert result.mesh.vertices == result.cloud.vertices
+    assert len(result.cloud.vertices) == 2381
+    assert len(result.mesh.vertices) == 2381
+    assert len(result.mesh.edges) == 2318
+    assert len(result.mesh.faces) == 1267
+    assert all(len(face) == 3 for face in result.mesh.faces)
+
+    face_edges = {
+        (min(start, end), max(start, end))
+        for face in result.mesh.faces
+        for start, end in zip(face, face[1:] + face[:1], strict=True)
+    }
+    assert set(result.mesh.edges) == face_edges
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+    assert [mesh.name for mesh in prepared.meshes] == [
+        "ball_pivoting_mesh",
+        "intersection_nodes",
+    ]
+    assert prepared.meshes[0].render_mode == "shaded"
+    assert prepared.meshes[1].render_mode == "points"
+
+
+def test_linesplan5_pc_from_dxf_exports_plain_points_by_default() -> None:
+    module = _load_linesplan5_script("pc_from_dxf")
+
+    points = module.points_from_dxf(module.LINESPLAN_DXF)
+    result = module.dxf_intersection_pointcloud(module.LINESPLAN_DXF)
+
+    assert isinstance(points, tuple)
+    assert all(isinstance(point, tuple) for point in points)
+    assert points == result.cloud.vertices
+    assert len(points) == 2124
+    assert result.repeat_distance == 900.0
+
+
 def _load_linesplan_script(name: str) -> ModuleType:
     path = Path(__file__).resolve().parents[2] / "examples" / "linesplan" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
@@ -307,13 +443,32 @@ def _load_linesplan_script(name: str) -> ModuleType:
 
 
 def _load_linesplan4_script(name: str) -> ModuleType:
-    path = Path(__file__).resolve().parents[2] / "examples" / "linesplan4" / f"{name}.py"
+    return _load_linesplan_dir_script("linesplan4", name)
+
+
+def _load_linesplan5_script(name: str) -> ModuleType:
+    return _load_linesplan_dir_script("linesplan5", name)
+
+
+def _load_linesplan_dir_script(directory: str, name: str) -> ModuleType:
+    path = Path(__file__).resolve().parents[2] / "examples" / directory / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise AssertionError(f"could not load {path}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    script_dir = str(path.parent)
+    add_to_path = script_dir not in sys.path
+    if add_to_path:
+        sys.path.insert(0, script_dir)
+    previous_pc_from_dxf = sys.modules.pop("pc_from_dxf", None)
+    try:
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    finally:
+        if previous_pc_from_dxf is not None:
+            sys.modules["pc_from_dxf"] = previous_pc_from_dxf
+        if add_to_path:
+            sys.path.remove(script_dir)
     return module
 
 

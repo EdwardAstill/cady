@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -14,6 +14,7 @@ from cady.view.interaction import (
     axis_toggle_key_pressed,
     number_key_name,
     projection_clip_planes,
+    space_key_pressed,
 )
 from cady.view.overlay_renderers import create_local_axes_renderer, create_scale_bar_renderer
 from cady.view.render_scene import RenderScene
@@ -66,6 +67,11 @@ void main() {
 """
 
 _HAS_VISPY = importlib.util.find_spec("vispy") is not None
+_PRIMARY_MOUSE_BUTTON = 1
+_SECONDARY_MOUSE_BUTTON = 2
+_MIDDLE_MOUSE_BUTTON = 3
+
+DragMode = Literal["orbit", "pan"]
 
 
 def _require_vispy() -> None:
@@ -84,6 +90,18 @@ def _select_vispy_shader_backend(gl: Any) -> None:
     backend_name = getattr(gl.current_backend, "__name__", "")
     if ".es" not in backend_name:
         gl.use_gl("es2")
+
+
+def _drag_mode_for_mouse(
+    button: int | None,
+    *,
+    space_pressed: bool,
+) -> DragMode | None:
+    if button == _PRIMARY_MOUSE_BUTTON:
+        return "pan" if space_pressed else "orbit"
+    if button in {_SECONDARY_MOUSE_BUTTON, _MIDDLE_MOUSE_BUTTON}:
+        return "pan"
+    return None
 
 
 def _make_vispy_canvas(
@@ -137,6 +155,7 @@ def _make_vispy_canvas(
 
             self._last_mouse: tuple[float, float] | None = None
             self._mouse_button: int | None = None
+            self._space_pressed = False
 
             self._configure_program_uniforms()
             self._configure_canvas_state()
@@ -280,10 +299,18 @@ def _make_vispy_canvas(
             dx = x - last_x
             dy = y - last_y
 
-            if self._mouse_button == 1:
+            drag_mode = _drag_mode_for_mouse(
+                self._mouse_button,
+                space_pressed=self._space_pressed,
+            )
+            if drag_mode == "orbit":
                 self._interaction.orbit(dx, dy)
-            elif self._mouse_button == 2:
-                self._interaction.pan_by_pixels(dx, dy)
+            elif drag_mode == "pan":
+                self._interaction.pan_by_pixels(
+                    dx,
+                    dy,
+                    cast(tuple[int, int], self.physical_size),
+                )
 
             self._last_mouse = event.pos
             self._update_matrices()
@@ -295,6 +322,10 @@ def _make_vispy_canvas(
             self.update()
 
         def on_key_press(self, event: Any) -> None:
+            if space_key_pressed(event.key):
+                self._space_pressed = True
+                event.handled = True
+                return
             if axis_toggle_key_pressed(event.key):
                 if self._local_axes is None:
                     return
@@ -309,10 +340,16 @@ def _make_vispy_canvas(
             self._update_matrices()
             self.update()
 
+        def on_key_release(self, event: Any) -> None:
+            if space_key_pressed(event.key):
+                self._space_pressed = False
+                event.handled = True
+
     return VispyCanvas()
 
 
 __all__ = [
+    "_drag_mode_for_mouse",
     "_make_vispy_canvas",
     "_require_vispy",
     "_select_vispy_shader_backend",
