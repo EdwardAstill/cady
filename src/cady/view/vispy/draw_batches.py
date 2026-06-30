@@ -8,8 +8,8 @@ from typing import Any
 
 import numpy as np
 
-from cady.view.mesh_buffers import orientation_edges, shaded_face_buffers
-from cady.view.render_scene import RenderScene, SceneLine, SceneMesh
+from cady.view.scene import RenderScene, SceneLine, SceneMesh
+from cady.view.vispy.mesh_buffers import orientation_edges, shaded_face_buffers
 
 DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
 

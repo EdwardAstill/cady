@@ -345,12 +345,10 @@ def build_scene(result: CurveNetworkMesh) -> Scene:
     centre = _bounds_centre(lower, upper)
 
     return (
-        Scene(name="linesplan5_curve_network_mesh")
+        Scene(name="linesplan5_curve_network_mesh", camera=camera, lights=(LIGHT,))
         .add(result.mesh, name="intersection_patch_mesh", style=MESH_STYLE)
         .add(result.intersection_wireframe, name="intersection_node_wireframe", style=WIRE_STYLE)
         .add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
-        .with_camera(camera, name="profile")
-        .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
     )
 

@@ -15,15 +15,18 @@ def test_scene_stores_targets_and_view_state_immutably() -> None:
     style = DisplayStyle(color=(0.1, 0.2, 0.3), opacity=0.8)
 
     scene = (
-        Scene.from_target(part, name="part view")
+        Scene(
+            "part view",
+            camera=camera,
+            lights=(DirectionalLight(direction=(-1, -1, -1)),),
+        )
+        .add(part)
         .add("drawing", name="front", style=style)
-        .with_camera(camera, name="main")
-        .with_light(DirectionalLight(direction=(-1, -1, -1)))
     )
 
     assert [obj.object_name for obj in scene.objects] == ["plate", "front"]
     assert scene.camera is camera
-    assert len(scene.lights) == 3
+    assert len(scene.lights) == 1
     assert scene.overlays == (ScaleBarOverlay(), LocalAxesOverlay())
 
     with pytest.raises(FrozenInstanceError):
@@ -87,9 +90,9 @@ def test_scene_rejects_invalid_references() -> None:
     with pytest.raises(ViewError):
         Scene(lights=(object(),))  # type: ignore[list-item]
     with pytest.raises(ViewError):
-        Scene().with_camera(object())
-    with pytest.raises(ViewError):
         Scene().add(None)
+    assert not hasattr(Scene(), "with_camera")
+    assert not hasattr(Scene(), "with_light")
 
 
 def test_display_style_validates_render_state() -> None:

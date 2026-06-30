@@ -40,7 +40,8 @@ def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
     lower, upper = _result_bounds(result)
     centre = _bounds_centre(lower, upper)
     origin_pose = Transform3().translate(-centre[0], -centre[1], -centre[2])
-    scene = Scene(name="linesplan_9m_wires")
+    camera = _fit_profile_camera(lower, upper)
+    scene = Scene(name="linesplan_9m_wires", camera=camera, lights=(PROFILE_LIGHT,))
 
     for index, wf in enumerate(result.wireframes, start=1):
         scene = scene.add(
@@ -58,8 +59,7 @@ def build_wire_scene(result: dxf.DxfImportResult) -> Scene:
             style=MESH_STYLE,
         )
 
-    camera = _fit_profile_camera(lower, upper)
-    return scene.with_camera(camera, name="profile").with_light(PROFILE_LIGHT)
+    return scene
 
 
 def print_wire_summary(result: dxf.DxfImportResult, scene: Scene) -> None:
@@ -70,9 +70,9 @@ def print_wire_summary(result: dxf.DxfImportResult, scene: Scene) -> None:
     if result.skipped:
         print(f"skipped {len(result.skipped)} unsupported 3D DXF entities")
 
-    camera = _active_camera(scene)
+    camera = scene.camera
     print(f"scene objects: {len(scene.objects)}")
-    print(f"active camera: {scene.active_camera}")
+    print(f"camera: {camera.projection}")
     print(f"camera target: {camera.target}")
     print(f"camera scale: {camera.orthographic_scale:g}")
 
@@ -142,13 +142,6 @@ def _point_tuple(value: object) -> tuple[float, float, float]:
     point = value.tuple() if hasattr(value, "tuple") else value
     x, y, z = point
     return (float(x), float(y), float(z))
-
-
-def _active_camera(scene: Scene) -> CameraType:
-    for name, camera in scene.cameras:
-        if name == scene.active_camera:
-            return camera
-    return scene.cameras[0][1]
 
 
 if __name__ == "__main__":

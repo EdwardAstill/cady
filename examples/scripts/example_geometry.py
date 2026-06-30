@@ -105,20 +105,19 @@ def production_assembly() -> Assembly:
 
 def scene_for_target(target: object, *, name: str = "scene") -> Scene:
     return (
-        Scene(name=name)
-        .add(
-            target,
-            style=DisplayStyle(color=(0.74, 0.78, 0.82), render_mode="shaded"),
-        )
-        .with_camera(
-            Camera.perspective(
+        Scene(
+            name=name,
+            camera=Camera.perspective(
                 position=(1.7, -1.6, 0.9),
                 target=(0.5, 0.3, 0.05),
                 fov_degrees=35.0,
             ),
-            name="iso",
+            lights=(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.6),),
         )
-        .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.6))
+        .add(
+            target,
+            style=DisplayStyle(color=(0.74, 0.78, 0.82), render_mode="shaded"),
+        )
     )
 
 
@@ -126,8 +125,7 @@ def scene_summary(scene: Scene) -> str:
     lines = [
         f"scene: {scene.name}",
         f"objects: {len(scene.objects)}",
-        f"cameras: {', '.join(name for name, _camera in scene.cameras) or 'none'}",
-        f"active_camera: {scene.active_camera or 'none'}",
+        f"camera: {scene.camera.projection}",
         f"lights: {len(scene.lights)}",
     ]
     for item in scene.objects:

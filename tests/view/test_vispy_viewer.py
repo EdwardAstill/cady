@@ -17,29 +17,45 @@ from cady import (
     Scene,
     box,
 )
-from cady.view.interaction import (
-    ViewerInteractionState,
-    pan_world_units_per_pixel,
-    space_key_pressed,
-)
-from cady.view.vispy_canvas import (
+from cady.view.scene import prepare_scene
+from cady.view.scene import transform_from_pose as _transform_from_pose
+from cady.view.vispy.canvas import (
     _drag_mode_for_mouse,
     _require_vispy,
     _select_vispy_shader_backend,
 )
-from cady.view.vispy_viewer import (
-    _camera_orientation,
-    _mesh_edge_color,
-    _orientation_edges,
-    _projection_clip_planes,
-    _scale_bar_for_camera,
-    _scale_bar_for_visible_height,
-    _scale_bar_overlay,
-    _shaded_face_buffers,
-    _transform_from_pose,
-    _view_relative_orthographic_axis_length,
-    _zoomed_orthographic_scale,
-    prepare_scene,
+from cady.view.vispy.draw_batches import mesh_edge_color as _mesh_edge_color
+from cady.view.vispy.interaction import (
+    ViewerInteractionState,
+    pan_world_units_per_pixel,
+    space_key_pressed,
+)
+from cady.view.vispy.interaction import (
+    camera_orientation as _camera_orientation,
+)
+from cady.view.vispy.interaction import (
+    projection_clip_planes as _projection_clip_planes,
+)
+from cady.view.vispy.interaction import (
+    view_relative_orthographic_axis_length as _view_relative_orthographic_axis_length,
+)
+from cady.view.vispy.interaction import (
+    zoomed_orthographic_scale as _zoomed_orthographic_scale,
+)
+from cady.view.vispy.mesh_buffers import (
+    orientation_edges as _orientation_edges,
+)
+from cady.view.vispy.mesh_buffers import (
+    shaded_face_buffers as _shaded_face_buffers,
+)
+from cady.view.vispy.overlays import (
+    scale_bar_for_camera as _scale_bar_for_camera,
+)
+from cady.view.vispy.overlays import (
+    scale_bar_for_visible_height as _scale_bar_for_visible_height,
+)
+from cady.view.vispy.overlays import (
+    scale_bar_overlay as _scale_bar_overlay,
 )
 
 
@@ -51,7 +67,7 @@ def test_vispy_viewer_module_imports_without_opening_window() -> None:
 
 def test_require_vispy_raises_when_missing() -> None:
     with (
-        mock.patch("cady.view.vispy_canvas._HAS_VISPY", False),
+        mock.patch("cady.view.vispy.canvas._HAS_VISPY", False),
         pytest.raises(ImportError, match="requires vispy"),
     ):
         _require_vispy()

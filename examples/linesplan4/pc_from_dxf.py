@@ -245,11 +245,9 @@ def build_scene(result: DxfIntersectionPointCloud) -> Scene:
     centre = _bounds_centre(lower, upper)
 
     return (
-        Scene(name="linesplan_intersection_point_cloud")
+        Scene(name="linesplan_intersection_point_cloud", camera=camera, lights=(LIGHT,))
         .add(result.source, name="source_wireframe", style=WIRE_STYLE)
         .add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
-        .with_camera(camera, name="profile")
-        .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
     )
 

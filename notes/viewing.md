@@ -168,16 +168,16 @@ from cady.view import view_scene
 
 part = box(1.0, 1.0, 1.0)
 scene = (
-    Scene("box")
-    .add(part, style=DisplayStyle(color=(0.62, 0.68, 0.72)))
-    .with_camera(
-        Camera.orthographic(
+    Scene(
+        "box",
+        camera=Camera.orthographic(
             position=(2.0, -2.0, 1.5),
             target=(0.0, 0.0, 0.0),
             scale=2.0,
-        )
+        ),
+        lights=(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.4),),
     )
-    .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.4))
+    .add(part, style=DisplayStyle(color=(0.62, 0.68, 0.72)))
 )
 
 view_scene(scene, tolerance=1e-3)
@@ -273,8 +273,8 @@ The viewer backend keeps the conversion steps separate:
 Scene
   -> prepare_scene(...)
   -> RenderScene
-  -> draw_batches.build_canvas_geometry(...)
-  -> vispy_canvas._make_vispy_canvas(...)
+  -> vispy.draw_batches.build_canvas_geometry(...)
+  -> vispy.canvas._make_vispy_canvas(...)
 ```
 
 `Scene` is the public model. It stores semantic targets, a camera, lights,
@@ -291,28 +291,28 @@ This layer is useful because it keeps two responsibilities apart:
 - `Scene` answers: what does the user want to view?
 - `RenderScene` answers: what arrays and render settings does the backend need?
 
-`draw_batches.py` turns the prepared mesh and line payloads into GPU draw
-batches. It owns the split into face batches, edge batches, and point batches.
-It also computes viewer-facing helpers such as shaded face buffers, fallback
-orientation edges, solid colours, and scene bounds.
+`scene.py` owns both the public `Scene` model and the backend-independent
+`RenderScene` preparation boundary. It does not import VisPy, GPU buffers, or
+OpenGL state.
 
-`interaction.py` owns camera interaction state for the viewer. It handles orbit,
-pan, zoom, keyboard view changes, camera orientation, model/view matrices,
-orthographic scale, and projection clip planes. The canvas asks this state for
-matrices rather than storing pan, zoom, and orientation fields itself.
+`viewer.py` is the public viewer entry point. It keeps helpers such as
+`view_scene(...)`, `view_mesh(...)`, `view_lines(...)`, and the quick
+`open_target_view(...)` path used by target `.view(...)` methods.
 
-`overlay_renderers.py` owns screen-space overlay drawing. The current overlay
-values are `ScaleBarOverlay` and `LocalAxesOverlay`. These renderers receive
-VisPy objects from `_make_vispy_canvas(...)`; they do not import VisPy at module
-scope.
+`view/vispy/` contains the VisPy backend internals:
 
-`vispy_viewer.py` is the public viewer entry point. It keeps helpers such as
-`view_scene(...)`, `view_mesh(...)`, and `view_lines(...)`.
-
-`vispy_canvas.py` is the lazy VisPy runtime boundary. It imports VisPy only when
-a viewer is actually opened, creates the canvas and shader programs, routes
-mouse/key events, asks `interaction.py` for matrices, asks
-`overlay_renderers.py` to update/draw overlays, and draws the prepared batches.
+- `canvas.py` is the lazy VisPy runtime boundary. It imports VisPy only when a
+  viewer is actually opened, creates the canvas and shader programs, routes
+  mouse/key events, asks `interaction.py` for matrices, asks `overlays.py` to
+  update/draw overlays, and draws the prepared batches.
+- `draw_batches.py` turns prepared mesh and line payloads into GPU draw
+  batches. It owns the split into face batches, edge batches, and point batches.
+- `mesh_buffers.py` owns shaded face buffers and fallback orientation edges.
+- `interaction.py` owns camera interaction state for orbit, pan, zoom, keyboard
+  view changes, camera orientation, model/view matrices, orthographic scale, and
+  projection clip planes.
+- `overlays.py` owns screen-space overlay drawing for `ScaleBarOverlay` and
+  `LocalAxesOverlay`.
 
 The public flow remains:
 
@@ -320,14 +320,15 @@ The public flow remains:
 target -> Scene.add(...) -> prepare_scene(..., tolerance=...) -> view_scene(...)
 ```
 
-`open_view.py` is the quick-view path used by target `.view(...)` helpers. It
-checks bounds or meshes the target, optionally recentres it, fits an
+`viewer.open_target_view(...)` is the quick-view path used by target `.view(...)`
+helpers. It checks bounds or meshes the target, optionally recentres it, fits an
 orthographic camera by default, chooses a shaded or wireframe style, builds a
 one-object `Scene`, then calls the lazy public viewer helper.
 
-The public `cady.view` package re-exports the model values immediately, but
-loads `prepare_scene` and VisPy helpers through `__getattr__`. Keep new viewer
-entry points behind that lazy boundary unless they are pure data/model helpers.
+The public `cady.view` package re-exports model values and `prepare_scene`
+directly, but loads viewer-opening helpers through `__getattr__`. Keep new
+viewer entry points behind that lazy boundary unless they are pure data/model
+helpers.
 
 Useful tests:
 

@@ -62,10 +62,8 @@ def build_scene(wireframe: Wireframe3) -> Scene:
     centre = _bounds_centre(lower, upper)
     camera = _fit_profile_camera(lower, upper)
     return (
-        Scene(name="linesplan_9m_wireframe")
+        Scene(name="linesplan_9m_wireframe", camera=camera, lights=(LIGHT,))
         .add(wireframe, name="wireframe", style=WIRE_STYLE)
-        .with_camera(camera, name="profile")
-        .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
     )
 

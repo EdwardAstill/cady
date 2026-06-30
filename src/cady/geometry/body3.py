@@ -22,8 +22,8 @@ Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
     from cady.view import Camera, DisplayStyle, Light
-    from cady.view.open_view import Projection
     from cady.view.style import RenderMode
+    from cady.view.viewer import Projection
 
 PrimitiveKind = Literal["box", "cylinder", "sphere", "cone"]
 BooleanKind = Literal["union", "difference", "intersection"]
@@ -254,7 +254,7 @@ class Body3:
         center: bool = True,
         tolerance: float = 1e-3,
     ) -> None:
-        from cady.view.open_view import open_target_view
+        from cady.view.viewer import open_target_view
 
         open_target_view(
             self,

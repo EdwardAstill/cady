@@ -6,31 +6,23 @@ from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight, Light, PointLight
 from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay, SceneOverlay
-from cady.view.scene import Scene, SceneObject
+from cady.view.scene import (
+    RenderScene,
+    Scene,
+    SceneLine,
+    SceneMesh,
+    SceneObject,
+    prepare_scene,
+)
 from cady.view.style import DisplayStyle
 
 if TYPE_CHECKING:
-    from cady.view.render_scene import (
-        RenderScene,
-        SceneLine,
-        SceneMesh,
-        prepare_scene,
-    )
-    from cady.view.vispy_viewer import (
+    from cady.view.viewer import (
         view_lines,
         view_mesh,
         view_meshes,
         view_scene,
         view_target,
-    )
-
-_PREPARATION_EXPORTS = frozenset(
-    {
-        "RenderScene",
-        "SceneLine",
-        "SceneMesh",
-        "prepare_scene",
-    }
 )
 _VIEWER_EXPORTS = frozenset(
     {
@@ -49,21 +41,16 @@ def scene_from_target(target: object, *, name: str = "scene") -> Scene:
 
 
 def __getattr__(name: str) -> object:
-    if name in _PREPARATION_EXPORTS:
-        # Scene preparation is backend-independent and does not open GUI paths.
-        from cady.view import render_scene
-
-        return getattr(render_scene, name)
     if name in _VIEWER_EXPORTS:
         # Defer viewer backend imports until a GUI-facing helper is requested.
-        from cady.view import vispy_viewer
+        from cady.view import viewer
 
-        return getattr(vispy_viewer, name)
+        return getattr(viewer, name)
     raise AttributeError(f"module 'cady.view' has no attribute {name!r}")
 
 
 def __dir__() -> list[str]:
-    return sorted((*globals(), *_PREPARATION_EXPORTS, *_VIEWER_EXPORTS))
+    return sorted((*globals(), *_VIEWER_EXPORTS))
 
 
 __all__ = [

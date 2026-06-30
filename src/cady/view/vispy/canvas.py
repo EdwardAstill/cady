@@ -8,16 +8,16 @@ from typing import Any, Literal, cast
 
 import numpy as np
 
-from cady.view.draw_batches import DrawBatch, build_canvas_geometry
-from cady.view.interaction import (
+from cady.view.scene import RenderScene
+from cady.view.vispy.draw_batches import DrawBatch, build_canvas_geometry
+from cady.view.vispy.interaction import (
     ViewerInteractionState,
     axis_toggle_key_pressed,
     number_key_name,
     projection_clip_planes,
     space_key_pressed,
 )
-from cady.view.overlay_renderers import create_local_axes_renderer, create_scale_bar_renderer
-from cady.view.render_scene import RenderScene
+from cady.view.vispy.overlays import create_local_axes_renderer, create_scale_bar_renderer
 
 _VERT_SHADER = """
 uniform mat4 u_model;

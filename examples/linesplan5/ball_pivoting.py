@@ -220,11 +220,9 @@ def build_scene(result: BallPivotingMesh) -> Scene:
     camera = _fit_profile_camera(lower, upper)
     centre = _bounds_centre(lower, upper)
     return (
-        Scene(name="linesplan5_ball_pivoting")
+        Scene(name="linesplan5_ball_pivoting", camera=camera, lights=(LIGHT,))
         .add(result.mesh, name="ball_pivoting_mesh", style=MESH_STYLE)
         .add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
-        .with_camera(camera, name="profile")
-        .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
     )
 

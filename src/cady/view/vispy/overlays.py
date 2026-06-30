@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 
 from cady.view.camera import Camera
-from cady.view.draw_batches import solid_color_vertices
 from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay
-from cady.view.render_scene import RenderScene
+from cady.view.scene import RenderScene
+from cady.view.vispy.draw_batches import solid_color_vertices
 
 LOCAL_AXIS_COLORS: tuple[tuple[float, float, float], ...] = (
     (0.9, 0.05, 0.05),

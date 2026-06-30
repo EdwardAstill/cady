@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from cady.geometry import Mesh3
     from cady.operations.transforms import Transform3
     from cady.view import Camera, DisplayStyle, Light
-    from cady.view.open_view import Projection
     from cady.view.style import RenderMode
+    from cady.view.viewer import Projection
 
 
 def _transform_from_pose(pose: object | None) -> Transform3:
@@ -184,7 +184,7 @@ class Assembly:
         center: bool = True,
         tolerance: float = 1e-3,
     ) -> None:
-        from cady.view.open_view import open_target_view
+        from cady.view.viewer import open_target_view
 
         open_target_view(
             self,

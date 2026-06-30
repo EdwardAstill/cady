@@ -48,10 +48,9 @@ def triangulate_closed_polyline(
 def build_scene(polyline: Polyline2, mesh: Mesh2) -> Scene:
     lower, upper = mesh.bounds()
     return (
-        Scene("polyline2_triangulation")
+        Scene("polyline2_triangulation", camera=_fit_camera(lower, upper))
         .add(_mesh2_to_flat_mesh3(mesh), name="triangulation", style=TRIANGLE_STYLE)
         .add(_boundary_wire(polyline), name="closed_polyline", style=BOUNDARY_STYLE)
-        .with_camera(_fit_camera(lower, upper), name="top")
     )
 
 

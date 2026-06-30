@@ -774,7 +774,11 @@ def build_scene(
     planes: Iterable[tuple[float, Mesh3]],
     nodes: Mesh3 | Iterable[Iterable[Point3]] | PointCloud3 | None = None,
 ) -> Scene:
-    scene = Scene(name="quarter_sphere_strip_mesh")
+    scene = Scene(
+        name="quarter_sphere_strip_mesh",
+        camera=CAMERA,
+        lights=(LIGHT,),
+    )
     for index, wireframe in enumerate(wireframes, start=1):
         scene = scene.add(
             wireframe,
@@ -785,7 +789,7 @@ def build_scene(
     scene = add_planes_to_scene(scene, planes)
     scene = add_nodes_to_scene(scene, nodes)
 
-    return scene.with_camera(CAMERA, name="isometric").with_light(LIGHT)
+    return scene
 
 
 def add_planes_to_scene(

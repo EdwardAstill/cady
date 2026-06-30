@@ -428,7 +428,11 @@ def build_scene(
     planes: Iterable[tuple[float, Mesh3]],
     nodes: Iterable[Iterable[Point3]] | PointCloud3 | None = None,
 ) -> Scene:
-    scene = Scene(name="quarter_sphere_slice_planes").add(
+    scene = Scene(
+        name="quarter_sphere_slice_planes",
+        camera=CAMERA,
+        lights=(LIGHT,),
+    ).add(
         wireframe,
         name="quarter_sphere_wireframe",
         style=WIRE_STYLE,
@@ -455,7 +459,7 @@ def build_scene(
             name="plane_intersection_nodes",
             style=NODE_STYLE,
         )
-    return scene.with_camera(CAMERA, name="isometric").with_light(LIGHT)
+    return scene
 
 
 def print_wireframe_summary(wireframe: Wireframe3) -> None:

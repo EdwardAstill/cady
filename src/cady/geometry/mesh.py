@@ -22,8 +22,8 @@ PointArray3: TypeAlias = NDArray[np.float64]
 if TYPE_CHECKING:
     from cady.geometry.wireframe import Wireframe3
     from cady.view import Camera, DisplayStyle, Light
-    from cady.view.open_view import Projection
     from cady.view.style import RenderMode
+    from cady.view.viewer import Projection
 
 TriangleIndex = tuple[int, int, int]
 FaceIndex = tuple[int, ...]
@@ -402,7 +402,7 @@ class Mesh3:
         center: bool = True,
         tolerance: float = 1e-3,
     ) -> None:
-        from cady.view.open_view import open_target_view
+        from cady.view.viewer import open_target_view
 
         open_target_view(
             self,

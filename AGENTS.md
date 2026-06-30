@@ -162,9 +162,10 @@ Subpackage exports are broader than top-level exports:
 - `cady.drawing` also exports `DrawingItem`, `Dimension2`, and
   `format_measurement`.
 - `cady.product` also exports `FlattenedPart` and `ProductError`.
-- `cady.view` lazily exposes viewer preparation types and helpers:
-  `RenderScene`, `SceneLine`, `SceneMesh`, `prepare_scene`, `view_scene`,
-  `view_target`, `view_mesh`, `view_meshes`, and `view_lines`.
+- `cady.view` exposes backend-independent preparation types and helpers:
+  `RenderScene`, `SceneLine`, `SceneMesh`, and `prepare_scene`. It lazily
+  exposes viewer-opening helpers: `view_scene`, `view_target`, `view_mesh`,
+  `view_meshes`, and `view_lines`.
 - `cady.document` also exports `DocumentItem`, `DocumentKind`, and
   `document_from_mapping`.
 
@@ -256,12 +257,15 @@ dependency would violate convention tests.
 
 ## View Layer
 
-`cady.view` is backend-independent until viewer helpers are requested. Its
-`__getattr__` lazily exposes Vispy helpers such as `prepare_scene`, `view_scene`,
-`view_target`, `view_mesh`, `view_meshes`, and `view_lines`.
+`cady.view` is backend-independent until viewer-opening helpers are requested.
+Its `__getattr__` lazily exposes Vispy-facing helpers such as `view_scene`,
+`view_target`, `view_mesh`, `view_meshes`, and `view_lines`. The
+backend-independent `RenderScene`, `SceneLine`, `SceneMesh`, and
+`prepare_scene` values live in `scene.py`.
 
 Do not import PyQt, Vispy, or OpenGL modules from core geometry/product/drawing
-code. User-facing `.view(...)` methods should late-import `open_target_view`.
+code. User-facing `.view(...)` methods should late-import
+`cady.view.viewer.open_target_view`.
 
 ## Editing Recipes
 

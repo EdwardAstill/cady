@@ -107,14 +107,18 @@ def build_scene(mesh: Mesh3, boundaries: tuple[Mesh3, ...]) -> Scene:
     upper = _point_tuple(upper)
     centre = _bounds_centre(lower, upper)
     camera = _fit_profile_camera(lower, upper)
-    scene = Scene(name="linesplan_9m_mirror_mesh").add(mesh, name="mesh", style=MESH_STYLE)
+    scene = Scene(
+        name="linesplan_9m_mirror_mesh",
+        camera=camera,
+        lights=(LIGHT,),
+    ).add(mesh, name="mesh", style=MESH_STYLE)
     for index, boundary in enumerate(boundaries, start=1):
         scene = scene.add(
             boundary,
             name=f"boundary_loop_{index}",
             style=_boundary_style(index - 1),
         )
-    return scene.with_camera(camera, name="profile").with_light(LIGHT).with_metadata(
+    return scene.with_metadata(
         target=_format_point(centre),
     )
 

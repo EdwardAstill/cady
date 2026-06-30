@@ -174,7 +174,7 @@ def test_visualise_linesplan_prints_summary_before_opening_viewer(
     stdout = capsys.readouterr().out
     assert "loaded 105 wireframes and 0 meshes" in stdout
     assert "scene objects: 105" in stdout
-    assert "active camera: profile" in stdout
+    assert "camera: orthographic" in stdout
     assert "camera target: (0.0, 0.0, 0.0)" in stdout
     assert "camera scale: 152661" in stdout
     assert "wireframe vertices: 9715" in stdout

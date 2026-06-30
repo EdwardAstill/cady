@@ -1,10 +1,17 @@
-"""Helpers for opening a quick fitted view of a single target."""
+"""Interactive 3D scene viewer using VisPy.
+
+VisPy is imported lazily so importing :mod:`cady.view` does not require GUI
+packages unless a viewer is actually launched.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sized
+import importlib
+from collections.abc import Callable, Sequence, Sized
 from math import sqrt
-from typing import Literal, cast
+from typing import Any, Literal, cast
+
+import numpy as np
 
 from cady.document import Document
 from cady.geometry import Mesh3
@@ -13,17 +20,115 @@ from cady.view._coordinates import finite_point3
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight, Light
-from cady.view.scene import Scene
+from cady.view.scene import (
+    DEFAULT_CAMERA,
+    LineVertices,
+    RenderScene,
+    Scene,
+    SceneLine,
+    SceneMesh,
+    prepare_polyline,
+    prepare_scene,
+)
 from cady.view.style import DisplayStyle, RenderMode
+from cady.view.vispy.canvas import (
+    _make_vispy_canvas,
+    _require_vispy,
+)
 
 Projection = Literal["orthographic", "perspective"]
-
+_DEFAULT_LINE_COLOR = (0.05, 0.23, 0.55)
 DEFAULT_VIEW_COLOR = (0.62, 0.68, 0.72)
 DEFAULT_WIRE_COLOR = (0.05, 0.23, 0.55)
 DEFAULT_VIEW_LIGHT = DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.4)
 DEFAULT_VIEW_ASPECT = 900.0 / 700.0
 DEFAULT_FOV_DEGREES = 35.0
 FIT_PADDING = 1.18
+
+
+def view_scene(scene: Scene, *, tolerance: float = 1e-3, title: str | None = None) -> object:
+    """Open an interactive window for a prepared scene."""
+    _require_vispy()
+    app = cast(Any, importlib.import_module("vispy.app"))
+    _make_vispy_canvas(prepare_scene(scene, tolerance=tolerance), title=title)
+    app.run()
+    return None
+
+
+def view_target(
+    target: object,
+    *,
+    tolerance: float = 1e-3,
+    title: str | None = None,
+) -> object:
+    """Open an interactive window for a single target."""
+    scene = Scene.from_target(
+        target,
+        name=title or "cady 3D viewer",
+    )
+    return view_scene(scene, tolerance=tolerance, title=title)
+
+
+def view_mesh(mesh: object, *, tolerance: float = 1e-3, title: str | None = None) -> object:
+    """Open an interactive window for one mesh-like target."""
+    return view_target(mesh, tolerance=tolerance, title=title or "cady 3D mesh")
+
+
+def view_meshes(
+    meshes: Sequence[object],
+    *,
+    tolerance: float = 1e-3,
+    title: str = "cady 3D meshes",
+) -> object:
+    """Open an interactive window for multiple mesh-like targets."""
+    scene = Scene(name=title)
+    for index, mesh in enumerate(meshes):
+        scene = scene.add(mesh, name=f"mesh_{index + 1}")
+    return view_scene(scene, tolerance=tolerance, title=title)
+
+
+def view_lines(
+    lines: Sequence[LineVertices],
+    *,
+    title: str = "cady 3D wire viewer",
+) -> object:
+    """Open an interactive window for one or more polylines."""
+    _require_vispy()
+    vertices: list[np.ndarray] = []
+    indices: list[np.ndarray] = []
+    segment_count = 0
+    for line in lines:
+        line_vertices, line_indices = prepare_polyline(line)
+        vertices.append(line_vertices)
+        indices.append(line_indices)
+        segment_count += len(line_indices)
+
+    if segment_count == 0:
+        raise ValueError("view_lines requires at least one line segment")
+
+    scene_lines = tuple(
+        SceneLine(
+            f"line_{index + 1}",
+            vertices[index],
+            indices[index],
+            _DEFAULT_LINE_COLOR,
+        )
+        for index in range(len(vertices))
+    )
+    prepared = RenderScene(
+        title,
+        (),
+        scene_lines,
+        DEFAULT_CAMERA,
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, -1.0),
+    )
+
+    app = cast(Any, importlib.import_module("vispy.app"))
+    _make_vispy_canvas(prepared, title=title)
+    app.run()
+    return None
 
 
 def open_target_view(
@@ -63,11 +168,11 @@ def open_target_view(
         .add(target, name=name, pose=pose, style=resolved_style)
     )
 
-    # Import through the public view module so GUI backends stay lazy.
+    # Import through the public view module so tests can patch the public helper.
     from cady import view as view_module
 
-    view_scene = cast(Callable[..., None], view_module.view_scene)
-    view_scene(scene, tolerance=tolerance, title=title)
+    public_view_scene = cast(Callable[..., None], view_module.view_scene)
+    public_view_scene(scene, tolerance=tolerance, title=title)
     return None
 
 
@@ -107,8 +212,6 @@ def _target_bounds_and_wire_mode(
 def _mesh_like(target: object, *, tolerance: float) -> object:
     if callable(getattr(target, "bounds", None)):
         return target
-    # Delegate mesh coercion here so documents, mesh values, and meshable domain
-    # objects all share the same compatibility rules and error messages.
     if isinstance(target, (Document, Mesh3)) or callable(getattr(target, "to_mesh", None)):
         return _mesh_from_target(target, tolerance=tolerance)
     to_array = getattr(target, "to_array", None)
@@ -224,4 +327,16 @@ def _centre(
     )
 
 
-__all__ = ["open_target_view"]
+__all__ = [
+    "Projection",
+    "RenderScene",
+    "SceneLine",
+    "SceneMesh",
+    "open_target_view",
+    "prepare_scene",
+    "view_lines",
+    "view_mesh",
+    "view_meshes",
+    "view_scene",
+    "view_target",
+]
