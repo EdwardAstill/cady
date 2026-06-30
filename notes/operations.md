@@ -1,9 +1,10 @@
 # Cady Operations
 
 The operations package is the numeric layer between semantic CAD values and
-meshable or array-backed results. It owns tuple coordinate math, local NumPy
-conversion, transforms, polygon triangulation, mesh construction, mesh clipping,
-capping, and lofting.
+array-backed or mesh-backed results. It owns tuple coordinate math, local NumPy
+conversion, transforms, triangulation, mesh construction, mesh topology, mesh
+clipping, planar closure, primitive triangle generation, lofting, and linesplan
+helpers.
 
 The important boundary is:
 
@@ -14,15 +15,20 @@ operation helpers -> tuples, NumPy arrays, or existing semantic mesh values
 ```
 
 `tolerance` is part of the algorithmic contract. Sampling, meshing,
-triangulation, clipping, and tolerance-sensitive predicates all take it
-explicitly instead of hiding a package-wide modelling resolution.
+triangulation, clipping, planar fitting, deduplication, and tolerance-sensitive
+predicates take it explicitly instead of hiding a package-wide modelling
+resolution.
 
 Sources:
 
 - `src/cady/operations/coordinates.py`
 - `src/cady/operations/transforms.py`
 - `src/cady/operations/triangulation.py`
+- `src/cady/operations/mesh_topology.py`
+- `src/cady/operations/mesh_clipping.py`
+- `src/cady/operations/meshing.py`
 - `src/cady/operations/meshes.py`
+- `src/cady/operations/lofting.py`
 - `src/cady/operations/__init__.py`
 
 ## Package Map
@@ -30,10 +36,29 @@ Sources:
 | Module | Role |
 |---|---|
 | `coordinates` | Pure tuple vector arithmetic in 2D and 3D. |
-| `transforms` | Point transforms plus immutable homogeneous affine transform containers. |
-| `triangulation` | Pure-Python polygon triangulation with ear clipping and hole bridging. |
-| `meshes` | Mesh coercion, boundaries, caps, clipping, primitives, extrusion, lofts, linesplans. |
-| `__init__` | Re-exports operations and lightweight semantic constructors. |
+| `transforms` | Immutable homogeneous affine transform containers for point arrays. |
+| `triangulation` | Boundary-guided triangulation of closed 2D loops and planar 3D loops. |
+| `mesh_topology` | Boundary edge discovery, loop stitching, dangling-edge pruning, and compaction. |
+| `mesh_clipping` | Existing-mesh coercion, plane clipping, explicit planar caps, and planar boundary closure. |
+| `meshing` | CAD-facing mesh construction for closed polylines, wireframes, regions, surface regions, and extrusions. |
+| `meshes` | Primitive triangle builders, primitive `Mesh3` constructors, tolerance validation, and linesplan helpers. |
+| `lofting` | Closed-loop and section-polyline loft helpers. |
+| `__init__` | Public re-exports plus lightweight semantic constructors. |
+
+There is no central `operations/arrays.py` module. Geometry values keep tuple
+data while being authored, then convert to copied NumPy arrays only at explicit
+boundaries such as `to_array(...)`, `to_mesh(...)`, transforms, clipping, and
+file/view preparation.
+
+When a module returns arrays, define the narrow type alias in that file, for
+example `PointArray3: TypeAlias = NDArray[np.float64]`. Keep validation local
+and minimal: public constructors and conversion boundaries should reject obvious
+invalid input, but operation code should not be routed through broad validator
+helpers just to satisfy type checking.
+
+Bounds, exact curve length, and single-object area/volume properties live with
+the semantic object that owns the geometry. Two-geometry queries such as
+distance and intersection belong in `cady.measurement`, not `cady.operations`.
 
 ## Coordinate Operations
 
@@ -80,7 +105,7 @@ a_x b_y - a_y b_x
 \right)
 $$
 
-`is_parallel3(a, b, tolerance)` tests whether the cross-product magnitude is
+`is_parallel3(a, b, tolerance=...)` tests whether the cross-product magnitude is
 near zero:
 
 $$
@@ -97,36 +122,22 @@ $$
 The projected point is not returned by this helper; callers can reconstruct it
 as `line_point + t * line_dir`.
 
-## Local Array Conversion
-
-There is no central `operations/arrays.py` module. Geometry values keep tuple
-data while being authored, then convert to copied NumPy arrays only at explicit
-boundaries such as `to_array(...)`, `to_mesh(...)`, transforms, and file/view
-preparation.
-
-When a module returns arrays, define the narrow type alias in that file, for
-example `PointArray3: TypeAlias = NDArray[np.float64]`. Keep validation local
-and minimal: public constructors and conversion boundaries should reject obvious
-invalid input, but operation code should not be routed through broad validator
-helpers just to satisfy type checking.
-
-Bounds and exact curve length should live with the semantic object that owns the
-geometry. Two-geometry queries such as distance and intersection belong in
-`cady.measurement`, not `cady.operations`.
-
 ## Sampling
 
 Curve sampling lives on the semantic curve objects that own the shape:
 `Arc2`, `Arc3`, `Circle2`, `Ellipse2`, `Spline2`, and `Spline3` implement
-`to_array(tolerance=...)` directly. `Arc2.discretise(...)` and
-`Spline2.discretise(...)` return `Polyline2` values made from `Line2` segments.
-Mesh-specific sampling, such as primitive segment counts, lives inside
-`operations.meshes` next to the mesh algorithms that use it.
+`to_array(tolerance=...)` directly. `Polyline2` and `Polyline3` store curve
+segments and sample them only when `discretise(...)` or `to_array(...)` is
+called.
+
+Mesh-specific sampling, such as primitive circle segments, sphere rings,
+revolution steps, loop refinement, and section resampling, lives in the
+operation module that uses it.
 
 ## Transform Operations
 
-`transforms.py` has exactly two public objects: `Transform2` and `Transform3`.
-Each object can be used in two ways:
+`transforms.py` has two public objects: `Transform2` and `Transform3`. Each
+object can be used in two ways:
 
 ```python
 Transform2(points).rotate(angle).translate(dx, dy).array
@@ -145,8 +156,8 @@ use when they need to store or compose placement before applying it to concrete
 arrays.
 
 Internally, `Transform2` stores a homogeneous `3x3` matrix and `Transform3`
-stores a homogeneous `4x4` matrix. This is still needed because translation
-cannot be represented by a plain `2x2` or `3x3` linear matrix.
+stores a homogeneous `4x4` matrix. Translation needs homogeneous coordinates
+because it cannot be represented by a plain `2x2` or `3x3` linear matrix.
 
 Points are converted to homogeneous coordinates, multiplied by `matrix.T`, then
 converted back to ordinary point arrays:
@@ -175,8 +186,9 @@ Both transform classes expose the same pattern:
 | `compose(other)` | Compose two transforms. |
 | `inverse()` | Numeric matrix inverse. |
 | `apply_points(points)` | Apply to supplied points without rebinding. |
+| `to_transform3()` | Return `self` for 3D transform coercion. |
 
-Chained calls are applied in the order they are written. This is why:
+Chained calls are applied in the order they are written:
 
 ```python
 Transform2([[1.0, 0.0]]).rotate(pi / 2).translate(1.0, 0.0).array
@@ -184,11 +196,12 @@ Transform2([[1.0, 0.0]]).rotate(pi / 2).translate(1.0, 0.0).array
 
 rotates the point first, then translates it.
 
-`Transform3.coerce(value, allow_none=False)` is the only coercion entry point.
-It accepts:
+`Transform3.coerce(value, allow_none=False)` accepts:
 
 - an existing `Transform3`
-- any object whose `to_transform3()` returns a `Transform3`
+- a `4x4` matrix-like value accepted by `Transform3(matrix=...)`
+- any object exposing a usable `matrix`
+- any object whose `to_transform3()` returns a `Transform3`-like value
 - a 3-number translation tuple
 - `None` only when `allow_none=True`, in which case it returns identity
 
@@ -207,100 +220,70 @@ The final point is `axis_origin + v'`.
 Plane-local semantic projection lives on `Plane3`: `coordinates(...)` maps a 3D
 point into local `(u, v)`, `signed_distance(...)` measures point offset from the
 plane, `project(...)` returns the orthogonal projection, and `fit(...)` builds a
-best-fit plane for planar 3D loops. Mesh-only array projection helpers live
-inside `operations.meshes` next to the capping and boundary-closing algorithms
-that use them.
+best-fit plane for planar 3D loops. Mesh-only projection helpers live near the
+capping, clipping, and boundary-closing algorithms that use them.
 
-## Measurement Queries
+## Triangulation
 
-Distance, intersection, and future area/volume entry points live in
-`cady.measurement`. Exact curve length is a `.length` property on geometry
-values. See `src/cady/measurement/PLAN.md` for the package plan and current
-public surface.
+`triangulation.py` triangulates closed 2D loops and planar 3D loops. It is a
+boundary-guided ear-clipping layer, not a constrained Delaunay triangulator.
 
-## Polygon Triangulation
+Public records and helpers:
 
-`triangulation.py` is a pure-Python fallback triangulator for simple 2D polygon
-regions. It is not a full constrained Delaunay triangulator.
+| Name | Role |
+|---|---|
+| `TriangulationGuide` | Optional edge-length constraints for simple boundary refinement. |
+| `triangulate_curve2(curve, tolerance=..., guide=None)` | Samples a closed 2D curve and returns `Mesh2`. |
+| `triangulate_curve3(curve, tolerance=..., guide=None)` | Samples a closed planar 3D curve and returns `Mesh3`. |
+| `triangulate_mesh2(nodes, edges, tolerance=..., guide=None)` | Returns `(nodes, edges, faces)` for closed 2D edge loops. |
+| `triangulate_mesh3(nodes, edges, tolerance=..., guide=None)` | Projects planar 3D edge loops and returns `(nodes, edges, faces)`. |
+| `triangulate2(...)` | Compatibility wrapper returning `(nodes, faces)` for 2D loops. |
+| `triangulate3(...)` | Compatibility wrapper returning `(nodes, faces)` for planar 3D loops. |
 
-`triangulate_float32(vertices, hole_indices=None, dimensions=2)` handles the
-simple flat-buffer case by creating a fan:
+`TriangulationGuide.target_edge_length` and `max_edge_length` refine boundary
+edges before triangulation. `max_area` and `min_angle_degrees` are accepted by
+the record but currently raise `NotImplementedError` when requested.
 
-```text
-(0, 1, 2), (0, 2, 3), ..., (0, n-2, n-1)
-```
+The 2D ear-clipping pass:
 
-It only supports 2D vertices and rejects `hole_indices` because holes are handled
-by `triangulate_polygon(...)`.
-
-`dedupe_closed(points)` removes a repeated final point equal to the first point.
-
-`area2(points)` returns signed ring area using the shoelace formula.
-
-`is_self_intersecting(points)` checks non-adjacent edge pairs using orientation
-tests. It skips adjacent edges and the first/last edge pair because they share a
-polygon vertex.
-
-### Ear Clipping
-
-`triangulate_polygon(outer, holes=(), tolerance=...)` first deduplicates closing
-points and checks the outer loop for self-intersection. Without holes, it calls
-`_triangulate_simple_polygon`.
-
-The simple ear-clipping pass:
-
-1. removes repeated consecutive points
-2. reverses clockwise rings into counter-clockwise order
-3. derives an epsilon from geometry span and tolerance
-4. scans vertices for a convex ear
-5. rejects ears containing any other polygon vertex
-6. emits the triangle and deletes the ear tip
-7. removes near-collinear or duplicate vertices if no ear is found
-8. raises `WriteError` if it cannot make progress
+1. stitches input edges into closed loops
+2. reverses clockwise loops into counter-clockwise order
+3. scans vertices for a convex ear
+4. rejects ears containing another loop vertex
+5. emits a triangle and deletes the ear tip
+6. removes near-collinear vertices if no ear is found
+7. stops when only one triangle remains or no progress is possible
 
 A candidate ear `(prev, point, next)` is convex when:
 
 $$
-\operatorname{cross}(prev, point, next) > \epsilon
+\operatorname{cross}(prev, point, next) > \text{tolerance}
 $$
 
-and no other remaining point lies inside the candidate triangle.
+For 3D loops, `triangulate_mesh3(...)` fits a plane by SVD, rejects loops whose
+maximum deviation exceeds `tolerance`, projects into local 2D coordinates, then
+uses the same loop triangulation.
 
-The geometry epsilon is:
+## Mesh Topology
 
-$$
-\epsilon =
-\max(\text{span}\cdot 10^{-12},\ \text{tolerance}\cdot 10^{-6},\ 10^{-12})
-$$
+`mesh_topology.py` contains topology helpers that operate on indexed faces and
+edges.
 
-This keeps exact coordinate comparisons from dominating the triangulation of
-large or very small shapes.
+| Function | Meaning |
+|---|---|
+| `boundary_edges(mesh)` | Count triangle edges and return those used by exactly one face. |
+| `boundary_edges_from_faces(faces)` | Tuple-oriented boundary edge helper for semantic meshes. |
+| `stitch_segments(segments)` | Walk undirected segments into simple vertex loops. |
+| `edge_loops(edges)` | Validate edge arrays and return closed loops. |
+| `prune_dangling_edges(edges)` | Repeatedly remove degree-1 branches until only cycles remain. |
+| `compact_mesh_data(vertices, faces, edges)` | Drop unused vertices and remap indices densely. |
 
-### Hole Bridging
+These helpers know topology, not CAD semantics. They do not import drawing,
+product, files, or viewer code.
 
-Polygons with holes are converted into one simple working polygon before ear
-clipping.
+## Mesh Clipping And Closure
 
-For each hole:
-
-1. orient the outer boundary counter-clockwise
-2. orient holes clockwise
-3. choose the hole vertex with maximum `x`, breaking ties toward lower `|y|`
-4. sort candidate bridge endpoints on the current polygon
-5. keep the first visible bridge
-6. splice the hole path into the polygon by duplicating bridge endpoints
-
-A bridge is visible only if samples along the bridge are inside the outer
-boundary, outside all holes, and the bridge does not intersect existing polygon
-or hole edges except at its own allowed endpoint.
-
-## Mesh Operations
-
-`meshes.py` owns the largest set of algorithms. It works with validated mesh
-arrays when operating numerically and returns semantic `Mesh3` values at the
-public geometry boundary.
-
-### Mesh Arrays And Boundaries
+`mesh_clipping.py` owns operations on existing triangle mesh arrays.
 
 `coerce_mesh(mesh_or_vertices, faces, edges=None)` returns validated
 `(vertices, faces, edges)` arrays:
@@ -312,39 +295,7 @@ public geometry boundary.
 It also accepts an existing tuple of `(vertices, faces)` or
 `(vertices, faces, edges)` when `faces` is `None`.
 
-`boundary_edges(mesh)` counts each undirected edge in every triangle. Edges that
-appear exactly once are boundary edges.
-
-`stitch_segments(segments)` builds adjacency from undirected boundary segments
-and walks unused edges into simple vertex loops. It ignores self-edges and
-deduplicates repeated undirected segments.
-
-`boundary_edges_from_faces(faces)` is the tuple-only version of the same
-single-use edge count. `prune_dangling_edges(edges)` repeatedly removes vertices
-of degree 1 until only cyclic edge structure remains.
-
-`compact_mesh_data(vertices, faces, edges)` removes unused vertices and remaps
-face and edge indices into dense index order.
-
-### Cap Triangulation
-
-`triangulate_loop(points, tolerance)` is another ear-clipping loop used for cap
-faces. It works in local loop index space and raises `ValueError` if no ear can
-be found.
-
-`cap_loops_to_faces(vertices, cap_segments, plane_origin, plane_normal,
-tolerance=...)`:
-
-1. stitches cap segments into loops
-2. projects each loop into 2D plane coordinates
-3. rejects nested loops
-4. triangulates each projected loop
-5. maps local triangle indices back to original mesh vertex indices
-
-The cap face orientation is reversed as `(loop[a], loop[c], loop[b])` so the cap
-normal matches the intended plane side.
-
-`close_planar_cap(...)` caps only boundary edges on a specified plane. With
+`close_planar_cap(...)` caps boundary edges on an explicit plane. With
 `snap_tolerance=None`, both edge vertices must already lie on the plane within
 `tolerance`. With `snap_tolerance`, near-plane vertices are projected to newly
 appended cap vertices while original mesh vertices stay in place.
@@ -360,8 +311,6 @@ appended cap vertices while original mesh vertices stay in place.
 
 This is only for planar holes. Non-planar hole filling is deliberately not
 implemented here.
-
-### Mesh Clipping
 
 `cut_mesh_by_plane(mesh, faces, plane_origin, plane_normal, keep=..., cap=True,
 tolerance=...)` clips a triangle mesh against a half-space.
@@ -408,10 +357,60 @@ k(p) =
 \right)
 $$
 
-### Primitive Triangle Builders
+## CAD-Facing Meshing
 
-`prism_triangles(origin, size)` returns 12 triangles for an axis-aligned box-like
-prism. It creates 8 corners and emits two triangles per rectangular face.
+`meshing.py` turns semantic boundaries into semantic mesh values.
+
+| Function | Meaning |
+|---|---|
+| `closed_polyline_mesh2(polyline, tolerance=..., guide=None)` | Fill a closed 2D polyline with `Mesh2`. |
+| `closed_polyline_mesh3(polyline, tolerance=..., guide=None)` | Fill a closed planar 3D polyline with `Mesh3`. |
+| `wireframe_mesh(wireframe, tolerance=..., guide=None)` | Triangulate closed planar wireframe edge loops into `Mesh3`. |
+| `region_mesh(region, plane, tolerance=..., guide=None)` | Place a parameter region on a plane and mesh it. |
+| `surface_region_mesh(region, surface, tolerance=..., guide=None)` | Mesh a bounded region on a `Surface3`. |
+| `extrusion_mesh(region, plane, distance=..., tolerance=..., guide=None)` | Extrude a 2D region along a plane normal. |
+| `region_loops_from_region(region, tolerance=...)` | Extract labelled outer and hole loops from a region-like value. |
+| `triangulate_polygon(outer, holes=(), tolerance=...)` | Ear-clip a 2D polygon, bridging holes first. |
+| `mesh_from_triangles(triangles)` | Build a `Mesh3` with fresh vertices for each triangle. |
+
+Region meshing supports `guide=None`; guide constraints are currently rejected
+for region and extrusion meshing because the guide is not applied to generated
+region interiors.
+
+### Polygon Triangulation With Holes
+
+`triangulate_polygon(outer, holes=(), tolerance=...)` deduplicates repeated
+closing points and triangulates the polygon. Without holes, it calls the simple
+ear-clipping path. With holes, it first splices holes into the outer polygon.
+
+For each hole:
+
+1. orient the outer boundary counter-clockwise
+2. orient holes clockwise
+3. choose the hole vertex with maximum `x`, breaking ties toward lower `|y|`
+4. sort candidate bridge endpoints on the current polygon
+5. keep the first visible bridge
+6. splice the hole path into the polygon by duplicating bridge endpoints
+
+A bridge is visible only if samples along the bridge are inside the outer
+boundary, outside all holes, and the bridge does not intersect existing polygon
+or hole edges except at its own allowed endpoint.
+
+`extrusion_mesh(...)` triangulates the start and end caps, offsets the end plane
+by `distance * plane.normal`, and emits two side-wall triangles for each outer
+and hole boundary segment. It rejects zero extrusion distance.
+
+## Primitive Mesh Helpers
+
+`meshes.py` contains primitive triangle builders and semantic `Mesh3`
+constructors.
+
+`segments_for_circle(radius, tolerance)` estimates a circle segment count from
+the supplied tolerance and enforces a practical lower bound.
+
+`prism_triangles(origin, size)` returns 12 triangles for an axis-aligned
+box-like prism. It creates 8 corners and emits two triangles per rectangular
+face.
 
 `basis_for_axis(axis, axis_name=None)` creates a local orthonormal basis
 `(u, v, w)` where `w` follows the axis. Special axis names `+x`, `-x`, `+y`, and
@@ -440,94 +439,45 @@ Current limits:
 - the step count is clamped to at most 160
 - rings are connected with two triangles per profile segment per angular step
 
-The angular step count is roughly:
-
-$$
-\text{steps} =
-\max\left(
-12,
-\left\lceil
-\frac{|\theta|r}{\max(8e,\ 10^{-6})}
-\right\rceil
-\right)
-$$
-
-then clamped to `<= 160`.
-
 `sphere_triangles(centre, radius, tolerance=...)` uses latitude-longitude
-tessellation. Rings are:
+tessellation. Degenerate pole triangles are skipped.
 
-$$
-\text{rings} =
-\min\left(64,\ \max\left(8,\ \frac{\text{segments_for_circle}(r,e)}{2}\right)\right)
-$$
+Semantic constructors validate inputs and return `Mesh3`:
 
-Segments are `2 * rings`. Points are:
+| Function | Meaning |
+|---|---|
+| `box_mesh(plane, width=..., depth=..., height=...)` | Oriented box from a `Plane3`. |
+| `cylinder_mesh(plane, radius=..., height=..., tolerance=...)` | Ring-based cylinder mesh. |
+| `sphere_mesh(plane, radius=..., tolerance=...)` | Sphere centred at `plane.origin`. |
 
-$$
-p =
-c +
-\left(
-r\sin\theta\cos\phi,\
-r\sin\theta\sin\phi,\
-r\cos\theta
-\right)
-$$
+`validate_tolerance(...)` and `validate_positive(...)` are small local helpers
+used by primitive meshing code.
 
-Degenerate pole triangles are skipped.
+## Loft Operations
 
-### Semantic Mesh Constructors
+`lofting.py` stores coarse loft results in:
 
-These helpers validate inputs and return `Mesh3`.
+| Record | Meaning |
+|---|---|
+| `LoftMesh` | Vertices, faces, and sampled edges from a loft operation. |
 
-`box_mesh(plane, width, depth, height)` builds an oriented box from the plane's
-`point(u,v)` mapping and its normal. It returns 8 vertices and 12 faces.
+`loft_closed_curves3(start_curve, end_curve, tolerance=..., guide=None)` samples
+two closed 3D curves and delegates to `loft_closed_loops3(...)`.
 
-`cylinder_mesh(plane, radius, height, tolerance=...)` chooses the circular
-segment count with `segments_for_circle`, builds bottom and top rings, adds two
-centre vertices, then emits:
+`loft_closed_loops3(start, end, tolerance=..., guide=None)` resamples two closed
+loops to a shared count, connects corresponding vertices with quad strips split
+into triangles, and returns a `Mesh3`. Guide constraints are currently rejected
+for lofting because they are not applied to generated interior faces.
 
-- bottom fan triangles
-- top fan triangles
-- two side triangles per segment
+`loft_section_polylines(polylines, tolerance=...)` builds a coarse strip mesh
+across open section polylines:
 
-`sphere_mesh(plane, radius, tolerance=...)` delegates to `sphere_triangles` using
-`plane.origin` as the sphere centre, then converts triangles to a `Mesh3`.
-
-`surface_region_mesh(region, surface, tolerance=...)` samples region loops,
-triangulates the parameter-space polygon, maps triangle vertices through
-`surface.point(u, v)`, and returns a `Mesh3`.
-
-`region_mesh(region, plane, tolerance=...)` wraps the plane as a planar
-`Surface3` and delegates to `surface_region_mesh`.
-
-`extrusion_mesh(region, plane, distance, tolerance=...)` triangulates the region
-caps, creates an end plane offset by `distance * plane.normal`, then emits cap
-triangles and boundary side walls. It rejects zero extrusion distance.
-
-`region_loops_from_region(region, tolerance=...)` extracts region loops either
-from `region.loops(tolerance=...)` or from a single `to_array(tolerance=...)`
-fallback. All loops must be closed and contain at least three points after
-deduping the repeated closing point.
-
-`mesh_from_triangles(triangles)` creates a `Mesh3` by appending three fresh
-vertices per triangle. It does not merge shared vertices.
-
-### Loft Operations
-
-`LoftMesh` stores coarse loft results as `vertices`, `faces`, and sampled
-`edges`.
-
-`loft_section_polylines(polylines, tolerance=...)` builds a strip mesh across
-open section polylines:
-
-1. filter candidate polylines into x-station sections
-2. group sections by approximate x coordinate
-3. keep the longest candidate in each station bucket
-4. orient each section so it rises in z
-5. resample every section to a common count
-6. connect adjacent rows with quad strips split into two triangles
-7. add longitudinal and transverse sample edges
+1. group candidate sections by approximate x coordinate
+2. keep the longest candidate in each station bucket
+3. orient each section so it rises in z
+4. resample every section to a common count
+5. connect adjacent rows with quad strips split into two triangles
+6. add longitudinal and transverse sample edges
 
 The common sample count is:
 
@@ -536,13 +486,13 @@ $$
 $$
 
 Resampling uses cumulative polyline arclength and linear interpolation at evenly
-spaced arclength values.
+spaced arclength values. Degenerate faces are skipped when any edge length is
+within tolerance.
 
-Degenerate faces are skipped when any edge length is within tolerance.
-
-### Linesplan Operations
+## Linesplan Operations
 
 Linesplan helpers normalize, classify, check, and mesh imported wire curves.
+They currently live in `meshes.py`.
 
 Records:
 
@@ -590,44 +540,20 @@ simple quad-strip mesh:
 This is a coarse section-loft mesh, not a fairing or naval-architecture surface
 solver.
 
-## Dispatch Operations
+## Lightweight Constructors And Public Exports
 
-`dispatch.py` is the loose, user-facing operation layer. It accepts semantic
-objects and routes them to existing methods or local fallback algorithms.
+`operations.__init__` re-exports the compact public operations surface:
 
-`discretise(target, tolerance=...)`:
+- `Transform2`, `Transform3`
+- `TriangulationGuide`
+- `triangulate2`, `triangulate3`
+- `triangulate_curve2`, `triangulate_curve3`
+- `triangulate_mesh2`, `triangulate_mesh3`
+- `close_boundary`, `close_planar_cap`, `cut_mesh_by_plane`
+- `sphere_triangles`
 
-1. calls `target.discretise(tolerance=...)` if present
-2. otherwise calls `target.to_array(tolerance=...)`
-3. converts 2D point arrays to `Polyline2`
-4. converts 3D point arrays to `Polyline3`, using `closed=True` when needed
-
-`discretize(...)` is the American spelling alias.
-
-`mesh(target, tolerance=..., surface=None, plane=None, closed=False)`:
-
-1. returns `Mesh2` or `Mesh3` values unchanged
-2. maps `mesh(region, surface=...)` through `Region3.from_region(...).to_mesh`
-3. maps `mesh(region, plane=...)` through `region_mesh`
-4. calls `target.to_mesh(tolerance=...)` if present
-5. turns point clouds into vertex-only `Mesh2` or `Mesh3`
-6. triangulates `Region2`-like objects with `loops`
-7. meshes closed curve-like objects through `to_array`
-
-`triangulate(target, tolerance=..., surface=None, plane=None)`:
-
-1. calls `target.triangulate(tolerance=...)` if present
-2. triangulates raw 2D point sequences with `triangulate_polygon`
-3. otherwise delegates to `mesh(...)`
-
-This dispatch layer intentionally uses late imports so importing operations does
-not eagerly pull in drawing, product, files, or viewer code.
-
-## Lightweight Constructors
-
-`operations.__init__` re-exports operations and also exposes lightweight factory
-wrappers. These wrappers late-import semantic classes and return authoring-layer
-objects.
+It also exposes lightweight factory wrappers. These wrappers late-import
+semantic classes and return authoring-layer objects.
 
 | Function | Returns |
 |---|---|
@@ -637,7 +563,7 @@ objects.
 | `arc3(centre, radius, start_rad, end_rad, x_axis=..., y_axis=...)` | `Arc3` |
 | `spline3(control_points)` | `Spline3` |
 | `polyline2(vertices, closed=False)` | `Polyline2` |
-| `polyline3(items)` | `Polyline3` |
+| `polyline3(items, closed=False)` | `Polyline3` |
 | `circle2(centre, radius)` | `Circle2` |
 | `region_rectangle(width, height, origin=...)` | `Region2.rectangle(...)` |
 | `region_circle(radius, centre=...)` | `Region2.circle(...)` |
@@ -654,9 +580,9 @@ The operations layer uses tolerance in three different ways:
 
 | Use | Examples |
 |---|---|
-| Sampling density | circle, arc, sphere, Bezier, revolution tessellation |
+| Sampling density | circle, arc, sphere, Bezier, revolution tessellation, loft resampling |
 | Predicate slack | segment hit tests, coplanarity, degeneracy, clipping |
-| Deduplication | clipped mesh vertices, section points, cap loops |
+| Deduplication | clipped mesh vertices, section points, cap loops, refined edges |
 
 This means tolerance is both a geometric accuracy parameter and a robustness
 parameter. Very loose values make geometry coarse and merge nearby features.
@@ -665,12 +591,15 @@ non-planar boundary loops.
 
 Current algorithmic limits:
 
-- polygon triangulation is ear clipping, not constrained Delaunay triangulation
-- hole support is implemented by visible bridge splicing
+- triangulation is ear clipping, not constrained Delaunay triangulation
+- hole support in region meshing is implemented by visible bridge splicing
 - cap triangulation rejects nested loops
 - `close_boundary` only closes planar holes
+- `close_holes` is not implemented on `Mesh3`
 - `revolution_triangles` only supports the positive Z axis
 - `mesh_from_triangles` does not merge shared vertices
+- `TriangulationGuide.max_area` and `min_angle_degrees` are not implemented
+- region meshing and lofting reject unapplied guide constraints
 - linesplan meshing is a coarse section grid, not a fairing solver
 
 The package is therefore best understood as a lightweight geometry operation

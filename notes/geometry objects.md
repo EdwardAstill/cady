@@ -80,9 +80,10 @@ the current source shape.
 
 ### Polyline2 and Polyline3
 
-`Polyline2` is a 2D path made from straight segments between stored vertices. It
-can be open or closed. A closed `Polyline2` can become a `Mesh2`; an open one
-stays a curve.
+`Polyline2` is a 2D path made from straight or curved `Curve2` segments. Passing
+vertices creates `Line2` segments; passing curve objects preserves those
+semantic curves until sampling. It can be open or closed. A closed `Polyline2`
+can become a `Mesh2`; an open one stays a curve.
 
 `Polyline3` is a 3D path that can be built from vertices or from curve objects
 such as `Line3`, `Arc3`, and `Spline3`. When it contains curved segments,
@@ -126,8 +127,9 @@ This is already numeric-style topology, so it belongs near conversion
 boundaries. A closed `Polyline2` or `Region2` can produce mesh data, but the
 mesh itself should not pretend to be the original semantic curve or region.
 
-`triangles` expands face indices into point triples. `boundary_loops` derives
-open mesh boundaries from topology when faces are present.
+`triangles` expands face indices into point triples. `area` sums triangle face
+areas. `boundary_loops` derives open mesh boundaries from topology when faces
+are present.
 
 ### PointCloud2
 
@@ -188,7 +190,12 @@ history and does not remember whether it came from a box, cylinder, region, or
 surface patch.
 
 Transforms return new meshes. Mirroring also reverses face winding so normals
-remain consistent after reflection.
+remain consistent after reflection. `area` and `volume` are mesh-level
+measurements; exact curve length still belongs on curves.
+
+`close_planar(...)`, `close_to_plane(...)`, and `close_boundary(...)` are
+explicit mesh repair operations for planar gaps. Non-planar hole filling remains
+outside the current mesh API.
 
 ### Wireframe3
 
@@ -199,6 +206,8 @@ A wireframe has vertices and edges but no faces. It is useful for imported line
 geometry, section networks, sketch-like 3D paths, and workflows that need to
 split crossing edges or remove dangling branches before triangulation.
 
+`split_crossing_edges(...)`, `remove_dangling_edges()`, `triangulate(...)`, and
+`triangulate_loops(...)` clean or fill edge networks while returning new values.
 `to_mesh(tolerance=...)` is an explicit conversion. Until then, the object
 represents connected lines, not surfaces.
 
@@ -254,6 +263,8 @@ can return a stable repeated start point.
 | `edges` | Edge indices into `vertices`. | Meshes and wireframes. |
 | `triangles` | Expanded triangle point triples. | Meshes. |
 | `boundary_loops` | Open boundary loops derived from mesh topology. | Meshes with faces. |
+| `area` | Exact polygon formula or summed triangle area. | Closed polylines and meshes. |
+| `volume` | Signed tetrahedron integration, returned non-negative. | `Mesh3`. |
 
 Do not add topology properties just to make objects look uniform. `closed`
 belongs on `Circle2` and `Polyline2`; it does not need to exist on `Line2`.
@@ -268,6 +279,7 @@ sampling.
 | `to_mesh(*, tolerance)` | `Mesh2` or `Mesh3`. | Meshable geometry to triangles. |
 | `loops(*, tolerance)` | Tuple of 2D loop arrays. | Filled 2D regions with holes. |
 | `discretise(*, tolerance)` / `discretize(*, tolerance)` | Polyline-like geometry. | Curved paths to straight segments. |
+| `triangulate(*, tolerance)` | Wireframe or mesh-like triangulated output. | Closed edge networks. |
 
 Every sampling, meshing, and export path should take `tolerance` explicitly as
 a keyword argument. This keeps discretisation visible at the call site.
@@ -276,8 +288,10 @@ a keyword argument. This keeps discretisation visible at the call site.
 return point arrays. Meshes and wireframes return `(vertices, faces, edges)`.
 
 `to_mesh(...)` should only exist where the object is naturally meshable. Closed
-polylines, regions, wireframes, meshes, and bodies can produce mesh data. Open
-curves should stay curves.
+polylines, surface regions, wireframes, meshes, and bodies can produce mesh
+data. Open curves and `Region2` authoring profiles should stay semantic unless
+they are placed on a plane or passed to an operation that explicitly meshes
+them.
 
 ## Transform Methods
 
@@ -329,7 +343,7 @@ coerced from a 3-number translation tuple.
 | Regions | `Region2` adds `loops(...)`; `Region3` meshes bounded surface regions. |
 | Meshes | Indexed storage, `bounds()`, `boundary`, `to_array(...)`, transforms. |
 | Point clouds | Point storage, `bounds()`, `points()`, `to_array(...)`, transforms. |
-| Wireframes | Edge storage, transforms, cleanup, and triangulation helpers. |
+| Wireframes | Edge storage, transforms, cleanup, splitting, and triangulation helpers. |
 | Bodies | Feature history, `transformed(...)`, `to_mesh(...)`, and `.view(...)`. |
 | Surfaces | Parametric `point(...)`; `Surface3` also has `normal(...)`. |
 
