@@ -30,20 +30,17 @@ EdgeIndex = tuple[int, int]
 
 
 class Curve2(Protocol):
-    """Common protocol for 2D curves that can be discretised on demand."""
+    """Common protocol for 2D curves that can be discretized on demand."""
 
     def bounds(self) -> tuple[Point2, Point2]: ...
 
     def points(self) -> tuple[Point2, ...]: ...
-
-    def to_array(self, *, tolerance: float) -> PointArray2: ...
 
 
 def _is_curve2(value: object) -> bool:
     return (
         callable(getattr(value, "bounds", None))
         and callable(getattr(value, "points", None))
-        and callable(getattr(value, "to_array", None))
     )
 
 
@@ -96,11 +93,17 @@ class Polyline2:
         *,
         closed: bool = False,
         tolerance: float | None = None,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
     ) -> Polyline2:
         polyline = cls(tuple(curves), closed=closed)
         if tolerance is None:
             return polyline
-        return polyline.discretise(tolerance=tolerance)
+        return polyline.discretize(
+            tolerance=tolerance,
+            max_segment_length=max_segment_length,
+            min_segments=min_segments,
+        )
 
     @property
     def vertices(self) -> tuple[Point2, ...]:
@@ -156,28 +159,36 @@ class Polyline2:
             return self.vertices + (self.vertices[0],)
         return self.vertices
 
-    def discretise(self, *, tolerance: float) -> Polyline2:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline2:
         tolerance = positive_tolerance(tolerance)
         points: list[Point2] = []
         for curve in self.curves:
-            array = curve.to_array(tolerance=tolerance)
-            for x, y in array:
-                point = (float(x), float(y))
+            for point in _discretized_points2(
+                curve,
+                tolerance=tolerance,
+                max_segment_length=max_segment_length,
+                min_segments=min_segments,
+            ):
                 if not points or points[-1] != point:
                     points.append(point)
         return Polyline2(tuple(points), closed=self.closed)
-
-    def discretize(self, *, tolerance: float) -> Polyline2:
-        return self.discretise(tolerance=tolerance)
 
     def to_array(self, *, tolerance: float) -> PointArray2:
         tolerance = positive_tolerance(tolerance)
 
         points: list[Point2] = []
         for curve in self.curves:
-            array = curve.to_array(tolerance=tolerance)
-            for x, y in array:
-                point = (float(x), float(y))
+            if not isinstance(curve, Line2):
+                raise GeometryError(
+                    "Polyline2 contains curved segments; call discretize() before to_array()"
+                )
+            for point in curve.points():
                 if not points or points[-1] != point:
                     points.append(point)
         if self.closed and len(points) > 1 and points[0] == points[-1]:
@@ -201,14 +212,11 @@ class Curve3(Protocol):
 
     def points(self) -> tuple[Point3, ...]: ...
 
-    def to_array(self, *, tolerance: float) -> PointArray3: ...
-
 
 def _is_curve3(value: object) -> bool:
     return (
         callable(getattr(value, "bounds", None))
         and callable(getattr(value, "points", None))
-        and callable(getattr(value, "to_array", None))
     )
 
 
@@ -266,11 +274,17 @@ class Polyline3:
         *,
         closed: bool = False,
         tolerance: float | None = None,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
     ) -> Polyline3:
         polyline = cls(tuple(curves), closed=closed)
         if tolerance is None:
             return polyline
-        return polyline.discretise(tolerance=tolerance)
+        return polyline.discretize(
+            tolerance=tolerance,
+            max_segment_length=max_segment_length,
+            min_segments=min_segments,
+        )
 
     @property
     def vertices(self) -> tuple[Point3, ...]:
@@ -343,27 +357,35 @@ class Polyline3:
             raise TypeError("Polyline3.add requires a Curve3")
         return Polyline3((*self.curves, curve))
 
-    def discretise(self, *, tolerance: float) -> Polyline3:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline3:
         tolerance = positive_tolerance(tolerance)
         points: list[Point3] = []
         for curve in self.curves:
-            array = curve.to_array(tolerance=tolerance)
-            for x, y, z in array:
-                point = (float(x), float(y), float(z))
+            for point in _discretized_points3(
+                curve,
+                tolerance=tolerance,
+                max_segment_length=max_segment_length,
+                min_segments=min_segments,
+            ):
                 if not points or points[-1] != point:
                     points.append(point)
         return Polyline3(tuple(points), closed=self.closed)
-
-    def discretize(self, *, tolerance: float) -> Polyline3:
-        return self.discretise(tolerance=tolerance)
 
     def to_array(self, *, tolerance: float) -> PointArray3:
         tolerance = positive_tolerance(tolerance)
         points: list[Point3] = []
         for curve in self.curves:
-            array = curve.to_array(tolerance=tolerance)
-            for x, y, z in array:
-                point = (float(x), float(y), float(z))
+            if not isinstance(curve, Line3):
+                raise GeometryError(
+                    "Polyline3 contains curved segments; call discretize() before to_array()"
+                )
+            for point in curve.points():
                 if not points or points[-1] != point:
                     points.append(point)
         if self.closed and len(points) > 1 and points[0] == points[-1]:
@@ -409,6 +431,46 @@ def _curve_length(curve: object) -> float:
     if not isinstance(value, Real):
         raise TypeError(f"{type(curve).__name__} does not expose an exact length")
     return float(value)
+
+
+def _discretized_points2(
+    curve: Curve2,
+    *,
+    tolerance: float,
+    max_segment_length: float | None,
+    min_segments: int,
+) -> tuple[Point2, ...]:
+    if isinstance(curve, Line2):
+        return curve.points()
+    discretize = getattr(curve, "discretize", None)
+    if not callable(discretize):
+        raise TypeError(f"{type(curve).__name__} does not provide discretize(tolerance=...)")
+    polyline = discretize(
+        tolerance=tolerance,
+        max_segment_length=max_segment_length,
+        min_segments=min_segments,
+    )
+    return tuple(cast(Polyline2, polyline).points())
+
+
+def _discretized_points3(
+    curve: Curve3,
+    *,
+    tolerance: float,
+    max_segment_length: float | None,
+    min_segments: int,
+) -> tuple[Point3, ...]:
+    if isinstance(curve, Line3):
+        return curve.points()
+    discretize = getattr(curve, "discretize", None)
+    if not callable(discretize):
+        raise TypeError(f"{type(curve).__name__} does not provide discretize(tolerance=...)")
+    polyline = discretize(
+        tolerance=tolerance,
+        max_segment_length=max_segment_length,
+        min_segments=min_segments,
+    )
+    return tuple(cast(Polyline3, polyline).points())
 
 
 __all__ = [

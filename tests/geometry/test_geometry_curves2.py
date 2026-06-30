@@ -52,17 +52,18 @@ def test_arc2_samples_with_tolerance() -> None:
     assert min_bound[1] == pytest.approx(0.0)
     assert max_bound == (2, 2)
 
-    array = arc.to_array(tolerance=0.01)
-    assert isinstance(array, np.ndarray)
-    assert len(array) > 2
-    np.testing.assert_allclose(array[0], [2, 0])
-    np.testing.assert_allclose(array[-1], [0, 2], atol=1e-12)
+    assert not hasattr(arc, "to_array")
 
-    polyline = arc.discretise(tolerance=0.01)
+    polyline = arc.discretize(tolerance=0.01)
     assert isinstance(polyline, Polyline2)
     assert all(isinstance(curve, Line2) for curve in polyline.curves)
     np.testing.assert_allclose(polyline.vertices[0], [2, 0])
     np.testing.assert_allclose(polyline.vertices[-1], [0, 2], atol=1e-12)
+    assert len(polyline.vertices) > 2
+
+    coarse = arc.discretize(tolerance=1.0, min_segments=1)
+    limited = arc.discretize(tolerance=1.0, max_segment_length=0.25)
+    assert len(limited.vertices) > len(coarse.vertices)
 
 
 def test_curve2_length_properties_are_exact_for_segments_and_circular_curves() -> None:
@@ -85,6 +86,21 @@ def test_polyline2_open_and_closed_array_flags() -> None:
     assert isinstance(closed_array, np.ndarray)
     np.testing.assert_allclose(open_array, [[0, 0], [1, 0], [1, 1]])
     np.testing.assert_allclose(closed_array, [[0, 0], [1, 0], [1, 1]])
+
+
+def test_polyline2_with_curves_must_be_discretized_before_array_conversion() -> None:
+    line = Line2((0.0, 0.0), (1.0, 0.0))
+    arc = Arc2((1.0, 1.0), 1.0, -pi / 2.0, 0.0)
+    spline = Spline2(((2.0, 1.0), (2.0, 2.0), (3.0, 2.0), (3.0, 1.0)))
+    polyline = Polyline2((line, arc, spline))
+
+    with pytest.raises(GeometryError, match="discretize"):
+        polyline.to_array(tolerance=0.1)
+
+    coarse = polyline.discretize(tolerance=1.0)
+    limited = polyline.discretize(tolerance=1.0, max_segment_length=0.25)
+    assert all(isinstance(curve, Line2) for curve in limited.curves)
+    assert len(limited.vertices) > len(coarse.vertices)
 
 
 def test_closed_polyline2_to_mesh_triangulates_boundary() -> None:
@@ -128,17 +144,18 @@ def test_circle2_and_ellipse2_are_closed_polyline_arrays() -> None:
 def test_spline2_samples_cubic_bezier_to_polyline() -> None:
     spline = Spline2(((0, 0), (1, 2), (2, 2), (3, 0)))
 
-    array = spline.to_array(tolerance=0.01)
-
-    assert isinstance(array, np.ndarray)
-    assert len(array) > 4
-    np.testing.assert_allclose(array[0], [0, 0])
-    np.testing.assert_allclose(array[-1], [3, 0])
+    assert not hasattr(spline, "to_array")
 
     polyline = spline.discretize(tolerance=0.01)
     assert isinstance(polyline, Polyline2)
     assert all(isinstance(curve, Line2) for curve in polyline.curves)
-    assert len(polyline.vertices) == len(array)
+    assert len(polyline.vertices) > 4
+    np.testing.assert_allclose(polyline.vertices[0], [0, 0])
+    np.testing.assert_allclose(polyline.vertices[-1], [3, 0])
+
+    coarse = spline.discretize(tolerance=0.5)
+    limited = spline.discretize(tolerance=0.5, max_segment_length=0.25)
+    assert len(limited.vertices) > len(coarse.vertices)
 
 
 @pytest.mark.parametrize(

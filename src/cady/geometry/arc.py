@@ -6,19 +6,14 @@ from dataclasses import dataclass
 from math import acos, atan2, ceil, cos, pi, sin
 from typing import TYPE_CHECKING, TypeAlias
 
-import numpy as np
-from numpy.typing import NDArray
-
 from cady.operations.coordinates import add3, dot3, length3, scale3
 from cady.utils import finite, positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
-PointArray2: TypeAlias = NDArray[np.float64]
-PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
-    from cady.geometry.polyline import Polyline2
+    from cady.geometry.polyline import Polyline2, Polyline3
 
 
 def _unit_axis(axis: Point3, name: str) -> Point3:
@@ -43,6 +38,34 @@ def _segments_for_circle(radius: float, tolerance: float) -> int:
         return 12
     angle = 2.0 * acos(max(-1.0, min(1.0, 1.0 - tolerance / radius)))
     return max(12, ceil((2.0 * pi) / angle))
+
+
+def _min_segments(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError("min_segments must be an integer")
+    if value < 1:
+        raise ValueError("min_segments must be at least 1")
+    return value
+
+
+def _segment_count(
+    *,
+    radius: float,
+    sweep: float,
+    tolerance: float,
+    max_segment_length: float | None,
+    min_segments: int,
+) -> int:
+    count = max(
+        min_segments,
+        ceil(abs(sweep) / (2.0 * pi) * _segments_for_circle(radius, tolerance)),
+    )
+    if max_segment_length is not None:
+        count = max(
+            count,
+            ceil(abs(sweep) * radius / positive(max_segment_length, "max_segment_length")),
+        )
+    return max(1, count)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -100,28 +123,31 @@ class Arc2:
     def points(self) -> tuple[Point2, ...]:
         return (self._point(self.start_rad), self._point(self.end_rad))
 
-    def to_array(self, *, tolerance: float) -> PointArray2:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline2:
         tolerance = positive_tolerance(tolerance)
+        min_segments = _min_segments(min_segments)
 
         sweep = self.end_rad - self.start_rad
-        segment_count = max(
-            2,
-            ceil(abs(sweep) / (2.0 * pi) * _segments_for_circle(self.radius, tolerance)),
+        segment_count = _segment_count(
+            radius=self.radius,
+            sweep=sweep,
+            tolerance=tolerance,
+            max_segment_length=max_segment_length,
+            min_segments=min_segments,
         )
         points = tuple(
             self._point(self.start_rad + sweep * index / segment_count)
             for index in range(segment_count + 1)
         )
-        return np.array(points, dtype=np.float64, copy=True)
-
-    def discretise(self, *, tolerance: float) -> Polyline2:
         from cady.geometry.polyline import Polyline2
 
-        points = tuple((float(x), float(y)) for x, y in self.to_array(tolerance=tolerance))
         return Polyline2(points)
-
-    def discretize(self, *, tolerance: float) -> Polyline2:
-        return self.discretise(tolerance=tolerance)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -206,23 +232,31 @@ class Arc3:
     def points(self) -> tuple[Point3, Point3]:
         return (self._point(self.start_rad), self._point(self.end_rad))
 
-    def to_array(self, *, tolerance: float) -> PointArray3:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline3:
         tolerance = positive_tolerance(tolerance)
+        min_segments = _min_segments(min_segments)
 
         sweep = self.end_rad - self.start_rad
-        segment_count = max(
-            2,
-            ceil(
-                abs(sweep)
-                / (2.0 * pi)
-                * _segments_for_circle(self.radius, tolerance)
-            ),
+        segment_count = _segment_count(
+            radius=self.radius,
+            sweep=sweep,
+            tolerance=tolerance,
+            max_segment_length=max_segment_length,
+            min_segments=min_segments,
         )
-        points = [
+        points = tuple(
             self._point(self.start_rad + sweep * index / segment_count)
             for index in range(segment_count + 1)
-        ]
-        return np.array(points, dtype=np.float64, copy=True)
+        )
+        from cady.geometry.polyline import Polyline3
+
+        return Polyline3(points)
 
 
 __all__ = ["Arc2", "Arc3"]

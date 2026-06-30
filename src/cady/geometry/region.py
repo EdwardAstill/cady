@@ -66,8 +66,8 @@ class Region2:
 
     def loops(self, *, tolerance: float) -> tuple[PointArray2, ...]:
         curves = (self.outer, *self.holes)
-        outer = self.outer.to_array(tolerance=tolerance)
-        hole_arrays = tuple(hole.to_array(tolerance=tolerance) for hole in self.holes)
+        outer = _curve2_array(self.outer, tolerance=tolerance)
+        hole_arrays = tuple(_curve2_array(hole, tolerance=tolerance) for hole in self.holes)
         loops = (outer, *hole_arrays)
         for index, (curve, loop) in enumerate(zip(curves, loops, strict=True)):
             if not getattr(curve, "closed", False):
@@ -77,6 +77,22 @@ class Region2:
                 label = "outer" if index == 0 else f"holes[{index - 1}]"
                 raise ValueError(f"region {label} boundary must contain at least three points")
         return loops
+
+
+def _curve2_array(curve: Curve2, *, tolerance: float) -> PointArray2:
+    if isinstance(curve, Polyline2):
+        return curve.discretize(tolerance=tolerance).to_array(tolerance=tolerance)
+
+    to_array = getattr(curve, "to_array", None)
+    if callable(to_array):
+        return np.asarray(to_array(tolerance=tolerance), dtype=np.float64)
+
+    discretize = getattr(curve, "discretize", None)
+    if callable(discretize):
+        polyline = cast(Polyline2, discretize(tolerance=tolerance))
+        return polyline.to_array(tolerance=tolerance)
+
+    raise TypeError(f"{type(curve).__name__} does not provide to_array or discretize")
 
 
 @dataclass(frozen=True, slots=True)

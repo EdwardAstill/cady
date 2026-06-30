@@ -37,7 +37,7 @@ def test_mesh_view_builds_centred_wire_scene_and_returns_none(
     assert scene.objects[0].target is mesh
     assert scene.objects[0].pose is not None
     assert scene.objects[0].style.render_mode == "wireframe"
-    assert scene.cameras[0][1].projection == "orthographic"
+    assert scene.camera.projection == "orthographic"
 
 
 def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,7 +62,7 @@ def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> N
     assert scene.objects[0].object_name == "body"
     assert scene.objects[0].pose is None
     assert scene.objects[0].style is style
-    assert scene.cameras[0][1].projection == "perspective"
+    assert scene.camera.projection == "perspective"
 
 
 def test_part_and_assembly_have_view_methods(monkeypatch: pytest.MonkeyPatch) -> None:

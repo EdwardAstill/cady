@@ -12,7 +12,7 @@ from cady.utils import positive_tolerance
 from cady.view._coordinates import finite_point3
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
-from cady.view.light import DirectionalLight, Light
+from cady.view.light import AmbientLight, DirectionalLight, Light
 from cady.view.scene import Scene
 from cady.view.style import DisplayStyle, RenderMode
 
@@ -55,10 +55,12 @@ def open_target_view(
     resolved_camera = camera or _fit_camera(camera_bounds, projection=projection)
     scene_name = title or name or _target_name(target)
     scene = (
-        Scene(scene_name)
+        Scene(
+            scene_name,
+            camera=resolved_camera,
+            lights=(AmbientLight(intensity=0.4), light or DEFAULT_VIEW_LIGHT),
+        )
         .add(target, name=name, pose=pose, style=resolved_style)
-        .with_camera(resolved_camera, name="view")
-        .with_light(light or DEFAULT_VIEW_LIGHT)
     )
 
     # Import through the public view module so GUI backends stay lazy.

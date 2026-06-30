@@ -7,19 +7,14 @@ from dataclasses import dataclass
 from math import ceil, sqrt
 from typing import TYPE_CHECKING, TypeAlias
 
-import numpy as np
-from numpy.typing import NDArray
-
 from cady.operations.coordinates import cross3, length3, scale3, sub3
-from cady.utils import positive_tolerance
+from cady.utils import positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
-PointArray2: TypeAlias = NDArray[np.float64]
-PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
-    from cady.geometry.polyline import Polyline2
+    from cady.geometry.polyline import Polyline2, Polyline3
 
 
 def _append_unique_point(points: list[Point3], point: Point3) -> None:
@@ -30,6 +25,20 @@ def _append_unique_point(points: list[Point3], point: Point3) -> None:
 def _append_unique_point2(points: list[Point2], point: Point2) -> None:
     if not points or points[-1] != point:
         points.append(point)
+
+
+def _min_segments(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError("min_segments must be an integer")
+    if value < 1:
+        raise ValueError("min_segments must be at least 1")
+    return value
+
+
+def _max_segment_length(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return positive(value, "max_segment_length")
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -67,22 +76,28 @@ class Spline2:
             return self.control_points + (self.control_points[0],)
         return self.control_points
 
-    def to_array(self, *, tolerance: float) -> PointArray2:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline2:
         tolerance = positive_tolerance(tolerance)
+        max_segment_length = _max_segment_length(max_segment_length)
+        min_segments = _min_segments(min_segments)
 
         points = _cubic_bezier_points2(self.control_points, tolerance=tolerance)
         if self.closed and points[0] != points[-1]:
             points = (*points, points[0])
-        return np.array(points, dtype=np.float64, copy=True)
-
-    def discretise(self, *, tolerance: float) -> Polyline2:
+        points = _densify_points2(
+            points,
+            max_segment_length=max_segment_length,
+            min_segments=min_segments,
+        )
         from cady.geometry.polyline import Polyline2
 
-        points = tuple((float(x), float(y)) for x, y in self.to_array(tolerance=tolerance))
         return Polyline2(points, closed=self.closed)
-
-    def discretize(self, *, tolerance: float) -> Polyline2:
-        return self.discretise(tolerance=tolerance)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -118,8 +133,17 @@ class Spline3:
     def points(self) -> tuple[Point3, ...]:
         return self.control_points
 
-    def to_array(self, *, tolerance: float) -> PointArray3:
+    def discretize(
+        self,
+        *,
+        tolerance: float,
+        max_segment_length: float | None = None,
+        min_segments: int = 1,
+    ) -> Polyline3:
         tolerance = positive_tolerance(tolerance)
+        max_segment_length = _max_segment_length(max_segment_length)
+        min_segments = _min_segments(min_segments)
+
         points: list[Point3] = []
         for index in range(0, len(self.control_points) - 1, 3):
             segment = self.control_points[index : index + 4]
@@ -132,7 +156,15 @@ class Spline3:
                 tolerance=tolerance,
                 depth=0,
             )
-        return np.array(points, dtype=np.float64, copy=True)
+        from cady.geometry.polyline import Polyline3
+
+        return Polyline3(
+            _densify_points3(
+                tuple(points),
+                max_segment_length=max_segment_length,
+                min_segments=min_segments,
+            )
+        )
 
 
 def _cubic_bezier_points2(
@@ -163,6 +195,83 @@ def _cubic_bezier_points2(
                 ),
             )
     return tuple(points)
+
+
+def _densify_points2(
+    points: tuple[Point2, ...],
+    *,
+    max_segment_length: float | None,
+    min_segments: int,
+) -> tuple[Point2, ...]:
+    counts = _subdivision_counts(points, max_segment_length=max_segment_length)
+    while sum(counts) < min_segments:
+        index = max(range(len(counts)), key=lambda item: _distance2(points[item], points[item + 1]))
+        counts[index] += 1
+    output: list[Point2] = []
+    pairs = zip(points, points[1:], strict=False)
+    for (start, end), count in zip(pairs, counts, strict=True):
+        for step in range(count):
+            t = step / count
+            _append_unique_point2(
+                output,
+                (
+                    start[0] + (end[0] - start[0]) * t,
+                    start[1] + (end[1] - start[1]) * t,
+                ),
+            )
+    _append_unique_point2(output, points[-1])
+    return tuple(output)
+
+
+def _densify_points3(
+    points: tuple[Point3, ...],
+    *,
+    max_segment_length: float | None,
+    min_segments: int,
+) -> tuple[Point3, ...]:
+    counts = _subdivision_counts(points, max_segment_length=max_segment_length)
+    while sum(counts) < min_segments:
+        index = max(
+            range(len(counts)),
+            key=lambda item: length3(sub3(points[item + 1], points[item])),
+        )
+        counts[index] += 1
+    output: list[Point3] = []
+    pairs = zip(points, points[1:], strict=False)
+    for (start, end), count in zip(pairs, counts, strict=True):
+        for step in range(count):
+            t = step / count
+            _append_unique_point(
+                output,
+                (
+                    start[0] + (end[0] - start[0]) * t,
+                    start[1] + (end[1] - start[1]) * t,
+                    start[2] + (end[2] - start[2]) * t,
+                ),
+            )
+    _append_unique_point(output, points[-1])
+    return tuple(output)
+
+
+def _subdivision_counts(
+    points: tuple[Point2, ...] | tuple[Point3, ...],
+    *,
+    max_segment_length: float | None,
+) -> list[int]:
+    if max_segment_length is None:
+        return [1 for _start, _end in zip(points, points[1:], strict=False)]
+    return [
+        max(1, ceil(_point_distance(start, end) / max_segment_length))
+        for start, end in zip(points, points[1:], strict=False)
+    ]
+
+
+def _point_distance(start: Point2 | Point3, end: Point2 | Point3) -> float:
+    return sqrt(sum((right - left) ** 2 for left, right in zip(start, end, strict=True)))
+
+
+def _distance2(start: Point2, end: Point2) -> float:
+    return sqrt((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2)
 
 
 def _append_cubic_points(

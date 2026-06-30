@@ -16,6 +16,7 @@ from cady.utils import positive_tolerance
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight
+from cady.view.overlay import SceneOverlay
 from cady.view.scene import Scene
 from cady.view.style import DisplayStyle
 
@@ -63,6 +64,7 @@ class PreparedScene:
     ambient_light: tuple[float, float, float]
     diffuse_light: tuple[float, float, float]
     light_direction: tuple[float, float, float]
+    overlays: tuple[SceneOverlay, ...] = ()
 
 
 def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
@@ -134,16 +136,16 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
     if not meshes and not lines:
         raise ValueError("cannot visualise an empty scene")
 
-    camera = _active_camera(scene)
     ambient, diffuse, light_direction = _lighting(scene)
     return PreparedScene(
         scene.name,
         tuple(meshes),
         tuple(lines),
-        camera,
+        scene.camera,
         ambient,
         diffuse,
         light_direction,
+        scene.overlays,
     )
 
 
@@ -240,16 +242,6 @@ def _style_color(target: object, style: DisplayStyle) -> tuple[float, float, flo
     if isinstance(target, Assembly):
         return _DEFAULT_MESH_COLOR
     return _DEFAULT_MESH_COLOR
-
-
-def _active_camera(scene: Scene) -> Camera:
-    if scene.active_camera is not None:
-        for name, camera in scene.cameras:
-            if name == scene.active_camera:
-                return camera
-    if scene.cameras:
-        return scene.cameras[0][1]
-    return DEFAULT_CAMERA
 
 
 def _lighting(

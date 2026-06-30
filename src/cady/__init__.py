@@ -73,8 +73,10 @@ from cady.view import (
     DisplayStyle,
     Light,
     PointLight,
+    ScaleBarOverlay,
     Scene,
     SceneObject,
+    SceneOverlay,
 )
 
 __all__ = [
@@ -125,8 +127,10 @@ __all__ = [
     "Region3",
     "RadiusDimension2",
     "ReadError",
+    "ScaleBarOverlay",
     "Scene",
     "SceneObject",
+    "SceneOverlay",
     "Spline2",
     "Spline3",
     "Surface2",

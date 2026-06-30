@@ -36,6 +36,23 @@ not the older `Line2D`/`Body3D`/`Drawing2D` style.
   dataclasses, tuple-backed immutable fields, minimal local validation, operation
   modules for numeric work, and late imports to maintain boundaries.
 
+## Maintainability Bias
+
+- Prefer obvious code over clever abstractions. A little repetition is better
+  than a helper that hides simple logic or makes call sites harder to read.
+- Add helper functions only when they name a real domain concept, remove
+  meaningful duplication, or isolate genuinely tricky logic.
+- Keep validation at public construction points and explicit conversion/export
+  boundaries. Avoid defensive validation inside every internal helper unless the
+  invariant is genuinely hard to preserve.
+- Keep modules readable top-to-bottom. Avoid splitting small, related logic
+  across many files just to make the structure look more abstract.
+- When changing code, preserve the local style first. Do not introduce a new
+  pattern unless it clearly improves the current module and is worth applying
+  consistently.
+- Tests should pin behavior, not implementation structure. Avoid tests that make
+  simple refactors painful unless the structure is itself part of the contract.
+
 ## Current Package Layout
 
 ```text

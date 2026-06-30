@@ -13,6 +13,7 @@ from cady import (
     Mesh3,
     Part,
     PointCloud3,
+    ScaleBarOverlay,
     Scene,
     box,
 )
@@ -23,6 +24,7 @@ from cady.view.vispy_viewer import (
     _require_vispy,
     _scale_bar_for_camera,
     _scale_bar_for_visible_height,
+    _scale_bar_overlay,
     _select_vispy_shader_backend,
     _shaded_face_buffers,
     _transform_from_pose,
@@ -70,18 +72,19 @@ def test_select_vispy_shader_backend_leaves_desktop_context() -> None:
 
 
 def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
-    scene = (
-        Scene("review")
-        .add(box(1.0, 0.5, 0.25), style=DisplayStyle(color=(0.2, 0.4, 0.8)))
-        .with_camera(
-            Camera.perspective(
-                position=(1.0, -2.0, 1.5),
-                target=(0.0, 0.0, 0.0),
-                fov_degrees=35.0,
-            ),
-            name="iso",
-        )
-        .with_light(DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.5))
+    scene = Scene(
+        "review",
+        camera=Camera.perspective(
+            position=(1.0, -2.0, 1.5),
+            target=(0.0, 0.0, 0.0),
+            fov_degrees=35.0,
+        ),
+        lights=(
+            DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.5),
+        ),
+    ).add(
+        box(1.0, 0.5, 0.25),
+        style=DisplayStyle(color=(0.2, 0.4, 0.8)),
     )
 
     prepared = prepare_scene(scene, tolerance=1e-3)
@@ -93,6 +96,20 @@ def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
     assert prepared.meshes[0].vertices.shape[1] == 3
     assert prepared.meshes[0].faces.shape[1] == 3
     assert prepared.light_direction == (-1.0, -1.0, -2.0)
+
+
+def test_prepare_scene_carries_scene_overlays() -> None:
+    overlay = ScaleBarOverlay(min_pixels=24.0, max_pixels=96.0)
+    prepared = prepare_scene(Scene("overlay", overlays=(overlay,)).add(box(1.0, 1.0, 1.0)))
+
+    assert prepared.overlays == (overlay,)
+    assert _scale_bar_overlay(prepared) is overlay
+
+    hidden = prepare_scene(
+        Scene("hidden", overlays=(ScaleBarOverlay(visible=False),)).add(box(1.0, 1.0, 1.0))
+    )
+
+    assert _scale_bar_overlay(hidden) is None
 
 
 def test_transform_from_pose_preserves_viewer_message() -> None:

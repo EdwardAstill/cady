@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from math import pi
 
-import numpy as np
 import pytest
 
 from cady import arc3, line3, polyline3, spline3
@@ -61,14 +60,17 @@ def test_arc3_samples_in_custom_plane() -> None:
     assert arc.points()[0] == pytest.approx((0.0, -2.0, 0.0))
     assert arc.points()[-1] == pytest.approx((0.0, 2.0, 0.0))
 
-    array = arc.to_array(tolerance=1e-3)
+    assert not hasattr(arc, "to_array")
 
-    assert isinstance(array, np.ndarray)
-    assert array.shape[1] == 3
-    assert len(array) > 2
-    assert array[len(array) // 2].tolist() == pytest.approx(
-        [0.0, 0.0, -2.0]
+    polyline = arc.discretize(tolerance=1e-3)
+    assert len(polyline.vertices) > 2
+    assert polyline.vertices[len(polyline.vertices) // 2] == pytest.approx(
+        (0.0, 0.0, -2.0)
     )
+
+    coarse = arc.discretize(tolerance=1.0, min_segments=1)
+    limited = arc.discretize(tolerance=1.0, max_segment_length=0.25)
+    assert len(limited.vertices) > len(coarse.vertices)
 
 
 def test_line3_factory_and_sampling() -> None:
@@ -102,15 +104,16 @@ def test_spline3_factory_and_adaptive_sampling() -> None:
         )
     )
 
-    array = spline.to_array(tolerance=1e-2)
+    polyline = spline.discretize(tolerance=1e-2)
 
     assert isinstance(spline, Spline3)
-    assert array[0].tolist() == pytest.approx([0.0, 0.0, 0.0])
-    assert array[-1].tolist() == pytest.approx([1.0, 0.0, 0.0])
-    assert len(array) > 2
+    assert not hasattr(spline, "to_array")
+    assert polyline.vertices[0] == pytest.approx((0.0, 0.0, 0.0))
+    assert polyline.vertices[-1] == pytest.approx((1.0, 0.0, 0.0))
+    assert len(polyline.vertices) > 2
 
 
-def test_polyline3_composes_curves_and_discretises_to_lines() -> None:
+def test_polyline3_composes_curves_and_discretizes_to_lines() -> None:
     line = Line3((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
     arc = Arc3(
         (1.0, 1.0, 0.0),
@@ -128,18 +131,18 @@ def test_polyline3_composes_curves_and_discretises_to_lines() -> None:
     )
 
     polyline = polyline3((line,)).add(arc).add(spline)
-    discretised = polyline.discretise(tolerance=1e-2)
     discretized = polyline.discretize(tolerance=1e-2)
 
     assert isinstance(polyline, Polyline3)
     assert polyline.curves == (line, arc, spline)
     assert polyline.vertices[0] == (0.0, 0.0, 0.0)
     assert polyline.vertices[-1] == (3.0, 1.0, 0.0)
-    assert all(isinstance(curve, Line3) for curve in discretised.curves)
-    assert discretised.vertices == discretized.vertices
-    assert discretised.vertices[0] == (0.0, 0.0, 0.0)
-    assert discretised.vertices[-1] == (3.0, 1.0, 0.0)
-    assert len(polyline.to_array(tolerance=1e-2)) == len(discretised.vertices)
+    assert all(isinstance(curve, Line3) for curve in discretized.curves)
+    assert discretized.vertices[0] == (0.0, 0.0, 0.0)
+    assert discretized.vertices[-1] == (3.0, 1.0, 0.0)
+    with pytest.raises(GeometryError, match="discretize"):
+        polyline.to_array(tolerance=1e-2)
+    assert len(discretized.to_array(tolerance=1e-2)) == len(discretized.vertices)
 
 
 def test_arc3_factory_and_polyline_from_curves() -> None:

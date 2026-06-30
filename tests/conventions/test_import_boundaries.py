@@ -30,6 +30,7 @@ def test_legacy_domain_and_build_packages_are_removed() -> None:
     assert not (SRC / "build").exists()
     assert not (SRC / "factories").exists()
     assert not (SRC / "numeric").exists()
+    assert not (SRC / "algorithms").exists()
     assert not (SRC / "visualisation").exists()
 
 
@@ -74,7 +75,7 @@ def test_files_do_not_import_viewer_or_numpy_at_module_scope() -> None:
     assert offenders == []
 
 
-def test_export_code_does_not_hide_discretisation_constants() -> None:
+def test_export_code_does_not_hide_discretization_constants() -> None:
     checked = [
         SRC / "files" / "dxf.py",
         SRC / "files" / "stl.py",

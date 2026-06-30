@@ -21,6 +21,7 @@ def test_smoke_import() -> None:
         "Drawing2",
         "Ellipse2",
         "Region3",
+        "ScaleBarOverlay",
         "Plane3",
         "Layer",
         "Light",
@@ -35,6 +36,7 @@ def test_smoke_import() -> None:
         "Polyline3",
         "Region2",
         "Scene",
+        "SceneOverlay",
         "Spline2",
         "Spline3",
         "Surface2",
@@ -76,10 +78,10 @@ def test_preferred_package_imports() -> None:
     from cady.measurement import distance, intersection
     from cady.operations import box, cut_mesh_by_plane, region_rectangle
     from cady.product import Assembly, Part
-    from cady.view import Camera, Scene
+    from cady.view import Camera, ScaleBarOverlay, Scene
 
     assert all((Drawing2, Line2, Region2, Surface2, Surface3, Body3, Mesh3, Part, Assembly))
-    assert all((Camera, Scene, region_rectangle, box, files))
+    assert all((Camera, Scene, ScaleBarOverlay, region_rectangle, box, files))
     assert all((distance, intersection))
     assert cut_mesh_by_plane
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))

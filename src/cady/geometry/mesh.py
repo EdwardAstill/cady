@@ -12,11 +12,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.errors import GeometryError
-from cady.operations.mesh_topology import (
-    boundary_edges_from_faces,
-    compact_mesh_data,
-    prune_dangling_edges,
-)
 from cady.operations.transforms import Transform2, Transform3
 
 Point2: TypeAlias = tuple[float, float]
@@ -185,16 +180,13 @@ class Mesh3:
         tolerance: float = 1e-6,
     ) -> Mesh3:
         """Reconstruct a triangle mesh from array-like 3D points."""
-        from cady.algorithms.advancing_front import advancing_front_surface
+        from cady.operations.advancing_front import advancing_front_surface
 
-        point_array = np.asarray(points, dtype=np.float64)
         reconstructed = advancing_front_surface(
-            point_array,
+            _point_array_from_points(points, tolerance=tolerance),
             tolerance=tolerance,
         )
-        if not isinstance(reconstructed, Mesh3):
-            reconstructed = reconstructed.mesh
-        return reconstructed
+        return cls(reconstructed.vertices, reconstructed.faces, reconstructed.edges)
 
     @property
     def triangles(self) -> tuple[tuple[Point3, Point3, Point3], ...]:
@@ -322,60 +314,22 @@ class Mesh3:
         edges. Dangling degree-1 edge branches are pruned before wall faces are
         generated.
         """
-        from cady.geometry.plane3 import Plane3
+        from cady.operations.mesh_clipping import close_to_plane as _close_to_plane_ops
 
         _validate_tolerance(tolerance)
         if max_distance <= 0.0:
             raise ValueError("max_distance must be positive")
-
-        plane = Plane3.from_normal(
-            _point3(plane_origin, name="plane_origin"),
-            _point3(plane_normal, name="plane_normal"),
+        vertices, faces, edges = self.to_array(tolerance=tolerance)
+        closed_vertices, closed_faces, closed_edges = _close_to_plane_ops(
+            vertices,
+            faces,
+            edges,
+            plane_origin,
+            plane_normal,
+            tolerance=tolerance,
+            max_distance=max_distance,
         )
-        source_edges = self.edges if self.edges else boundary_edges_from_faces(self.faces)
-        live_edges = prune_dangling_edges(source_edges)
-
-        near_edges: list[tuple[int, int]] = []
-        for a, b in live_edges:
-            dist_a = plane.signed_distance(self.vertices[a])
-            dist_b = plane.signed_distance(self.vertices[b])
-            if abs(dist_a) <= max_distance and abs(dist_b) <= max_distance:
-                near_edges.append((a, b))
-
-        if not near_edges:
-            raise GeometryError("no edges found within max_distance of the plane")
-
-        projected_index: dict[int, int] = {}
-        all_vertices = list(self.vertices)
-
-        for a, b in near_edges:
-            if a not in projected_index:
-                projected = plane.project(self.vertices[a])
-                projected_index[a] = len(all_vertices)
-                all_vertices.append(projected)
-            if b not in projected_index:
-                projected = plane.project(self.vertices[b])
-                projected_index[b] = len(all_vertices)
-                all_vertices.append(projected)
-
-        wall_faces: list[FaceIndex] = []
-        for a, b in near_edges:
-            pa = projected_index[a]
-            pb = projected_index[b]
-            wall_faces.append((a, b, pb))
-            wall_faces.append((a, pb, pa))
-
-        display_edges = live_edges if self.edges else ()
-        compact_vertices, compact_faces, compact_edges = compact_mesh_data(
-            tuple(all_vertices),
-            self.faces + tuple(wall_faces),
-            display_edges,
-        )
-        return Mesh3(
-            tuple((float(x), float(y), float(z)) for x, y, z in compact_vertices),
-            compact_faces,
-            compact_edges,
-        )
+        return _mesh_from_arrays(closed_vertices, closed_faces, closed_edges)
 
     def close_boundary(
         self,
@@ -553,11 +507,17 @@ def _polyline2_from_loop(vertices: tuple[Point2, ...], loop: list[int]) -> Point
     return np.array([vertices[index] for index in loop + [loop[0]]], dtype=np.float64)
 
 
-def _point3(value: object, *, name: str) -> Point3:
-    array = np.array(value, dtype=np.float64, copy=True)
-    if array.shape != (3,) or not np.all(np.isfinite(array)):
-        raise ValueError(f"{name} must be a finite 3D point")
-    return (float(array[0]), float(array[1]), float(array[2]))
+def _point_array_from_points(points: object, *, tolerance: float) -> PointArray3:
+    to_array = getattr(points, "to_array", None)
+    if callable(to_array):
+        array = np.asarray(to_array(tolerance=tolerance), dtype=np.float64)
+    else:
+        points_method = getattr(points, "points", None)
+        if callable(points_method):
+            array = np.asarray(points_method(), dtype=np.float64)
+        else:
+            array = np.asarray(points, dtype=np.float64)
+    return array
 
 
 def _triangle_area2(

@@ -13,6 +13,7 @@ from cady.operations.mesh_clipping import (
     KeepSide,
     close_boundary,
     close_planar_cap,
+    close_to_plane,
     coerce_mesh,
     cut_mesh_by_plane,
 )
@@ -708,6 +709,7 @@ __all__ = [
     "classify_linesplan_curves",
     "close_boundary",
     "close_planar_cap",
+    "close_to_plane",
     "closed_polyline_mesh2",
     "closed_polyline_mesh3",
     "coerce_mesh",

@@ -5,7 +5,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from cady.product import Part
-from cady.view import Camera, DirectionalLight, DisplayStyle, Scene, ViewError
+from cady.view import Camera, DirectionalLight, DisplayStyle, ScaleBarOverlay, Scene, ViewError
 
 
 def test_scene_stores_targets_and_view_state_immutably() -> None:
@@ -21,20 +21,57 @@ def test_scene_stores_targets_and_view_state_immutably() -> None:
     )
 
     assert [obj.object_name for obj in scene.objects] == ["plate", "front"]
-    assert scene.active_camera == "main"
-    assert len(scene.lights) == 2
+    assert scene.camera is camera
+    assert len(scene.lights) == 3
+    assert len(scene.overlays) == 1
+    assert isinstance(scene.overlays[0], ScaleBarOverlay)
 
     with pytest.raises(FrozenInstanceError):
         scene.name = "changed"  # type: ignore[misc]
 
 
+def test_scene_stores_overlay_values() -> None:
+    overlay = ScaleBarOverlay(color=(0.1, 0.2, 0.3), min_pixels=20.0, max_pixels=80.0)
+    scene = Scene("review", overlays=()).with_overlay(overlay)
+
+    assert scene.overlays == (overlay,)
+
+    with pytest.raises(ViewError):
+        ScaleBarOverlay(min_pixels=100.0, max_pixels=50.0)
+    with pytest.raises(ViewError):
+        Scene(overlays=(object(),))  # type: ignore[list-item]
+    with pytest.raises(ViewError):
+        Scene().with_overlay(object())
+
+
+def test_scene_view_uses_lazy_public_viewer(monkeypatch: pytest.MonkeyPatch) -> None:
+    view = pytest.importorskip("cady.view")
+    scene = Scene("review")
+    opened: list[tuple[object, float, str | None]] = []
+
+    def fake_view_scene(
+        scene_arg: object,
+        *,
+        tolerance: float = 1e-3,
+        title: str | None = None,
+    ) -> None:
+        opened.append((scene_arg, tolerance, title))
+
+    monkeypatch.setattr(view, "view_scene", fake_view_scene)
+
+    result = scene.view(tolerance=0.25, title="scene window")
+
+    assert result is None
+    assert opened == [(scene, 0.25, "scene window")]
+
+
 def test_scene_rejects_invalid_references() -> None:
     with pytest.raises(ViewError):
-        Scene(active_camera="missing")
+        Scene(camera=object())  # type: ignore[arg-type]
     with pytest.raises(ViewError):
-        Scene().with_camera(Camera.look_at(position=(1, -2, 3), target=(0, 0, 0))).with_camera(
-            Camera.look_at(position=(2, -3, 4), target=(0, 0, 0))
-        )
+        Scene(lights=(object(),))  # type: ignore[list-item]
+    with pytest.raises(ViewError):
+        Scene().with_camera(object())
     with pytest.raises(ViewError):
         Scene().add(None)
 

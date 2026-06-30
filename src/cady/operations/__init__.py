@@ -3,9 +3,16 @@
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, TypeAlias
 
+from cady.operations.advancing_front import (
+    AdvancingFrontMeshData,
+    AdvancingFrontResult,
+    AdvancingFrontStats,
+    advancing_front_surface,
+)
 from cady.operations.mesh_clipping import (
     close_boundary,
     close_planar_cap,
+    close_to_plane,
     cut_mesh_by_plane,
 )
 from cady.operations.meshes import (
@@ -162,12 +169,17 @@ __all__ = [
     "Transform2",
     "Transform3",
     "TriangulationGuide",
+    "AdvancingFrontMeshData",
+    "AdvancingFrontResult",
+    "AdvancingFrontStats",
+    "advancing_front_surface",
     "arc2",
     "arc3",
     "box",
     "circle2",
     "close_boundary",
     "close_planar_cap",
+    "close_to_plane",
     "cut_mesh_by_plane",
     "cylinder",
     "line2",
