@@ -27,6 +27,7 @@ def test_smoke_import() -> None:
         "Light",
         "Line2",
         "Line3",
+        "LocalAxesOverlay",
         "Mesh3",
         "Mesh2",
         "Part",
@@ -78,14 +79,28 @@ def test_preferred_package_imports() -> None:
     from cady.measurement import distance, intersection
     from cady.operations import box, cut_mesh_by_plane, region_rectangle
     from cady.product import Assembly, Part
-    from cady.view import Camera, ScaleBarOverlay, Scene
+    from cady.view import Camera, LocalAxesOverlay, RenderScene, ScaleBarOverlay, Scene
 
     assert all((Drawing2, Line2, Region2, Surface2, Surface3, Body3, Mesh3, Part, Assembly))
-    assert all((Camera, Scene, ScaleBarOverlay, region_rectangle, box, files))
+    assert all((Camera, Scene, ScaleBarOverlay, LocalAxesOverlay, RenderScene))
+    assert all((region_rectangle, box, files))
     assert all((distance, intersection))
     assert cut_mesh_by_plane
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
     assert all((stl.write, step.render, step.write, step.read_faces))
+
+
+def test_view_overlay_module_exports() -> None:
+    from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay, SceneOverlay
+
+    assert all((LocalAxesOverlay, ScaleBarOverlay, SceneOverlay))
+
+
+def test_prepared_scene_name_is_removed_from_view_api() -> None:
+    import cady.view
+
+    assert hasattr(cady.view, "RenderScene")
+    assert not hasattr(cady.view, "PreparedScene")
 
 
 def test_removed_compatibility_package_replacements() -> None:

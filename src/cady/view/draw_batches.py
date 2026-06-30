@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from cady.view.mesh_buffers import orientation_edges, shaded_face_buffers
-from cady.view.preparation import PreparedScene, SceneLine, SceneMesh
+from cady.view.render_scene import RenderScene, SceneLine, SceneMesh
 
 DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
 
@@ -137,7 +137,7 @@ def scene_bounds(geometry_vertices: Sequence[np.ndarray]) -> SceneBounds:
     return SceneBounds(local_centre=local_centre, radius=radius)
 
 
-def build_canvas_geometry(prepared: PreparedScene, gloo: Any) -> CanvasGeometry:
+def build_canvas_geometry(prepared: RenderScene, gloo: Any) -> CanvasGeometry:
     """Convert prepared scene arrays into GPU-ready draw batches."""
     face_batches: list[DrawBatch] = []
     edge_batches: list[DrawBatch] = []

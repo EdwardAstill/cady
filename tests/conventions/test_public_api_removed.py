@@ -1,6 +1,7 @@
 import cady
 import cady.measurement as measurement
 import cady.operations as operations
+import cady.product as product
 from cady.files import dxf, step, stl
 
 
@@ -65,3 +66,13 @@ def test_length_is_not_a_measurement_function() -> None:
     assert importlib.util.find_spec("cady.measurement.length") is None
     assert not hasattr(measurement, "length")
     assert not hasattr(measurement, "intersect")
+
+
+def test_product_convenience_wrappers_are_removed() -> None:
+    import importlib.util
+
+    assert importlib.util.find_spec("cady.product.flatten") is None
+    assert not hasattr(product, "flatten_assembly")
+    assert "flatten_assembly" not in product.__all__
+    assert not hasattr(product.Part, "add_body")
+    assert not hasattr(product.Assembly, "add")

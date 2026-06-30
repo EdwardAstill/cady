@@ -11,12 +11,12 @@ def _point_mesh() -> Mesh3:
     return Mesh3(((0.0, 0.0, 0.0),), ())
 
 
-def test_assembly_add_returns_new_assembly_and_reuses_parts_as_instances() -> None:
+def test_assembly_add_part_returns_new_assembly_and_reuses_parts_as_instances() -> None:
     part = Part("bolt").with_body(_point_mesh())
     original = Assembly("fixture")
     updated = (
-        original.add(part, name="bolt_a", pose=(1.0, 0.0, 0.0))
-        .add(part, name="bolt_b", pose=(2.0, 0.0, 0.0))
+        original.add_part(part, name="bolt_a", pose=(1.0, 0.0, 0.0))
+        .add_part(part, name="bolt_b", pose=(2.0, 0.0, 0.0))
     )
 
     assert original.part_instances == ()
@@ -31,7 +31,7 @@ def test_assembly_add_returns_new_assembly_and_reuses_parts_as_instances() -> No
 
 def test_nested_assembly_flattening_applies_parent_before_child_pose() -> None:
     part = Part("pin").with_body(_point_mesh())
-    child = Assembly("child").add(
+    child = Assembly("child").add_part(
         part,
         name="pin",
         pose=Transform3().translate(5.0, 0.0, 0.0),
@@ -59,7 +59,7 @@ def test_assembly_rejects_cycles_and_duplicate_instance_names() -> None:
 
     part = Part("plate").with_body(_point_mesh())
     with pytest.raises(ProductError):
-        Assembly("assy").add(part, name="same").add(part, name="same")
+        Assembly("assy").add_part(part, name="same").add_part(part, name="same")
 
 
 def test_assembly_pose_validation_message_is_preserved() -> None:
@@ -69,4 +69,4 @@ def test_assembly_pose_validation_message_is_preserved() -> None:
         ProductError,
         match="pose must be None, Transform3-like, or a 3D translation",
     ):
-        Assembly("assy").add(part, pose=(1.0, 2.0))
+        Assembly("assy").add_part(part, pose=(1.0, 2.0))

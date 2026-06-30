@@ -17,15 +17,14 @@ from cady import (
     Scene,
     box,
 )
+from cady.view.vispy_canvas import _require_vispy, _select_vispy_shader_backend
 from cady.view.vispy_viewer import (
     _camera_orientation,
     _mesh_edge_color,
     _orientation_edges,
-    _require_vispy,
     _scale_bar_for_camera,
     _scale_bar_for_visible_height,
     _scale_bar_overlay,
-    _select_vispy_shader_backend,
     _shaded_face_buffers,
     _transform_from_pose,
     _view_relative_orthographic_axis_length,
@@ -42,7 +41,7 @@ def test_vispy_viewer_module_imports_without_opening_window() -> None:
 
 def test_require_vispy_raises_when_missing() -> None:
     with (
-        mock.patch("cady.view.vispy_viewer._HAS_VISPY", False),
+        mock.patch("cady.view.vispy_canvas._HAS_VISPY", False),
         pytest.raises(ImportError, match="requires vispy"),
     ):
         _require_vispy()

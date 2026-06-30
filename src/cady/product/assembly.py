@@ -104,18 +104,6 @@ class Assembly:
         _reject_duplicate_instance_names((*self.part_instances, *self.assembly_instances))
         _detect_cycles(self)
 
-    def add(
-        self,
-        target: Part | Assembly,
-        *,
-        name: str | None = None,
-        pose: object | None = None,
-    ) -> Assembly:
-        """Dispatch to ``add_part`` or ``add_assembly`` based on target type."""
-        if isinstance(target, Part):
-            return self.add_part(target, name=name, pose=pose)
-        return self.add_assembly(target, name=name, pose=pose)
-
     def add_part(
         self,
         part: Part,

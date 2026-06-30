@@ -69,7 +69,7 @@ def test_part_and_assembly_have_view_methods(monkeypatch: pytest.MonkeyPatch) ->
     view = pytest.importorskip("cady.view")
     opened: list[object] = []
     part = Part("box").with_body(box(1.0, 1.0, 1.0))
-    assembly = Assembly("assy").add(part)
+    assembly = Assembly("assy").add_part(part)
 
     def fake_view_scene(
         scene: object,

@@ -264,12 +264,53 @@ def test_linesplan_wireframe_scene_draws_only_wireframe() -> None:
     assert len(prepared.meshes[0].faces) == 0
 
 
+def test_linesplan4_marks_projected_front_crossing() -> None:
+    module = _load_linesplan4_script("mesh_pc_dxf")
+
+    curves = module.read_polyline_curves(module.LINESPLAN_DXF)
+    result = module.mesh_point_cloud_from_intersections(
+        curves,
+        source=module.wireframe_from_curves(curves),
+        tolerance=1e-3,
+        intersection_tolerance=40.0,
+        repeat_distance=50.0,
+    )
+    scene = module.build_scene(result)
+
+    assert len(result.projected_misses) == 1
+    miss = result.projected_misses[0]
+    assert {miss.left_source_index, miss.right_source_index} == {5, 16}
+    assert miss.gap > result.intersection_tolerance
+    assert round(miss.projected_point[0]) == 181448
+    assert round(miss.projected_point[2]) == 5000
+    assert "projected_miss_1_ring" in [item.object_name for item in scene.objects]
+    assert "projected_miss_curve_5" in [item.object_name for item in scene.objects]
+    assert "projected_miss_curve_16" in [item.object_name for item in scene.objects]
+
+    prepared = prepare_scene(scene, tolerance=1e-3)
+    prepared_names = [mesh.name for mesh in prepared.meshes]
+    assert "projected_miss_1_ring" in prepared_names
+    assert "projected_miss_curve_5" in prepared_names
+    assert "projected_miss_curve_16" in prepared_names
+
+
 def _load_linesplan_script(name: str) -> ModuleType:
     path = Path(__file__).resolve().parents[2] / "examples" / "linesplan" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise AssertionError(f"could not load {path}")
     module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_linesplan4_script(name: str) -> ModuleType:
+    path = Path(__file__).resolve().parents[2] / "examples" / "linesplan4" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

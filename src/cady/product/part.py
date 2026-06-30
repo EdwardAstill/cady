@@ -64,9 +64,6 @@ class Part:
             metadata=self.metadata,
         )
 
-    def add_body(self, body: object) -> Part:
-        return self.with_body(body)
-
     def with_bodies(self, *bodies: object) -> Part:
         """Return a new part with all supplied bodies appended in order."""
         part = self

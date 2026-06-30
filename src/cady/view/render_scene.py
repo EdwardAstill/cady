@@ -54,7 +54,7 @@ class SceneLine:
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedScene:
+class RenderScene:
     """Scene data converted into arrays and lighting values for rendering."""
 
     name: str
@@ -67,7 +67,7 @@ class PreparedScene:
     overlays: tuple[SceneOverlay, ...] = ()
 
 
-def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
+def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
     """Convert scene objects into mesh and line buffers for rendering."""
     meshes: list[SceneMesh] = []
     lines: list[SceneLine] = []
@@ -137,7 +137,7 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> PreparedScene:
         raise ValueError("cannot visualise an empty scene")
 
     ambient, diffuse, light_direction = _lighting(scene)
-    return PreparedScene(
+    return RenderScene(
         scene.name,
         tuple(meshes),
         tuple(lines),
@@ -282,7 +282,7 @@ def _array3_tuple(values: np.ndarray) -> tuple[float, float, float]:
 __all__ = [
     "DEFAULT_CAMERA",
     "LineVertices",
-    "PreparedScene",
+    "RenderScene",
     "SceneLine",
     "SceneMesh",
     "prepare_polyline",

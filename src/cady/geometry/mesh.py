@@ -182,11 +182,11 @@ class Mesh3:
         """Reconstruct a triangle mesh from array-like 3D points."""
         from cady.operations.advancing_front import advancing_front_surface
 
-        reconstructed = advancing_front_surface(
+        vertices, faces, edges = advancing_front_surface(
             _point_array_from_points(points, tolerance=tolerance),
             tolerance=tolerance,
         )
-        return cls(reconstructed.vertices, reconstructed.faces, reconstructed.edges)
+        return _mesh_from_arrays(vertices, faces, edges)
 
     @property
     def triangles(self) -> tuple[tuple[Point3, Point3, Point3], ...]:

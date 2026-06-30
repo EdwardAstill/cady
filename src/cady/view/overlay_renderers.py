@@ -10,8 +10,8 @@ import numpy as np
 
 from cady.view.camera import Camera
 from cady.view.draw_batches import solid_color_vertices
-from cady.view.overlay import ScaleBarOverlay
-from cady.view.preparation import PreparedScene
+from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay
+from cady.view.render_scene import RenderScene
 
 LOCAL_AXIS_COLORS: tuple[tuple[float, float, float], ...] = (
     (0.9, 0.05, 0.05),
@@ -35,9 +35,16 @@ class ScaleBar:
     label: str
 
 
-def scale_bar_overlay(prepared: PreparedScene) -> ScaleBarOverlay | None:
+def scale_bar_overlay(prepared: RenderScene) -> ScaleBarOverlay | None:
     for overlay in prepared.overlays:
-        if overlay.visible:
+        if isinstance(overlay, ScaleBarOverlay) and overlay.visible:
+            return overlay
+    return None
+
+
+def local_axes_overlay(prepared: RenderScene) -> LocalAxesOverlay | None:
+    for overlay in prepared.overlays:
+        if isinstance(overlay, LocalAxesOverlay) and overlay.visible:
             return overlay
     return None
 
@@ -140,18 +147,19 @@ def scale_bar_line_vertices(
 def local_axis_line_data(
     origin: np.ndarray,
     length: float,
+    colors: tuple[tuple[float, float, float], ...] = LOCAL_AXIS_COLORS,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     basis = np.eye(3, dtype=np.float32) * np.float32(length)
     vertices: list[np.ndarray] = []
-    colors: list[tuple[float, float, float]] = []
-    for axis_index, rgb in enumerate(LOCAL_AXIS_COLORS):
+    axis_colors: list[tuple[float, float, float]] = []
+    for axis_index, rgb in enumerate(colors):
         vertices.append(origin.astype(np.float32, copy=True))
         vertices.append((origin + basis[axis_index]).astype(np.float32, copy=False))
-        colors.extend((rgb, rgb))
+        axis_colors.extend((rgb, rgb))
     return (
         np.array(vertices, dtype=np.float32),
         np.array([[0, 1], [2, 3], [4, 5]], dtype=np.uint32),
-        np.array(colors, dtype=np.float32),
+        np.array(axis_colors, dtype=np.float32),
     )
 
 
@@ -166,8 +174,15 @@ class LocalAxesRenderer:
     visible: bool = False
 
     @classmethod
-    def create(cls, *, local_centre: np.ndarray, gloo: Any) -> LocalAxesRenderer:
-        positions, indices, colors = local_axis_line_data(local_centre, 1.0)
+    def create(
+        cls,
+        overlay: LocalAxesOverlay,
+        *,
+        local_centre: np.ndarray,
+        gloo: Any,
+    ) -> LocalAxesRenderer:
+        colors = (overlay.x_color, overlay.y_color, overlay.z_color)
+        positions, indices, axis_colors = local_axis_line_data(local_centre, 1.0, colors)
         _solid_positions, normals, _solid_colors = solid_color_vertices(
             positions,
             (0.0, 0.0, 0.0),
@@ -175,10 +190,11 @@ class LocalAxesRenderer:
         return cls(
             positions=np.ascontiguousarray(positions, dtype=np.float32),
             normals=normals,
-            colors=np.ascontiguousarray(colors, dtype=np.float32),
+            colors=np.ascontiguousarray(axis_colors, dtype=np.float32),
             index_buffer=gloo.IndexBuffer(indices),
             local_centre=local_centre,
             gloo=gloo,
+            visible=overlay.visible,
         )
 
     def toggle(self) -> None:
@@ -293,7 +309,7 @@ class ScaleBarRenderer:
 
 
 def create_scale_bar_renderer(
-    prepared: PreparedScene,
+    prepared: RenderScene,
     *,
     overlay_program: Any,
     visuals: Any,
@@ -312,11 +328,29 @@ def create_scale_bar_renderer(
     )
 
 
+def create_local_axes_renderer(
+    prepared: RenderScene,
+    *,
+    local_centre: np.ndarray,
+    gloo: Any,
+) -> LocalAxesRenderer | None:
+    overlay = local_axes_overlay(prepared)
+    if overlay is None:
+        return None
+    return LocalAxesRenderer.create(
+        overlay,
+        local_centre=local_centre,
+        gloo=gloo,
+    )
+
+
 __all__ = [
     "LocalAxesRenderer",
     "ScaleBar",
     "ScaleBarRenderer",
+    "create_local_axes_renderer",
     "create_scale_bar_renderer",
+    "local_axes_overlay",
     "scale_bar_for_camera",
     "scale_bar_for_visible_height",
     "scale_bar_overlay",

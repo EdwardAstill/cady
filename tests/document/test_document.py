@@ -17,7 +17,7 @@ class NamedDrawing:
 def test_document_registry_stores_named_contents_immutably() -> None:
     drawing = NamedDrawing("front")
     part = Part("plate")
-    assembly = Assembly("assy").add(part)
+    assembly = Assembly("assy").add_part(part)
     scene = Scene.from_assembly(assembly)
 
     document = (

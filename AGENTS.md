@@ -149,7 +149,8 @@ Top-level `cady` re-exports currently include:
   `RadiusDimension2`, `DiameterDimension2`, `AngularDimension2`
 - product: `Part`, `PartInstance`, `Assembly`, `AssemblyInstance`, `Material`
 - view: `Scene`, `SceneObject`, `Camera`, `Light`, `AmbientLight`,
-  `DirectionalLight`, `PointLight`, `DisplayStyle`
+  `DirectionalLight`, `PointLight`, `DisplayStyle`, `ScaleBarOverlay`,
+  `LocalAxesOverlay`, `SceneOverlay`
 - other: `Document` and shared error classes
 
 Subpackage exports are broader than top-level exports:
@@ -160,10 +161,9 @@ Subpackage exports are broader than top-level exports:
   and `intersection(...)`, plus their small result dataclasses.
 - `cady.drawing` also exports `DrawingItem`, `Dimension2`, and
   `format_measurement`.
-- `cady.product` also exports `FlattenedPart`, `ProductError`, and
-  `flatten_assembly`.
+- `cady.product` also exports `FlattenedPart` and `ProductError`.
 - `cady.view` lazily exposes viewer preparation types and helpers:
-  `PreparedScene`, `SceneLine`, `SceneMesh`, `prepare_scene`, `view_scene`,
+  `RenderScene`, `SceneLine`, `SceneMesh`, `prepare_scene`, `view_scene`,
   `view_target`, `view_mesh`, `view_meshes`, and `view_lines`.
 - `cady.document` also exports `DocumentItem`, `DocumentKind`, and
   `document_from_mapping`.

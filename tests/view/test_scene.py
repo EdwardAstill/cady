@@ -6,6 +6,7 @@ import pytest
 
 from cady.product import Part
 from cady.view import Camera, DirectionalLight, DisplayStyle, ScaleBarOverlay, Scene, ViewError
+from cady.view.overlay import LocalAxesOverlay
 
 
 def test_scene_stores_targets_and_view_state_immutably() -> None:
@@ -23,18 +24,18 @@ def test_scene_stores_targets_and_view_state_immutably() -> None:
     assert [obj.object_name for obj in scene.objects] == ["plate", "front"]
     assert scene.camera is camera
     assert len(scene.lights) == 3
-    assert len(scene.overlays) == 1
-    assert isinstance(scene.overlays[0], ScaleBarOverlay)
+    assert scene.overlays == (ScaleBarOverlay(), LocalAxesOverlay())
 
     with pytest.raises(FrozenInstanceError):
         scene.name = "changed"  # type: ignore[misc]
 
 
 def test_scene_stores_overlay_values() -> None:
-    overlay = ScaleBarOverlay(color=(0.1, 0.2, 0.3), min_pixels=20.0, max_pixels=80.0)
-    scene = Scene("review", overlays=()).with_overlay(overlay)
+    scale_bar = ScaleBarOverlay(color=(0.1, 0.2, 0.3), min_pixels=20.0, max_pixels=80.0)
+    local_axes = LocalAxesOverlay(visible=False)
+    scene = Scene("review", overlays=(local_axes,)).with_overlay(scale_bar)
 
-    assert scene.overlays == (overlay,)
+    assert scene.overlays == (local_axes, scale_bar)
 
     with pytest.raises(ViewError):
         ScaleBarOverlay(min_pixels=100.0, max_pixels=50.0)
@@ -42,6 +43,21 @@ def test_scene_stores_overlay_values() -> None:
         Scene(overlays=(object(),))  # type: ignore[list-item]
     with pytest.raises(ViewError):
         Scene().with_overlay(object())
+
+
+def test_local_axes_overlay_validates_axis_colors() -> None:
+    overlay = LocalAxesOverlay(
+        x_color=(1.0, 0.0, 0.0),
+        y_color=(0.0, 1.0, 0.0),
+        z_color=(0.0, 0.0, 1.0),
+    )
+
+    assert overlay.x_color == (1.0, 0.0, 0.0)
+    assert overlay.y_color == (0.0, 1.0, 0.0)
+    assert overlay.z_color == (0.0, 0.0, 1.0)
+
+    with pytest.raises(ValueError):
+        LocalAxesOverlay(x_color=(1.2, 0.0, 0.0))
 
 
 def test_scene_view_uses_lazy_public_viewer(monkeypatch: pytest.MonkeyPatch) -> None:

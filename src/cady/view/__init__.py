@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight, Light, PointLight
-from cady.view.overlay import ScaleBarOverlay, SceneOverlay
+from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay, SceneOverlay
 from cady.view.scene import Scene, SceneObject
 from cady.view.style import DisplayStyle
 
 if TYPE_CHECKING:
-    from cady.view.preparation import (
-        PreparedScene,
+    from cady.view.render_scene import (
+        RenderScene,
         SceneLine,
         SceneMesh,
         prepare_scene,
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 _PREPARATION_EXPORTS = frozenset(
     {
-        "PreparedScene",
+        "RenderScene",
         "SceneLine",
         "SceneMesh",
         "prepare_scene",
@@ -51,9 +51,9 @@ def scene_from_target(target: object, *, name: str = "scene") -> Scene:
 def __getattr__(name: str) -> object:
     if name in _PREPARATION_EXPORTS:
         # Scene preparation is backend-independent and does not open GUI paths.
-        from cady.view import preparation
+        from cady.view import render_scene
 
-        return getattr(preparation, name)
+        return getattr(render_scene, name)
     if name in _VIEWER_EXPORTS:
         # Defer viewer backend imports until a GUI-facing helper is requested.
         from cady.view import vispy_viewer
@@ -72,8 +72,9 @@ __all__ = [
     "DirectionalLight",
     "DisplayStyle",
     "Light",
+    "LocalAxesOverlay",
     "PointLight",
-    "PreparedScene",
+    "RenderScene",
     "ScaleBarOverlay",
     "Scene",
     "SceneLine",

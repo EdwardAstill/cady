@@ -29,7 +29,22 @@ class ScaleBarOverlay:
             raise ViewError("scale bar max_pixels must be greater than or equal to min_pixels")
 
 
-SceneOverlay: TypeAlias = ScaleBarOverlay
+@dataclass(frozen=True, slots=True)
+class LocalAxesOverlay:
+    """Local X/Y/Z axes marker for scene views."""
+
+    x_color: Color = (0.9, 0.05, 0.05)
+    y_color: Color = (0.05, 0.62, 0.18)
+    z_color: Color = (0.1, 0.28, 0.95)
+    visible: bool = True
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "x_color", rgb(self.x_color, name="local x-axis color"))
+        object.__setattr__(self, "y_color", rgb(self.y_color, name="local y-axis color"))
+        object.__setattr__(self, "z_color", rgb(self.z_color, name="local z-axis color"))
 
 
-__all__ = ["ScaleBarOverlay", "SceneOverlay"]
+SceneOverlay: TypeAlias = ScaleBarOverlay | LocalAxesOverlay
+
+
+__all__ = ["LocalAxesOverlay", "ScaleBarOverlay", "SceneOverlay"]

@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import dist, floor, isfinite
+from math import cos, dist, floor, isfinite, pi, sin
 from pathlib import Path
 
 from cady import (
@@ -32,11 +32,29 @@ ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
 VIEW_ASPECT = 900.0 / 700.0
 FIT_PADDING = 1.08
-DEFAULT_INTERSECTION_TOLERANCE = 40.0
-DEFAULT_REPEAT_DISTANCE = 50.0
+DEFAULT_INTERSECTION_TOLERANCE = 80.0
+DEFAULT_REPEAT_DISTANCE = 90.0
+DIAGNOSTIC_FRONT_FRACTION = 0.075
+DIAGNOSTIC_MAX_MISSES = 8
+DIAGNOSTIC_RING_RADIUS = 650.0
 MESH_STYLE = DisplayStyle(color=(0.48, 0.56, 0.54), opacity=0.82, render_mode="shaded")
 WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe", line_width=1.0)
 POINT_STYLE = DisplayStyle(color=(0.88, 0.45, 0.12), render_mode="points", point_size=4.0)
+PROJECTED_MISS_RING_STYLE = DisplayStyle(
+    color=(0.55, 0.16, 0.90),
+    render_mode="wireframe",
+    line_width=3.0,
+)
+PROJECTED_MISS_LEFT_STYLE = DisplayStyle(
+    color=(0.90, 0.16, 0.12),
+    render_mode="wireframe",
+    line_width=2.5,
+)
+PROJECTED_MISS_RIGHT_STYLE = DisplayStyle(
+    color=(0.02, 0.58, 0.86),
+    render_mode="wireframe",
+    line_width=2.5,
+)
 LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
 
 Point3 = tuple[float, float, float]
@@ -54,9 +72,31 @@ class SegmentRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class CurveSegment:
+    source_index: int
+    layer: str
+    vertices: tuple[Point3, ...]
+    segment: SegmentRecord
+
+
+@dataclass(frozen=True, slots=True)
 class IntersectionPoint:
     measure: float
     point: Point3
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectedIntersectionMiss:
+    left_source_index: int
+    right_source_index: int
+    left_layer: str
+    right_layer: str
+    left_vertices: tuple[Point3, ...]
+    right_vertices: tuple[Point3, ...]
+    projected_point: Point3
+    left_closest: Point3
+    right_closest: Point3
+    gap: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +109,7 @@ class PointCloudMesh:
     rejected_count: int
     intersection_tolerance: float
     repeat_distance: float
+    projected_misses: tuple[ProjectedIntersectionMiss, ...]
 
 
 def main() -> None:
@@ -137,6 +178,12 @@ def main() -> None:
     print(f"intersection tolerance: {result.intersection_tolerance:g}")
     print(f"repeat distance: {result.repeat_distance:g}")
     print(f"intersection nodes: {len(result.cloud.vertices)}")
+    print(f"projected-only front crossings: {len(result.projected_misses)}")
+    for index, miss in enumerate(result.projected_misses, start=1):
+        print(
+            f"  {index}: curves {miss.left_source_index}/{miss.right_source_index}, "
+            f"profile={_format_point(miss.projected_point)}, gap={miss.gap:g}"
+        )
     if result.mesh is None:
         print("mesh: skipped (intersection node rows are not rectangular)")
     else:
@@ -205,6 +252,13 @@ def mesh_point_cloud_from_intersections(
         raise ValueError("no section-guide intersection nodes were found")
 
     cloud = PointCloud3(nodes)
+    projected_misses = _projected_intersection_misses(
+        curves,
+        tolerance=tolerance,
+        intersection_tolerance=intersection_tolerance,
+        front_fraction=DIAGNOSTIC_FRONT_FRACTION,
+        max_count=DIAGNOSTIC_MAX_MISSES,
+    )
     return PointCloudMesh(
         source,
         cloud,
@@ -214,6 +268,7 @@ def mesh_point_cloud_from_intersections(
         len(network.rejected),
         intersection_tolerance,
         repeat_distance,
+        projected_misses,
     )
 
 
@@ -226,9 +281,10 @@ def build_scene(result: PointCloudMesh) -> Scene:
     scene = Scene(name="linesplan_intersection_point_cloud")
     if result.mesh is not None:
         scene = scene.add(result.mesh, name="mesh", style=MESH_STYLE)
+    scene = scene.add(result.source, name="source_wireframe", style=WIRE_STYLE)
+    scene = _add_projected_miss_overlays(scene, result.projected_misses)
     return (
-        scene.add(result.source, name="source_wireframe", style=WIRE_STYLE)
-        .add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
+        scene.add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
         .with_camera(camera, name="profile")
         .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
@@ -364,6 +420,136 @@ def _polyline_intersections(
     return tuple(nodes)
 
 
+def _projected_intersection_misses(
+    curves: tuple[dxf.DxfWireCurve, ...],
+    *,
+    tolerance: float,
+    intersection_tolerance: float,
+    front_fraction: float,
+    max_count: int,
+) -> tuple[ProjectedIntersectionMiss, ...]:
+    if not curves or max_count <= 0:
+        return ()
+    points = tuple(point for curve in curves for point in curve.vertices)
+    lower_x = min(point[0] for point in points)
+    upper_x = max(point[0] for point in points)
+    front_min_x = upper_x - (upper_x - lower_x) * front_fraction
+
+    segments: list[CurveSegment] = []
+    for curve in curves:
+        for segment in _segment_records(curve.vertices, tolerance=tolerance):
+            if segment.upper[0] >= front_min_x:
+                segments.append(
+                    CurveSegment(curve.source_index, curve.layer, curve.vertices, segment)
+                )
+
+    candidates: list[ProjectedIntersectionMiss] = []
+    for left_index, left in enumerate(segments):
+        for right in segments[left_index + 1 :]:
+            if left.source_index == right.source_index:
+                continue
+            if not _projected_bounds_overlap(left.segment, right.segment):
+                continue
+            projected = _projected_segment_intersection_xz(
+                left.segment.start,
+                left.segment.end,
+                right.segment.start,
+                right.segment.end,
+            )
+            if projected is None:
+                continue
+            x, z = projected
+            if x < front_min_x:
+                continue
+            closest = closest_points_between_segments3(
+                (left.segment.start, left.segment.end),
+                (right.segment.start, right.segment.end),
+                tolerance=intersection_tolerance,
+            )
+            if closest.distance <= intersection_tolerance:
+                continue
+            candidates.append(
+                ProjectedIntersectionMiss(
+                    left.source_index,
+                    right.source_index,
+                    left.layer,
+                    right.layer,
+                    left.vertices,
+                    right.vertices,
+                    (x, (closest.left[1] + closest.right[1]) * 0.5, z),
+                    closest.left,
+                    closest.right,
+                    closest.distance,
+                )
+            )
+
+    return _dedupe_projected_misses(
+        candidates,
+        tolerance=max(intersection_tolerance, DIAGNOSTIC_RING_RADIUS * 0.25),
+        max_count=max_count,
+    )
+
+
+def _projected_bounds_overlap(left: SegmentRecord, right: SegmentRecord) -> bool:
+    return not (
+        left.upper[0] < right.lower[0]
+        or right.upper[0] < left.lower[0]
+        or left.upper[2] < right.lower[2]
+        or right.upper[2] < left.lower[2]
+    )
+
+
+def _projected_segment_intersection_xz(
+    left_start: Point3,
+    left_end: Point3,
+    right_start: Point3,
+    right_end: Point3,
+) -> tuple[float, float] | None:
+    px, py = left_start[0], left_start[2]
+    rx, ry = left_end[0] - px, left_end[2] - py
+    qx, qy = right_start[0], right_start[2]
+    sx, sy = right_end[0] - qx, right_end[2] - qy
+    denominator = _cross2(rx, ry, sx, sy)
+    if abs(denominator) <= 1e-9:
+        return None
+    qpx, qpy = qx - px, qy - py
+    left_parameter = _cross2(qpx, qpy, sx, sy) / denominator
+    right_parameter = _cross2(qpx, qpy, rx, ry) / denominator
+    if not (
+        -1e-9 <= left_parameter <= 1.0 + 1e-9
+        and -1e-9 <= right_parameter <= 1.0 + 1e-9
+    ):
+        return None
+    return (px + left_parameter * rx, py + left_parameter * ry)
+
+
+def _cross2(ax: float, ay: float, bx: float, by: float) -> float:
+    return ax * by - ay * bx
+
+
+def _dedupe_projected_misses(
+    misses: Iterable[ProjectedIntersectionMiss],
+    *,
+    tolerance: float,
+    max_count: int,
+) -> tuple[ProjectedIntersectionMiss, ...]:
+    result: list[ProjectedIntersectionMiss] = []
+    for miss in sorted(misses, key=lambda item: (-item.projected_point[0], -item.gap)):
+        if any(
+            _profile_points_close(miss.projected_point, existing.projected_point, tolerance)
+            for existing in result
+        ):
+            continue
+        result.append(miss)
+        if len(result) >= max_count:
+            break
+    return tuple(result)
+
+
+def _profile_points_close(left: Point3, right: Point3, tolerance: float) -> bool:
+    return dist((left[0], left[2]), (right[0], right[2])) <= tolerance
+
+
 def _segment_records(
     vertices: tuple[Point3, ...],
     *,
@@ -462,6 +648,49 @@ def _mesh_from_rectangular_rows(
         return None
     points = tuple(point for row in node_rows for point in row)
     return Mesh3.from_points(points, tolerance=tolerance)
+
+
+def _add_projected_miss_overlays(
+    scene: Scene,
+    misses: tuple[ProjectedIntersectionMiss, ...],
+) -> Scene:
+    highlighted: set[int] = set()
+    for index, miss in enumerate(misses, start=1):
+        scene = scene.add(
+            _ring_wireframe(miss.projected_point, radius=DIAGNOSTIC_RING_RADIUS),
+            name=f"projected_miss_{index}_ring",
+            style=PROJECTED_MISS_RING_STYLE,
+        )
+        for source_index, vertices, style in (
+            (miss.left_source_index, miss.left_vertices, PROJECTED_MISS_LEFT_STYLE),
+            (miss.right_source_index, miss.right_vertices, PROJECTED_MISS_RIGHT_STYLE),
+        ):
+            if source_index in highlighted:
+                continue
+            highlighted.add(source_index)
+            scene = scene.add(
+                _curve_wireframe(vertices),
+                name=f"projected_miss_curve_{source_index}",
+                style=style,
+            )
+    return scene
+
+
+def _curve_wireframe(vertices: tuple[Point3, ...]) -> Wireframe3:
+    return Wireframe3.from_polylines((Polyline3(vertices),))
+
+
+def _ring_wireframe(centre: Point3, *, radius: float) -> Wireframe3:
+    segments = 48
+    points = tuple(
+        (
+            centre[0] + cos(2.0 * pi * index / segments) * radius,
+            centre[1],
+            centre[2] + sin(2.0 * pi * index / segments) * radius,
+        )
+        for index in range(segments)
+    )
+    return Wireframe3.from_polylines((Polyline3(points, closed=True),))
 
 
 def _station_x(section: LinesplanCurve) -> float:

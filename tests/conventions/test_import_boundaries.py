@@ -70,6 +70,7 @@ def test_files_do_not_import_viewer_or_numpy_at_module_scope() -> None:
         for name in _imports(path)
         if name == "numpy"
         or name.startswith("cady.view.mesh_buffers")
+        or name.startswith("cady.view.vispy_canvas")
         or name.startswith("cady.view.vispy_viewer")
     ]
     assert offenders == []

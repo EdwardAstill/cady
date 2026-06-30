@@ -5,12 +5,12 @@ until the viewing boundary, then converts them into arrays, camera values, and
 lighting values that VisPy can pass to OpenGL.
 
 ```text
-Cady object -> Scene -> prepare_scene(...) -> RenderScene -> VisPy draw batches
+Cady object -> Scene -> prepare_scene(...) -> RenderScene -> VispyCanvas
 ```
 
-The code currently calls this render layer `PreparedScene`. The better mental
-name is `RenderScene`: it is not another authoring scene, it is the scene after
-Cady has converted semantic objects into renderable arrays.
+`RenderScene` is not another authoring scene. It is the scene after Cady has
+converted semantic objects into renderable arrays, camera values, lighting
+values, and overlay values.
 
 ## What VisPy Needs
 
@@ -209,7 +209,7 @@ scene = Scene("box")
 
 scene.camera  # default Camera
 scene.lights  # default light tuple
-scene.overlays  # default ScaleBarOverlay tuple
+scene.overlays  # default ScaleBarOverlay and LocalAxesOverlay tuple
 ```
 
 The target passed to `Scene.add(...)` can be a mesh, a meshable CAD value, a
@@ -247,16 +247,19 @@ Geometry / Body / Mesh
 the viewer wrapper: target, optional view pose, display style, and metadata.
 
 Overlays are separate from scene objects. They describe information drawn over
-the viewer rather than geometry placed in the model. The current concrete
-overlay is `ScaleBarOverlay`, which the VisPy viewer draws in screen space for
-orthographic cameras.
+the viewer rather than geometry placed in the model. `ScaleBarOverlay` draws a
+screen-space scale bar for orthographic cameras. `LocalAxesOverlay` draws the
+local X/Y/Z axes marker.
 
 ```python
-from cady import ScaleBarOverlay
+from cady import LocalAxesOverlay, ScaleBarOverlay
 
 scene = Scene(
     "box",
-    overlays=(ScaleBarOverlay(min_pixels=40.0, max_pixels=120.0),),
+    overlays=(
+        ScaleBarOverlay(min_pixels=40.0, max_pixels=120.0),
+        LocalAxesOverlay(),
+    ),
 ).add(part)
 
 scene_without_overlays = Scene("plain", overlays=()).add(part)
@@ -271,18 +274,17 @@ Scene
   -> prepare_scene(...)
   -> RenderScene
   -> draw_batches.build_canvas_geometry(...)
-  -> vispy_viewer._make_canvas(...)
+  -> vispy_canvas._make_vispy_canvas(...)
 ```
 
 `Scene` is the public model. It stores semantic targets, a camera, lights,
 overlays, units, and metadata. It should not know about VisPy, GPU buffers, or
 OpenGL state.
 
-`RenderScene` is the backend-independent render description. In the current
-code this type is named `PreparedScene`, but its job is clearer if read as
-"scene prepared for rendering". It contains `SceneMesh` and `SceneLine`
-payloads, the active `Camera`, lighting values, and overlay values. This is the
-main boundary where meshable Cady objects become arrays.
+`RenderScene` is the backend-independent render description. It contains
+`SceneMesh` and `SceneLine` payloads, the active `Camera`, lighting values, and
+overlay values. This is the main boundary where meshable Cady objects become
+arrays.
 
 This layer is useful because it keeps two responsibilities apart:
 
@@ -299,16 +301,18 @@ pan, zoom, keyboard view changes, camera orientation, model/view matrices,
 orthographic scale, and projection clip planes. The canvas asks this state for
 matrices rather than storing pan, zoom, and orientation fields itself.
 
-`overlay_renderers.py` owns screen-space overlay drawing. The current overlay is
-`ScaleBarOverlay`, and the same module also holds the local axes renderer used
-by the viewer. These renderers receive VisPy objects from `_make_canvas(...)`;
-they do not import VisPy at module scope.
+`overlay_renderers.py` owns screen-space overlay drawing. The current overlay
+values are `ScaleBarOverlay` and `LocalAxesOverlay`. These renderers receive
+VisPy objects from `_make_vispy_canvas(...)`; they do not import VisPy at module
+scope.
 
-`vispy_viewer.py` is the lazy VisPy boundary and public viewer entry point. It
-imports VisPy only when a viewer is actually opened. Its nested canvas now acts
-mostly as the VisPy adapter: it creates the canvas and shader programs, routes
-mouse/key events, asks `interaction.py` for matrices, asks `overlay_renderers.py`
-to update/draw overlays, and draws the prepared batches.
+`vispy_viewer.py` is the public viewer entry point. It keeps helpers such as
+`view_scene(...)`, `view_mesh(...)`, and `view_lines(...)`.
+
+`vispy_canvas.py` is the lazy VisPy runtime boundary. It imports VisPy only when
+a viewer is actually opened, creates the canvas and shader programs, routes
+mouse/key events, asks `interaction.py` for matrices, asks
+`overlay_renderers.py` to update/draw overlays, and draws the prepared batches.
 
 The public flow remains:
 

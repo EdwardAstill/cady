@@ -10,7 +10,7 @@ from cady.product.material import Metadata, metadata_items
 from cady.view.camera import Camera
 from cady.view.errors import ViewError
 from cady.view.light import AmbientLight, DirectionalLight, Light
-from cady.view.overlay import ScaleBarOverlay, SceneOverlay
+from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay, SceneOverlay
 from cady.view.style import DisplayStyle
 
 
@@ -60,7 +60,9 @@ class Scene:
             DirectionalLight(direction=(0.2, 0.45, 0.9), intensity=0.72),
         )
     )
-    overlays: tuple[SceneOverlay, ...] = field(default_factory=lambda: (ScaleBarOverlay(),))
+    overlays: tuple[SceneOverlay, ...] = field(
+        default_factory=lambda: (ScaleBarOverlay(), LocalAxesOverlay())
+    )
     objects: tuple[SceneObject, ...] = field(default_factory=tuple)
     units: str = "m"
     metadata: Metadata = field(default_factory=tuple)
@@ -79,7 +81,7 @@ class Scene:
             if not isinstance(light, Light):
                 raise ViewError("scene lights must be Light values")
         for overlay in cast(tuple[object, ...], self.overlays):
-            if not isinstance(overlay, ScaleBarOverlay):
+            if not isinstance(overlay, (ScaleBarOverlay, LocalAxesOverlay)):
                 raise ViewError("scene overlays must be SceneOverlay values")
 
     @classmethod
@@ -141,7 +143,7 @@ class Scene:
 
     def with_overlay(self, overlay: object) -> Scene:
         """Return a copy with an additional overlay."""
-        if not isinstance(overlay, ScaleBarOverlay):
+        if not isinstance(overlay, (ScaleBarOverlay, LocalAxesOverlay)):
             raise ViewError("overlay must be a SceneOverlay value")
         return replace(self, overlays=(*self.overlays, overlay))
 

@@ -19,87 +19,32 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from contextlib import suppress
-from dataclasses import dataclass
 from math import inf
-from typing import Literal, TypeAlias, overload
+from typing import TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
 
-Point3: TypeAlias = tuple[float, float, float]
 FaceIndex: TypeAlias = tuple[int, int, int]
 EdgeIndex: TypeAlias = tuple[int, int]
+MeshArray: TypeAlias = NDArray[np.float64] | NDArray[np.int64]
 
 
-@dataclass(frozen=True, slots=True)
-class AdvancingFrontStats:
-    """Simple reconstruction diagnostics."""
-
-    vertices: int
-    faces: int
-    boundary_edges: int
-    max_edge_length: float
-
-
-@dataclass(frozen=True, slots=True)
-class AdvancingFrontMeshData:
-    """Primitive mesh data reconstructed by the advancing-front operation."""
-
-    vertices: tuple[Point3, ...]
-    faces: tuple[FaceIndex, ...]
-    edges: tuple[EdgeIndex, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class AdvancingFrontResult:
-    """Primitive mesh data plus useful reconstruction diagnostics."""
-
-    mesh: AdvancingFrontMeshData
-    stats: AdvancingFrontStats
-
-
-@overload
 def advancing_front_surface(
-    points: object,
+    points: NDArray[np.float64],
     *,
     tolerance: float = 1e-6,
     max_edge_length: float | None = None,
     neighbour_count: int = 40,
     search_radius_factor: float = 1.75,
     max_faces: int | None = None,
-    return_stats: Literal[False] = False,
-) -> AdvancingFrontMeshData: ...
-
-
-@overload
-def advancing_front_surface(
-    points: object,
-    *,
-    tolerance: float = 1e-6,
-    max_edge_length: float | None = None,
-    neighbour_count: int = 40,
-    search_radius_factor: float = 1.75,
-    max_faces: int | None = None,
-    return_stats: Literal[True],
-) -> AdvancingFrontResult: ...
-
-
-def advancing_front_surface(
-    points: object,
-    *,
-    tolerance: float = 1e-6,
-    max_edge_length: float | None = None,
-    neighbour_count: int = 40,
-    search_radius_factor: float = 1.75,
-    max_faces: int | None = None,
-    return_stats: bool = False,
-) -> AdvancingFrontMeshData | AdvancingFrontResult:
+) -> list[MeshArray]:
     """Reconstruct an open triangle mesh from points using a greedy front.
 
     Parameters
     ----------
     points:
-        Iterable or array of ``(x, y, z)`` points.
+        Array of ``(x, y, z)`` points.
 
     tolerance:
         Geometric epsilon for duplicate points, degenerate triangles, and side
@@ -119,13 +64,10 @@ def advancing_front_surface(
     max_faces:
         Optional hard stop for debugging.
 
-    return_stats:
-        If True, return ``AdvancingFrontResult`` instead of just mesh data.
-
     Returns
     -------
-    AdvancingFrontMeshData or AdvancingFrontResult
-        Open surface mesh data.  Boundary edges are expected; this method does
+    list of arrays
+        ``[vertices, faces, edges]``. Boundary edges are expected; this method does
         not force watertight closure.
     """
     if tolerance <= 0.0:
@@ -211,18 +153,7 @@ def advancing_front_surface(
     if not used_vertices:
         raise ValueError("reconstruction produced no faces")
 
-    mesh = _compact_mesh(pts, tuple(faces), used_vertices)
-    boundary_count = len(_boundary_edges(mesh.faces))
-    stats = AdvancingFrontStats(
-        vertices=len(mesh.vertices),
-        faces=len(mesh.faces),
-        boundary_edges=boundary_count,
-        max_edge_length=max_edge_length,
-    )
-
-    if return_stats:
-        return AdvancingFrontResult(mesh=mesh, stats=stats)
-    return mesh
+    return _compact_mesh(pts, tuple(faces), used_vertices)
 
 
 # ── Candidate selection ─────────────────────────────────────────────
@@ -494,19 +425,20 @@ def _compact_mesh(
     points: NDArray[np.float64],
     faces: tuple[FaceIndex, ...],
     used_vertices: Sequence[int],
-) -> AdvancingFrontMeshData:
+) -> list[MeshArray]:
     remap = {old: new for new, old in enumerate(used_vertices)}
-    vertices: tuple[Point3, ...] = tuple(
-        (float(points[index, 0]), float(points[index, 1]), float(points[index, 2]))
-        for index in used_vertices
-    )
+    vertices = np.asarray(points[list(used_vertices)], dtype=np.float64)
     remapped_faces: tuple[FaceIndex, ...] = tuple(
         (remap[a], remap[b], remap[c])
         for a, b, c in faces
         if a in remap and b in remap and c in remap
     )
     edges = _edges_from_faces(remapped_faces)
-    return AdvancingFrontMeshData(vertices, remapped_faces, edges)
+    return [
+        vertices,
+        np.asarray(remapped_faces, dtype=np.int64),
+        np.asarray(edges, dtype=np.int64),
+    ]
 
 
 def _face_edges(face: FaceIndex) -> tuple[EdgeIndex, EdgeIndex, EdgeIndex]:
@@ -530,14 +462,6 @@ def _edges_from_faces(faces: Sequence[FaceIndex]) -> tuple[EdgeIndex, ...]:
     return tuple(sorted(edges))
 
 
-def _boundary_edges(faces: Sequence[FaceIndex]) -> tuple[EdgeIndex, ...]:
-    counts: dict[EdgeIndex, int] = defaultdict(int)
-    for face in faces:
-        for edge in _face_edges(face):
-            counts[edge] += 1
-    return tuple(edge for edge, count in counts.items() if count == 1)
-
-
 def _distance(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
     return float(np.linalg.norm(a - b))
 
@@ -547,8 +471,5 @@ def _triangle_area(a: NDArray[np.float64], b: NDArray[np.float64], c: NDArray[np
 
 
 __all__ = [
-    "AdvancingFrontMeshData",
-    "AdvancingFrontResult",
-    "AdvancingFrontStats",
     "advancing_front_surface",
 ]
