@@ -1,4 +1,4 @@
-"""Read DXF wire polylines and turn their intersection nodes into a point cloud.
+"""Read DXF wire polylines and draw their intersection nodes as a point cloud.
 
 Usage:
     PYTHONPATH=src .venv/bin/python examples/linesplan4/mesh_pc_dxf.py --no-view
@@ -10,14 +10,13 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import cos, dist, floor, isfinite, pi, sin
+from math import dist, floor, isfinite
 from pathlib import Path
 
 from cady import (
     Camera,
     DirectionalLight,
     DisplayStyle,
-    Mesh3,
     PointCloud3,
     Polyline3,
     Scene,
@@ -26,7 +25,6 @@ from cady import (
 from cady.errors import ReadError
 from cady.files import dxf
 from cady.measurement.distance import closest_points_between_segments3
-from cady.operations.meshes import LinesplanCurve, classify_linesplan_curves
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -34,27 +32,8 @@ VIEW_ASPECT = 900.0 / 700.0
 FIT_PADDING = 1.08
 DEFAULT_INTERSECTION_TOLERANCE = 80.0
 DEFAULT_REPEAT_DISTANCE = 90.0
-DIAGNOSTIC_FRONT_FRACTION = 0.075
-DIAGNOSTIC_MAX_MISSES = 8
-DIAGNOSTIC_RING_RADIUS = 650.0
-MESH_STYLE = DisplayStyle(color=(0.48, 0.56, 0.54), opacity=0.82, render_mode="shaded")
 WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe", line_width=1.0)
-POINT_STYLE = DisplayStyle(color=(0.88, 0.45, 0.12), render_mode="points", point_size=4.0)
-PROJECTED_MISS_RING_STYLE = DisplayStyle(
-    color=(0.55, 0.16, 0.90),
-    render_mode="wireframe",
-    line_width=3.0,
-)
-PROJECTED_MISS_LEFT_STYLE = DisplayStyle(
-    color=(0.90, 0.16, 0.12),
-    render_mode="wireframe",
-    line_width=2.5,
-)
-PROJECTED_MISS_RIGHT_STYLE = DisplayStyle(
-    color=(0.02, 0.58, 0.86),
-    render_mode="wireframe",
-    line_width=2.5,
-)
+POINT_STYLE = DisplayStyle(color=(0.88, 0.45, 0.12), render_mode="points", point_size=7.0)
 LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
 
 Point3 = tuple[float, float, float]
@@ -72,49 +51,25 @@ class SegmentRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class CurveSegment:
-    source_index: int
-    layer: str
-    vertices: tuple[Point3, ...]
-    segment: SegmentRecord
-
-
-@dataclass(frozen=True, slots=True)
 class IntersectionPoint:
     measure: float
     point: Point3
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedIntersectionMiss:
-    left_source_index: int
-    right_source_index: int
-    left_layer: str
-    right_layer: str
-    left_vertices: tuple[Point3, ...]
-    right_vertices: tuple[Point3, ...]
-    projected_point: Point3
-    left_closest: Point3
-    right_closest: Point3
-    gap: float
-
-
-@dataclass(frozen=True, slots=True)
-class PointCloudMesh:
+class IntersectionPointCloud:
     source: Wireframe3
     cloud: PointCloud3
-    mesh: Mesh3 | None
-    node_rows: tuple[tuple[Point3, ...], ...]
-    guide_count: int
-    rejected_count: int
+    curve_count: int
+    raw_intersection_count: int
+    intersecting_pair_count: int
     intersection_tolerance: float
     repeat_distance: float
-    projected_misses: tuple[ProjectedIntersectionMiss, ...]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build a point cloud from DXF linesplan polyline intersection nodes.",
+        description="Build a point cloud from all DXF wire polyline intersection nodes.",
     )
     parser.add_argument(
         "--input",
@@ -126,7 +81,7 @@ def main() -> None:
         "--tolerance",
         type=float,
         default=1e-3,
-        help="Geometry tolerance used when classifying curves.",
+        help="Minimum segment length kept during intersection checks.",
     )
     parser.add_argument(
         "--intersection-tolerance",
@@ -171,23 +126,12 @@ def main() -> None:
     print("cady linesplan intersection point-cloud demo")
     print(f"input: {args.input}")
     print_wireframe_summary("source wireframe", result.source)
-    print(
-        f"classified rows: {len(result.node_rows)}, guides={result.guide_count}, "
-        f"rejected={result.rejected_count}"
-    )
+    print(f"polyline curves: {result.curve_count}")
+    print(f"intersecting polyline pairs: {result.intersecting_pair_count}")
+    print(f"raw pair intersections: {result.raw_intersection_count}")
     print(f"intersection tolerance: {result.intersection_tolerance:g}")
     print(f"repeat distance: {result.repeat_distance:g}")
     print(f"intersection nodes: {len(result.cloud.vertices)}")
-    print(f"projected-only front crossings: {len(result.projected_misses)}")
-    for index, miss in enumerate(result.projected_misses, start=1):
-        print(
-            f"  {index}: curves {miss.left_source_index}/{miss.right_source_index}, "
-            f"profile={_format_point(miss.projected_point)}, gap={miss.gap:g}"
-        )
-    if result.mesh is None:
-        print("mesh: skipped (intersection node rows are not rectangular)")
-    else:
-        print_mesh_summary("mesh", result.mesh)
 
     if args.no_view:
         print("VisPy viewer skipped.")
@@ -205,7 +149,7 @@ def read_polyline_curves(path: Path) -> tuple[dxf.DxfWireCurve, ...]:
     return curves
 
 
-def wireframe_from_curves(curves: Iterable[dxf.DxfWireCurve | LinesplanCurve]) -> Wireframe3:
+def wireframe_from_curves(curves: Iterable[dxf.DxfWireCurve]) -> Wireframe3:
     return Wireframe3.from_polylines(Polyline3(curve.vertices) for curve in curves)
 
 
@@ -221,70 +165,40 @@ def mesh_point_cloud_from_intersections(
     tolerance: float,
     intersection_tolerance: float,
     repeat_distance: float,
-) -> PointCloudMesh:
-    network = classify_linesplan_curves(curves, tolerance=tolerance)
-    sections = tuple(sorted(network.sections, key=_station_x))
-    guides = network.buttocks + network.waterlines + network.knuckles
-    if len(sections) < 2:
-        raise ValueError("intersection point cloud requires at least two section curves")
-    if not guides:
-        raise ValueError("intersection point cloud requires at least one guide curve")
-
-    node_rows = tuple(
-        row
-        for row in (
-            _section_intersection_nodes(
-                section,
-                guides,
-                tolerance=tolerance,
-                intersection_tolerance=intersection_tolerance,
-                repeat_distance=repeat_distance,
-            )
-            for section in sections
-        )
-        if row
-    )
-    nodes = _unique_points(
-        (point for row in node_rows for point in row),
-        tolerance=intersection_tolerance,
-    )
-    if not nodes:
-        raise ValueError("no section-guide intersection nodes were found")
-
-    cloud = PointCloud3(nodes)
-    projected_misses = _projected_intersection_misses(
+) -> IntersectionPointCloud:
+    intersections, intersecting_pair_count = _all_polyline_intersections(
         curves,
         tolerance=tolerance,
         intersection_tolerance=intersection_tolerance,
-        front_fraction=DIAGNOSTIC_FRONT_FRACTION,
-        max_count=DIAGNOSTIC_MAX_MISSES,
+        repeat_distance=repeat_distance,
     )
-    return PointCloudMesh(
+    nodes = _unique_points(
+        (intersection.point for intersection in intersections),
+        tolerance=intersection_tolerance,
+    )
+    if not nodes:
+        raise ValueError("no polyline intersection nodes were found")
+
+    return IntersectionPointCloud(
         source,
-        cloud,
-        _mesh_from_rectangular_rows(node_rows, tolerance=tolerance),
-        node_rows,
-        len(guides),
-        len(network.rejected),
+        PointCloud3(nodes),
+        len(curves),
+        len(intersections),
+        intersecting_pair_count,
         intersection_tolerance,
         repeat_distance,
-        projected_misses,
     )
 
 
-def build_scene(result: PointCloudMesh) -> Scene:
-    target = result.mesh if result.mesh is not None else result.cloud
-    lower, upper = target.bounds()
+def build_scene(result: IntersectionPointCloud) -> Scene:
+    lower, upper = result.source.bounds()
     camera = _fit_profile_camera(lower, upper)
     centre = _bounds_centre(lower, upper)
 
-    scene = Scene(name="linesplan_intersection_point_cloud")
-    if result.mesh is not None:
-        scene = scene.add(result.mesh, name="mesh", style=MESH_STYLE)
-    scene = scene.add(result.source, name="source_wireframe", style=WIRE_STYLE)
-    scene = _add_projected_miss_overlays(scene, result.projected_misses)
     return (
-        scene.add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
+        Scene(name="linesplan_intersection_point_cloud")
+        .add(result.source, name="source_wireframe", style=WIRE_STYLE)
+        .add(result.cloud, name="intersection_nodes", style=POINT_STYLE)
         .with_camera(camera, name="profile")
         .with_light(LIGHT)
         .with_metadata(target=_format_point(centre))
@@ -299,51 +213,29 @@ def print_wireframe_summary(label: str, wireframe: Wireframe3) -> None:
     )
 
 
-def print_mesh_summary(label: str, mesh: Mesh3) -> None:
-    lower, upper = mesh.bounds()
-    print(
-        f"{label}: {len(mesh.vertices)} vertices, {len(mesh.edges)} edges, "
-        f"{len(mesh.faces)} faces, bounds={_format_point(lower)} to {_format_point(upper)}"
-    )
-
-
-def _section_intersection_nodes(
-    section: LinesplanCurve,
-    guides: tuple[LinesplanCurve, ...],
+def _all_polyline_intersections(
+    curves: tuple[dxf.DxfWireCurve, ...],
     *,
     tolerance: float,
     intersection_tolerance: float,
     repeat_distance: float,
-) -> tuple[Point3, ...]:
+) -> tuple[tuple[IntersectionPoint, ...], int]:
     nodes: list[IntersectionPoint] = []
-    for guide in guides:
-        for node in _polyline_intersections(
-            section.vertices,
-            guide.vertices,
-            tolerance=tolerance,
-            intersection_tolerance=intersection_tolerance,
-            repeat_distance=repeat_distance,
-        ):
-            _append_intersection_point(
-                nodes,
-                node,
-                tolerance=intersection_tolerance,
+    intersecting_pair_count = 0
+    for left_index, left in enumerate(curves):
+        for right in curves[left_index + 1 :]:
+            pair_nodes = _polyline_intersections(
+                left.vertices,
+                right.vertices,
+                tolerance=tolerance,
+                intersection_tolerance=intersection_tolerance,
+                repeat_distance=repeat_distance,
             )
-    return tuple(
-        node.point
-        for node in sorted(nodes, key=lambda node: node.measure)
-    )
-
-
-def _append_intersection_point(
-    nodes: list[IntersectionPoint],
-    node: IntersectionPoint,
-    *,
-    tolerance: float,
-) -> None:
-    if any(_points_close(node.point, existing.point, tolerance=tolerance) for existing in nodes):
-        return
-    nodes.append(node)
+            if not pair_nodes:
+                continue
+            intersecting_pair_count += 1
+            nodes.extend(pair_nodes)
+    return tuple(nodes), intersecting_pair_count
 
 
 def _append_pair_intersection(
@@ -418,136 +310,6 @@ def _polyline_intersections(
             repeat_distance=repeat_distance,
         )
     return tuple(nodes)
-
-
-def _projected_intersection_misses(
-    curves: tuple[dxf.DxfWireCurve, ...],
-    *,
-    tolerance: float,
-    intersection_tolerance: float,
-    front_fraction: float,
-    max_count: int,
-) -> tuple[ProjectedIntersectionMiss, ...]:
-    if not curves or max_count <= 0:
-        return ()
-    points = tuple(point for curve in curves for point in curve.vertices)
-    lower_x = min(point[0] for point in points)
-    upper_x = max(point[0] for point in points)
-    front_min_x = upper_x - (upper_x - lower_x) * front_fraction
-
-    segments: list[CurveSegment] = []
-    for curve in curves:
-        for segment in _segment_records(curve.vertices, tolerance=tolerance):
-            if segment.upper[0] >= front_min_x:
-                segments.append(
-                    CurveSegment(curve.source_index, curve.layer, curve.vertices, segment)
-                )
-
-    candidates: list[ProjectedIntersectionMiss] = []
-    for left_index, left in enumerate(segments):
-        for right in segments[left_index + 1 :]:
-            if left.source_index == right.source_index:
-                continue
-            if not _projected_bounds_overlap(left.segment, right.segment):
-                continue
-            projected = _projected_segment_intersection_xz(
-                left.segment.start,
-                left.segment.end,
-                right.segment.start,
-                right.segment.end,
-            )
-            if projected is None:
-                continue
-            x, z = projected
-            if x < front_min_x:
-                continue
-            closest = closest_points_between_segments3(
-                (left.segment.start, left.segment.end),
-                (right.segment.start, right.segment.end),
-                tolerance=intersection_tolerance,
-            )
-            if closest.distance <= intersection_tolerance:
-                continue
-            candidates.append(
-                ProjectedIntersectionMiss(
-                    left.source_index,
-                    right.source_index,
-                    left.layer,
-                    right.layer,
-                    left.vertices,
-                    right.vertices,
-                    (x, (closest.left[1] + closest.right[1]) * 0.5, z),
-                    closest.left,
-                    closest.right,
-                    closest.distance,
-                )
-            )
-
-    return _dedupe_projected_misses(
-        candidates,
-        tolerance=max(intersection_tolerance, DIAGNOSTIC_RING_RADIUS * 0.25),
-        max_count=max_count,
-    )
-
-
-def _projected_bounds_overlap(left: SegmentRecord, right: SegmentRecord) -> bool:
-    return not (
-        left.upper[0] < right.lower[0]
-        or right.upper[0] < left.lower[0]
-        or left.upper[2] < right.lower[2]
-        or right.upper[2] < left.lower[2]
-    )
-
-
-def _projected_segment_intersection_xz(
-    left_start: Point3,
-    left_end: Point3,
-    right_start: Point3,
-    right_end: Point3,
-) -> tuple[float, float] | None:
-    px, py = left_start[0], left_start[2]
-    rx, ry = left_end[0] - px, left_end[2] - py
-    qx, qy = right_start[0], right_start[2]
-    sx, sy = right_end[0] - qx, right_end[2] - qy
-    denominator = _cross2(rx, ry, sx, sy)
-    if abs(denominator) <= 1e-9:
-        return None
-    qpx, qpy = qx - px, qy - py
-    left_parameter = _cross2(qpx, qpy, sx, sy) / denominator
-    right_parameter = _cross2(qpx, qpy, rx, ry) / denominator
-    if not (
-        -1e-9 <= left_parameter <= 1.0 + 1e-9
-        and -1e-9 <= right_parameter <= 1.0 + 1e-9
-    ):
-        return None
-    return (px + left_parameter * rx, py + left_parameter * ry)
-
-
-def _cross2(ax: float, ay: float, bx: float, by: float) -> float:
-    return ax * by - ay * bx
-
-
-def _dedupe_projected_misses(
-    misses: Iterable[ProjectedIntersectionMiss],
-    *,
-    tolerance: float,
-    max_count: int,
-) -> tuple[ProjectedIntersectionMiss, ...]:
-    result: list[ProjectedIntersectionMiss] = []
-    for miss in sorted(misses, key=lambda item: (-item.projected_point[0], -item.gap)):
-        if any(
-            _profile_points_close(miss.projected_point, existing.projected_point, tolerance)
-            for existing in result
-        ):
-            continue
-        result.append(miss)
-        if len(result) >= max_count:
-            break
-    return tuple(result)
-
-
-def _profile_points_close(left: Point3, right: Point3, tolerance: float) -> bool:
-    return dist((left[0], left[2]), (right[0], right[2])) <= tolerance
 
 
 def _segment_records(
@@ -631,70 +393,6 @@ def _neighbour_keys(key: PointKey3) -> Iterable[PointKey3]:
 
 def _points_close(left: Point3, right: Point3, *, tolerance: float) -> bool:
     return dist(left, right) <= tolerance
-
-
-def _mesh_from_rectangular_rows(
-    node_rows: tuple[tuple[Point3, ...], ...],
-    *,
-    tolerance: float,
-) -> Mesh3 | None:
-    if len(node_rows) < 2:
-        return None
-    row_lengths = {len(row) for row in node_rows}
-    if len(row_lengths) != 1:
-        return None
-    columns = next(iter(row_lengths))
-    if columns < 2:
-        return None
-    points = tuple(point for row in node_rows for point in row)
-    return Mesh3.from_points(points, tolerance=tolerance)
-
-
-def _add_projected_miss_overlays(
-    scene: Scene,
-    misses: tuple[ProjectedIntersectionMiss, ...],
-) -> Scene:
-    highlighted: set[int] = set()
-    for index, miss in enumerate(misses, start=1):
-        scene = scene.add(
-            _ring_wireframe(miss.projected_point, radius=DIAGNOSTIC_RING_RADIUS),
-            name=f"projected_miss_{index}_ring",
-            style=PROJECTED_MISS_RING_STYLE,
-        )
-        for source_index, vertices, style in (
-            (miss.left_source_index, miss.left_vertices, PROJECTED_MISS_LEFT_STYLE),
-            (miss.right_source_index, miss.right_vertices, PROJECTED_MISS_RIGHT_STYLE),
-        ):
-            if source_index in highlighted:
-                continue
-            highlighted.add(source_index)
-            scene = scene.add(
-                _curve_wireframe(vertices),
-                name=f"projected_miss_curve_{source_index}",
-                style=style,
-            )
-    return scene
-
-
-def _curve_wireframe(vertices: tuple[Point3, ...]) -> Wireframe3:
-    return Wireframe3.from_polylines((Polyline3(vertices),))
-
-
-def _ring_wireframe(centre: Point3, *, radius: float) -> Wireframe3:
-    segments = 48
-    points = tuple(
-        (
-            centre[0] + cos(2.0 * pi * index / segments) * radius,
-            centre[1],
-            centre[2] + sin(2.0 * pi * index / segments) * radius,
-        )
-        for index in range(segments)
-    )
-    return Wireframe3.from_polylines((Polyline3(points, closed=True),))
-
-
-def _station_x(section: LinesplanCurve) -> float:
-    return sum(point[0] for point in section.vertices) / len(section.vertices)
 
 
 def _fit_profile_camera(lower: Point3, upper: Point3) -> Camera:

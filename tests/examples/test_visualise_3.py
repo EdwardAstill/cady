@@ -264,7 +264,7 @@ def test_linesplan_wireframe_scene_draws_only_wireframe() -> None:
     assert len(prepared.meshes[0].faces) == 0
 
 
-def test_linesplan4_marks_projected_front_crossing() -> None:
+def test_linesplan4_adds_all_polyline_intersection_nodes() -> None:
     module = _load_linesplan4_script("mesh_pc_dxf")
 
     curves = module.read_polyline_curves(module.LINESPLAN_DXF)
@@ -272,26 +272,28 @@ def test_linesplan4_marks_projected_front_crossing() -> None:
         curves,
         source=module.wireframe_from_curves(curves),
         tolerance=1e-3,
-        intersection_tolerance=40.0,
-        repeat_distance=50.0,
+        intersection_tolerance=80.0,
+        repeat_distance=90.0,
     )
     scene = module.build_scene(result)
 
-    assert len(result.projected_misses) == 1
-    miss = result.projected_misses[0]
-    assert {miss.left_source_index, miss.right_source_index} == {5, 16}
-    assert miss.gap > result.intersection_tolerance
-    assert round(miss.projected_point[0]) == 181448
-    assert round(miss.projected_point[2]) == 5000
-    assert "projected_miss_1_ring" in [item.object_name for item in scene.objects]
-    assert "projected_miss_curve_5" in [item.object_name for item in scene.objects]
-    assert "projected_miss_curve_16" in [item.object_name for item in scene.objects]
+    assert not hasattr(result, "node_rows")
+    assert result.curve_count == 105
+    assert result.intersecting_pair_count == 2036
+    assert result.raw_intersection_count == 2503
+    assert len(result.cloud.vertices) == 2381
+    assert any(
+        abs(point[0] - 181447.46) <= 90.0 and abs(point[2] - 4999.91) <= 90.0
+        for point in result.cloud.vertices
+    )
 
     prepared = prepare_scene(scene, tolerance=1e-3)
-    prepared_names = [mesh.name for mesh in prepared.meshes]
-    assert "projected_miss_1_ring" in prepared_names
-    assert "projected_miss_curve_5" in prepared_names
-    assert "projected_miss_curve_16" in prepared_names
+    assert [mesh.name for mesh in prepared.meshes] == [
+        "source_wireframe",
+        "intersection_nodes",
+    ]
+    assert prepared.meshes[1].render_mode == "points"
+    assert len(prepared.meshes[1].vertices) == 2381
 
 
 def _load_linesplan_script(name: str) -> ModuleType:
