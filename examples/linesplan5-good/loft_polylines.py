@@ -1,489 +1,276 @@
-"""Loft station polylines into a simple open Mesh3 grid."""
+"""Loft station polylines and view the resulting mesh."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from colorsys import hsv_to_rgb
-from math import dist, isfinite
-from typing import TypeAlias
+from math import dist
+from statistics import median
+from typing import TypeAlias, cast
 
 from wireframe import STATION_POLYLINES
 
-from cady import (
-    Camera,
-    DirectionalLight,
-    DisplayStyle,
-    Mesh3,
-    PointCloud3,
-    Polyline3,
-    Scene,
-)
+from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene, Wireframe3
 
 Point3: TypeAlias = tuple[float, float, float]
-EdgeIndex: TypeAlias = tuple[int, int]
-FaceIndex: TypeAlias = tuple[int, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
-DEFAULT_NODES_ON_POLYLINE = 48
-DEFAULT_TOLERANCE = 1e-3
-DEFAULT_CONNECTION_TOLERANCE = 1000.0
-VIEW_ASPECT = 900.0 / 700.0
-FIT_PADDING = 1.08
-LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
+NODES_ON_POLYLINE = 100
+TOLERANCE = 1e-3
+SNAP_TOLERANCE = 1000.0
+MIN_STATION_FRAGMENT_LENGTH = 1.0
 START_NODE_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
+SOURCE_STATION_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 
 
-def loft_polylines(
-    polylines: Iterable[Polyline3],
-    nodes_on_polyline: int,
-    *,
-    tolerance: float = DEFAULT_TOLERANCE,
-    connection_tolerance: float = DEFAULT_CONNECTION_TOLERANCE,
-) -> Mesh3:
-    """Join touching station fragments, sample rows, and connect them as a Mesh3."""
-    if nodes_on_polyline < 2:
-        raise ValueError("nodes_on_polyline must be at least 2")
-    _validate_tolerance(tolerance)
-
-    node_array = make_node_array(
-        polylines,
-        nodes_on_polyline,
-        tolerance=tolerance,
-        connection_tolerance=connection_tolerance,
-    )
-    edges, faces = edges_and_faces_from_node_array(node_array)
-    vertices = tuple(point for row in node_array for point in row)
-    return Mesh3(vertices, faces, edges)
+def loft_polylines2(polylines: Iterable[Polyline3]) -> Mesh3:
+    station_lines = process_station_lines(polylines, SNAP_TOLERANCE)
+    mirrored_lines = mirror_station_lines(station_lines)
+    nodes = get_node_array(mirrored_lines)
+    return mesh_node_array(nodes)
 
 
-def make_node_array(
-    polylines: Iterable[Polyline3],
-    nodes_on_polyline: int,
-    *,
-    tolerance: float = DEFAULT_TOLERANCE,
-    connection_tolerance: float = DEFAULT_CONNECTION_TOLERANCE,
-) -> NodeArray:
-    """Return one equal-width node row for each connected station polyline."""
-    if nodes_on_polyline < 2:
-        raise ValueError("nodes_on_polyline must be at least 2")
-    _validate_tolerance(tolerance)
-    _validate_tolerance(connection_tolerance)
-
-    polylines = connect_polylines(polylines, tolerance=connection_tolerance)
-    if len(polylines) < 2:
-        raise ValueError("loft_polylines requires at least two polylines")
-
-    node_array: list[tuple[Point3, ...]] = []
+def mirror_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
+    mirrored: list[Polyline3] = []
     for polyline in polylines:
-        points = _dedupe_adjacent_points(polyline.points(), tolerance=tolerance)
-        if len(points) < 2:
-            raise ValueError("each polyline must contain at least two distinct points")
+        points = [_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE)]
+        if points[-1][2] > points[0][2]:
+            points = list(reversed(points))
 
-        segment_lengths = tuple(
-            dist(start, end) for start, end in zip(points, points[1:], strict=False)
-        )
-        total_length = sum(segment_lengths)
-        if total_length <= tolerance:
-            raise ValueError("each polyline must have non-zero length")
+        mirrored_points = [_clean_point((point[0], -point[1], point[2])) for point in points]
+        mirrored_points = list(reversed(mirrored_points))
+        if dist(points[-1], mirrored_points[0]) <= TOLERANCE:
+            mirrored_points = mirrored_points[1:]
 
-        node_array.append(
-            tuple(
-                _point_at_distance(
-                    points,
-                    segment_lengths,
-                    total_length * index / (nodes_on_polyline - 1),
-                )
-                for index in range(nodes_on_polyline)
-            )
-        )
-
-    oriented_node_array = [node_array[0]]
-    for row in node_array[1:]:
-        previous = oriented_node_array[-1]
-        same_direction_distance = dist(previous[0], row[0]) + dist(previous[-1], row[-1])
-        flipped_direction_distance = dist(previous[0], row[-1]) + dist(previous[-1], row[0])
-        if flipped_direction_distance < same_direction_distance:
-            row = tuple(reversed(row))
-        oriented_node_array.append(row)
-
-    return tuple(oriented_node_array)
+        mirrored.append(Polyline3((*points, *mirrored_points)))
+    return tuple(mirrored)
 
 
-def connect_polylines(
+def process_station_lines(
     polylines: Iterable[Polyline3],
-    *,
-    tolerance: float = DEFAULT_CONNECTION_TOLERANCE,
+    snap_tolerance: float,
 ) -> tuple[Polyline3, ...]:
-    """Join open fragments whose endpoints meet or snap onto another fragment."""
-    _validate_tolerance(tolerance)
+    rows: list[tuple[Point3, ...]] = []
+    for polyline in polylines:
+        row = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+        if _polyline_length(row) > MIN_STATION_FRAGMENT_LENGTH:
+            rows.append(row)
 
-    remaining = [_polyline_points(polyline) for polyline in polylines]
-    if any(len(points) < 2 for points in remaining):
-        raise ValueError("each polyline must contain at least two distinct points")
+    connected: list[tuple[Point3, ...]] = []
 
-    connected: list[Polyline3] = []
-    while remaining:
-        points = remaining.pop(0)
+    while rows:
+        row = rows.pop(0)
         while True:
-            best_index: int | None = None
-            best_match: tuple[float, tuple[Point3, ...]] | None = None
-            for index, candidate in enumerate(remaining):
-                match = _duplicate_polyline_points(
-                    points,
-                    candidate,
-                    tolerance=tolerance,
-                )
-                if match is None:
-                    match = _joined_polyline_points(
-                        points,
-                        candidate,
-                        tolerance=tolerance,
-                    )
-                if match is None:
-                    match = _snapped_polyline_points(
-                        points,
-                        candidate,
-                        tolerance=tolerance,
-                    )
-                if match is None:
-                    continue
-                if best_match is None or match[0] < best_match[0]:
-                    best_index = index
-                    best_match = match
+            match_index = None
+            match_row: tuple[Point3, ...] | None = None
 
-            if best_index is None or best_match is None:
+            for index, candidate in enumerate(rows):
+                if len(row) == len(candidate):
+                    same = max(dist(a, b) for a, b in zip(row, candidate, strict=True))
+                    flipped = max(dist(a, b) for a, b in zip(row, reversed(candidate), strict=True))
+                    if same <= TOLERANCE or flipped <= TOLERANCE:
+                        match_index = index
+                        match_row = row
+                        break
+
+                joins: list[tuple[Point3, ...]] = []
+                if dist(row[-1], candidate[0]) <= snap_tolerance:
+                    joins.append(row + candidate[1:])
+                if dist(row[-1], candidate[-1]) <= snap_tolerance:
+                    joins.append(row + tuple(reversed(candidate[:-1])))
+                if dist(row[0], candidate[-1]) <= snap_tolerance:
+                    joins.append(candidate[:-1] + row)
+                if dist(row[0], candidate[0]) <= snap_tolerance:
+                    joins.append(tuple(reversed(candidate[1:])) + row)
+                if len(joins) == 1:
+                    match_index = index
+                    match_row = joins[0]
+                    break
+
+                best_snap: tuple[float, tuple[Point3, ...]] | None = None
+                for source, target in ((candidate, row), (row, candidate)):
+                    for endpoint_index in (0, -1):
+                        endpoint = source[endpoint_index]
+                        source_row = source if endpoint_index == 0 else tuple(reversed(source))
+
+                        for segment_index, (start, end) in enumerate(
+                            zip(target, target[1:], strict=False)
+                        ):
+                            segment = (
+                                end[0] - start[0],
+                                end[1] - start[1],
+                                end[2] - start[2],
+                            )
+                            length_squared = (
+                                segment[0] * segment[0]
+                                + segment[1] * segment[1]
+                                + segment[2] * segment[2]
+                            )
+                            if length_squared == 0.0:
+                                continue
+
+                            offset = (
+                                endpoint[0] - start[0],
+                                endpoint[1] - start[1],
+                                endpoint[2] - start[2],
+                            )
+                            position = (
+                                offset[0] * segment[0]
+                                + offset[1] * segment[1]
+                                + offset[2] * segment[2]
+                            ) / length_squared
+                            if not 0.0 < position < 1.0:
+                                continue
+
+                            snap_point = (
+                                start[0] + segment[0] * position,
+                                start[1] + segment[1] * position,
+                                start[2] + segment[2] * position,
+                            )
+                            distance = dist(endpoint, snap_point)
+                            if distance > snap_tolerance:
+                                continue
+
+                            snapped = (
+                                target[: segment_index + 1]
+                                + (snap_point,)
+                                + source_row
+                                + target[segment_index + 1 :]
+                            )
+                            if best_snap is None or distance < best_snap[0]:
+                                best_snap = (distance, snapped)
+
+                if best_snap is not None:
+                    match_index = index
+                    match_row = best_snap[1]
+                    break
+
+            if match_index is None or match_row is None:
                 break
-            points = best_match[1]
-            del remaining[best_index]
 
-        connected.append(Polyline3(points))
+            row = _dedupe(match_row)
+            del rows[match_index]
 
-    return tuple(connected)
+        connected.append(row)
 
-
-def edges_and_faces_from_node_array(
-    node_array: NodeArray,
-) -> tuple[tuple[EdgeIndex, ...], tuple[FaceIndex, ...]]:
-    """Build indexed grid edges and quad faces from sampled station rows."""
-    if len(node_array) < 2:
-        raise ValueError("node_array must contain at least two rows")
-
-    width = len(node_array[0])
-    if width < 2:
-        raise ValueError("node_array rows must contain at least two nodes")
-    if any(len(row) != width for row in node_array):
-        raise ValueError("node_array rows must all have the same length")
-
-    edges: set[EdgeIndex] = set()
-    faces: list[FaceIndex] = []
-
-    for row in range(len(node_array)):
-        base = row * width
-        for col in range(width - 1):
-            edges.add((base + col, base + col + 1))
-
-    for row in range(len(node_array) - 1):
-        base = row * width
-        next_base = (row + 1) * width
-        for col in range(width):
-            edges.add((base + col, next_base + col))
-        for col in range(width - 1):
-            faces.append((
-                base + col,
-                next_base + col,
-                next_base + col + 1,
-                base + col + 1,
-            ))
-
-    return tuple(sorted(edges)), tuple(faces)
+    connected.sort(key=lambda line: median(point[0] for point in line))
+    return tuple(Polyline3(row) for row in connected)
 
 
-def build_processed_polylines_scene(
-    polylines: Iterable[Polyline3],
-    *,
-    connection_tolerance: float = DEFAULT_CONNECTION_TOLERANCE,
-) -> Scene:
-    """Build a debug scene with connected rows coloured individually."""
-    processed = connect_polylines(polylines, tolerance=connection_tolerance)
-    lower, upper = _polylines_bounds(processed)
-    scene = Scene(
-        name="processed_station_polylines",
-        camera=_fit_profile_camera(lower, upper),
-        lights=(LIGHT,),
-    )
-    for index, polyline in enumerate(processed):
+def get_node_array(polylines: Iterable[Polyline3]) -> NodeArray:
+    rows: list[tuple[Point3, ...]] = []
+    for polyline in polylines:
+        points = _dedupe(
+            (float(point[0]), float(point[1]), float(point[2]))
+            for point in polyline.to_array(tolerance=TOLERANCE)
+        )
+        if points[-1][2] > points[0][2]:
+            points = tuple(reversed(points))
+
+        lengths = tuple(dist(start, end) for start, end in zip(points, points[1:], strict=False))
+        total = sum(lengths)
+
+        row: list[Point3] = []
+        for node_index in range(NODES_ON_POLYLINE):
+            target = total * node_index / (NODES_ON_POLYLINE - 1)
+            walked = 0.0
+            for start, end, length in zip(points, points[1:], lengths, strict=True):
+                next_walked = walked + length
+                if target <= next_walked or end == points[-1]:
+                    ratio = 0.0 if length == 0.0 else (target - walked) / length
+                    row.append(
+                        (
+                            start[0] + (end[0] - start[0]) * ratio,
+                            start[1] + (end[1] - start[1]) * ratio,
+                            start[2] + (end[2] - start[2]) * ratio,
+                        )
+                    )
+                    break
+                walked = next_walked
+
+        nodes = tuple(row)
+        x = float(median(point[0] for point in nodes))
+        rows.append(tuple((x, point[1], point[2]) for point in nodes))
+
+    return tuple(rows)
+
+
+def mesh_node_array(nodes: NodeArray) -> Mesh3:
+    width = len(nodes[0])
+    vertices = tuple(point for row in nodes for point in row)
+    edges: set[tuple[int, int]] = set()
+    faces: list[tuple[int, ...]] = []
+
+    for row_index in range(len(nodes)):
+        start = row_index * width
+        for column_index in range(width - 1):
+            edges.add((start + column_index, start + column_index + 1))
+
+    for row_index in range(len(nodes) - 1):
+        start = row_index * width
+        next_start = (row_index + 1) * width
+        for column_index in range(width):
+            edges.add((start + column_index, next_start + column_index))
+        for column_index in range(width - 1):
+            faces.append(
+                (
+                    start + column_index,
+                    next_start + column_index,
+                    next_start + column_index + 1,
+                    start + column_index + 1,
+                )
+            )
+
+    return Mesh3(vertices, tuple(faces), tuple(sorted(edges)))
+
+
+def view_node_array(nodes: NodeArray) -> None:
+    scene = Scene(name="processed_station_polylines")
+    for index, row in enumerate(nodes):
         scene = scene.add(
-            polyline.points(),
-            name=f"station_polyline_{index:02d}",
-            style=DisplayStyle(color=_polyline_color(index, len(processed))),
+            row,
+            name=f"station_{index:02d}",
+            style=DisplayStyle(color=hsv_to_rgb(index / max(len(nodes), 1), 0.72, 0.92)),
         )
 
-    starts = tuple(polyline.points()[0] for polyline in processed)
-    return scene.add(
-        PointCloud3(starts),
-        name="station_polyline_start_nodes",
-        style=START_NODE_STYLE,
+    starts = tuple(row[0] for row in nodes)
+    scene.add(PointCloud3(starts), name="station_starts", style=START_NODE_STYLE).view(
+        title="processed station polylines"
     )
 
 
-def view_processed_polylines(polylines: Iterable[Polyline3]) -> None:
-    """Open the connected station polylines with start-node markers."""
-    build_processed_polylines_scene(polylines).view(title="processed station polylines")
+def view_original_station_lines(polylines: Iterable[Polyline3]) -> None:
+    wireframe = Wireframe3.from_polylines(polylines)
+    wireframe.view(title="original station polylines", style=SOURCE_STATION_STYLE)
 
 
-def _duplicate_polyline_points(
-    points: tuple[Point3, ...],
-    candidate: tuple[Point3, ...],
-    *,
-    tolerance: float,
-) -> tuple[float, tuple[Point3, ...]] | None:
-    """Return unchanged points when the candidate is the same row."""
-    if len(points) != len(candidate):
-        return None
-
-    duplicate_tolerance = min(tolerance, DEFAULT_TOLERANCE)
-    same_distance = max(dist(start, end) for start, end in zip(points, candidate, strict=True))
-    if same_distance <= duplicate_tolerance:
-        return same_distance, points
-
-    reversed_candidate = tuple(reversed(candidate))
-    reversed_distance = max(
-        dist(start, end) for start, end in zip(points, reversed_candidate, strict=True)
-    )
-    if reversed_distance <= duplicate_tolerance:
-        return reversed_distance, points
-
-    return None
-
-
-def _joined_polyline_points(
-    points: tuple[Point3, ...],
-    candidate: tuple[Point3, ...],
-    *,
-    tolerance: float,
-) -> tuple[float, tuple[Point3, ...]] | None:
-    """Return a candidate join, or None for non-matches and full overlaps."""
-    matches: list[tuple[float, tuple[Point3, ...]]] = []
-
-    distance = dist(points[-1], candidate[0])
-    if distance <= tolerance:
-        matches.append((distance, points + candidate[1:]))
-
-    distance = dist(points[-1], candidate[-1])
-    if distance <= tolerance:
-        matches.append((distance, points + tuple(reversed(candidate[:-1]))))
-
-    distance = dist(points[0], candidate[-1])
-    if distance <= tolerance:
-        matches.append((distance, candidate[:-1] + points))
-
-    distance = dist(points[0], candidate[0])
-    if distance <= tolerance:
-        matches.append((distance, tuple(reversed(candidate[1:])) + points))
-
-    if len(matches) != 1:
-        return None
-    return matches[0]
-
-
-def _snapped_polyline_points(
-    points: tuple[Point3, ...],
-    candidate: tuple[Point3, ...],
-    *,
-    tolerance: float,
-) -> tuple[float, tuple[Point3, ...]] | None:
-    """Return the nearest endpoint-to-segment snap candidate."""
-    matches = (
-        _snap_endpoint_to_polyline(candidate, points, tolerance=tolerance),
-        _snap_endpoint_to_polyline(points, candidate, tolerance=tolerance),
-    )
-    matches = tuple(match for match in matches if match is not None)
-    if not matches:
-        return None
-    return min(matches, key=lambda match: match[0])
-
-
-def _snap_endpoint_to_polyline(
-    source: tuple[Point3, ...],
-    target: tuple[Point3, ...],
-    *,
-    tolerance: float,
-) -> tuple[float, tuple[Point3, ...]] | None:
-    best: tuple[float, tuple[Point3, ...]] | None = None
-    for endpoint_index in (0, -1):
-        endpoint = source[endpoint_index]
-        source_points = source if endpoint_index == 0 else tuple(reversed(source))
-        for index, (start, end) in enumerate(zip(target, target[1:], strict=False)):
-            distance, snap_point, segment_position = _point_segment_distance(
-                endpoint,
-                start,
-                end,
-            )
-            if not 0.0 < segment_position < 1.0 or distance > tolerance:
-                continue
-
-            snapped = (
-                target[: index + 1]
-                + (snap_point,)
-                + source_points
-                + target[index + 1 :]
-            )
-            if best is None or distance < best[0]:
-                best = (distance, snapped)
-
-    return best
-
-
-def _point_segment_distance(
-    point: Point3,
-    start: Point3,
-    end: Point3,
-) -> tuple[float, Point3, float]:
-    vector = (
-        end[0] - start[0],
-        end[1] - start[1],
-        end[2] - start[2],
-    )
-    segment_length_squared = _dot(vector, vector)
-    if segment_length_squared == 0.0:
-        return dist(point, start), start, 0.0
-
-    segment_position = max(
-        0.0,
-        min(
-            1.0,
-            _dot(
-                (
-                    point[0] - start[0],
-                    point[1] - start[1],
-                    point[2] - start[2],
-                ),
-                vector,
-            )
-            / segment_length_squared,
-        ),
-    )
-    snap_point = (
-        start[0] + vector[0] * segment_position,
-        start[1] + vector[1] * segment_position,
-        start[2] + vector[2] * segment_position,
-    )
-    return dist(point, snap_point), snap_point, segment_position
-
-
-def _dot(left: Point3, right: Point3) -> float:
-    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
-
-
-def _polyline_color(index: int, count: int) -> tuple[float, float, float]:
-    hue = index / max(count, 1)
-    return hsv_to_rgb(hue, 0.72, 0.92)
-
-
-def _polylines_bounds(polylines: tuple[Polyline3, ...]) -> tuple[Point3, Point3]:
-    points = tuple(point for polyline in polylines for point in polyline.points())
-    if not points:
-        raise ValueError("cannot build a scene for empty polylines")
-    return (
-        (
-            min(point[0] for point in points),
-            min(point[1] for point in points),
-            min(point[2] for point in points),
-        ),
-        (
-            max(point[0] for point in points),
-            max(point[1] for point in points),
-            max(point[2] for point in points),
-        ),
-    )
-
-
-def _fit_profile_camera(lower: Point3, upper: Point3) -> Camera:
-    centre = _bounds_centre(lower, upper)
-    span = (upper[0] - lower[0], upper[1] - lower[1], upper[2] - lower[2])
-    profile_scale = max(span[2], span[0] / VIEW_ASPECT, 1.0) * FIT_PADDING
-    distance = max(span) * 1.5 or 1.0
-    return Camera.orthographic(
-        position=(centre[0], centre[1] - distance, centre[2]),
-        target=centre,
-        scale=profile_scale,
-    )
-
-
-def _bounds_centre(lower: Point3, upper: Point3) -> Point3:
-    return (
-        (lower[0] + upper[0]) / 2.0,
-        (lower[1] + upper[1]) / 2.0,
-        (lower[2] + upper[2]) / 2.0,
-    )
-
-
-def _polyline_points(polyline: Polyline3) -> tuple[Point3, ...]:
-    """Return polyline points as plain float tuples."""
-    return tuple((float(point[0]), float(point[1]), float(point[2])) for point in polyline.points())
-
-
-def _point_at_distance(
-    points: tuple[Point3, ...],
-    segment_lengths: tuple[float, ...],
-    target: float,
-) -> Point3:
-    """Interpolate the point at a target walk distance along a point chain."""
-    walked = 0.0
-    for start, end, length in zip(points, points[1:], segment_lengths, strict=True):
-        next_walked = walked + length
-        if target <= next_walked or end == points[-1]:
-            if length == 0.0:
-                return start
-            ratio = (target - walked) / length
-            return (
-                start[0] + (end[0] - start[0]) * ratio,
-                start[1] + (end[1] - start[1]) * ratio,
-                start[2] + (end[2] - start[2]) * ratio,
-            )
-        walked = next_walked
-    return points[-1]
-
-
-def _dedupe_adjacent_points(
-    points: Iterable[Point3],
-    *,
-    tolerance: float,
-) -> tuple[Point3, ...]:
-    """Drop adjacent duplicate points so zero-length segments do not affect sampling."""
+def _dedupe(points: Iterable[Point3]) -> tuple[Point3, ...]:
     kept: list[Point3] = []
     for point in points:
-        point = (float(point[0]), float(point[1]), float(point[2]))
-        if kept and dist(point, kept[-1]) <= tolerance:
-            continue
-        kept.append(point)
+        if not kept or dist(point, kept[-1]) > TOLERANCE:
+            kept.append(point)
     return tuple(kept)
 
 
-def _validate_tolerance(tolerance: float) -> None:
-    """Reject non-finite or non-positive geometric tolerances."""
-    if tolerance <= 0.0 or not isfinite(tolerance):
-        raise ValueError("tolerance must be positive")
+def _polyline_length(points: tuple[Point3, ...]) -> float:
+    return sum(dist(start, end) for start, end in zip(points, points[1:], strict=False))
 
 
-def main() -> None:
-    """Run the station-polyline loft example and print a mesh summary."""
-    mesh = loft_polylines(STATION_POLYLINES, DEFAULT_NODES_ON_POLYLINE)
-    print(
-        "lofted station mesh: "
-        f"{len(mesh.vertices)} vertices, {len(mesh.edges)} edges, {len(mesh.faces)} faces"
-    )
-    mesh.view()
+def _clean_point(point: object) -> Point3:
+    coordinates = cast(Sequence[float], point)
+    x, y, z = (float(coordinates[0]), float(coordinates[1]), float(coordinates[2]))
+    if abs(y) <= TOLERANCE:
+        y = 0.0
+    return (x, y, z)
 
 
-def view_wireframe(polylines: Iterable[Polyline3]) -> None:
-    """Open the source station polylines as a wireframe."""
-    from cady import Wireframe3
-
-    wireframe = Wireframe3.from_polylines(polylines)
-    wireframe.view()
+PROCESSED_STATION_POLYLINES = process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
+MIRRORED_STATION_POLYLINES = mirror_station_lines(PROCESSED_STATION_POLYLINES)
+MIRRORED_STATION_NODES = get_node_array(MIRRORED_STATION_POLYLINES)
+MIRRORED_STATION_MESH = mesh_node_array(MIRRORED_STATION_NODES)
 
 
 if __name__ == "__main__":
-    view_processed_polylines(STATION_POLYLINES)
-    main()
+    view_original_station_lines(STATION_POLYLINES)
+    view_node_array(MIRRORED_STATION_NODES)
+    MIRRORED_STATION_MESH.view(title="mirrored linesplan station mesh")

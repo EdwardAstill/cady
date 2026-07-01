@@ -103,10 +103,11 @@ def build_case(
     if key == "linesplan-dxf":
         from cady.vessels import Linesplan
 
-        mesh = Linesplan.from_dxf(linesplan_dxf, tolerance=linesplan_tolerance).to_mesh(
-            nodes_per_station=linesplan_nodes,
+        mesh = Linesplan.from_dxf(
+            linesplan_dxf,
+            nodes_on_polyline=linesplan_nodes,
             tolerance=linesplan_tolerance,
-        )
+        ).to_mesh(tolerance=linesplan_tolerance)
         return DecimationCase(
             key,
             "closed linesplan mesh from DXF",

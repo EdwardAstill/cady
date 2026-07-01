@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TypeAlias
 
-from loft_polylines2 import MIRRORED_STATION_MESH, MIRRORED_STATION_NODES, TOLERANCE
+from loft_polylines import MIRRORED_STATION_MESH, MIRRORED_STATION_NODES, TOLERANCE
 
 from cady import Mesh3
 

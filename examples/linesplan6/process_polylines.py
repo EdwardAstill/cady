@@ -1,4 +1,4 @@
-"""Loft station polylines and view the resulting mesh."""
+"""Clean, join, split, and inspect station polylines."""
 
 from __future__ import annotations
 
@@ -8,42 +8,51 @@ from math import dist
 from statistics import median
 from typing import TypeAlias, cast
 
-from wireframe import STATION_POLYLINES
-
-from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene, Wireframe3
+from cady import DisplayStyle, PointCloud3, Polyline3, Scene, Wireframe3
 
 Point3: TypeAlias = tuple[float, float, float]
-NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
+PolylineGroup: TypeAlias = tuple[Polyline3, ...]
+ProcessedPolylineGroups: TypeAlias = tuple[PolylineGroup, PolylineGroup]
 
-NODES_ON_POLYLINE = 100
 TOLERANCE = 1e-3
 SNAP_TOLERANCE = 1000.0
 MIN_STATION_FRAGMENT_LENGTH = 1.0
-START_NODE_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
+KEEL_DISCONTINUITY_ANGLE_DEGREES = 60.0
+TOP_POSITIVE_Y_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
+DISCONTINUITY_STYLE = DisplayStyle(color=(1.0, 0.18, 0.05), point_size=12.0)
+END_POINT_STYLE = DisplayStyle(color=(0.1, 0.82, 0.24), point_size=10.0)
 SOURCE_STATION_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 
 
-def loft_polylines2(polylines: Iterable[Polyline3]) -> Mesh3:
+def process_polylines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
     station_lines = process_station_lines(polylines, SNAP_TOLERANCE)
-    mirrored_lines = mirror_station_lines(station_lines)
-    nodes = get_node_array(mirrored_lines)
-    return mesh_node_array(nodes)
+    station_lines = prepare_station_lines(station_lines)
+    return split_station_lines(station_lines)
 
 
-def mirror_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
-    mirrored: list[Polyline3] = []
+def prepare_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
+    return tuple(_prepare_station_line(polyline) for polyline in polylines)
+
+
+def split_station_lines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
+    positive_y_top: list[Polyline3] = []
+    discontinuity_top: list[Polyline3] = []
+
     for polyline in polylines:
-        points = [_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE)]
-        if points[-1][2] > points[0][2]:
-            points = list(reversed(points))
+        points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+        discontinuity_index = _top_discontinuity_index(points)
+        if discontinuity_index is None:
+            positive_y_top.append(Polyline3(points))
+            continue
 
-        mirrored_points = [_clean_point((point[0], -point[1], point[2])) for point in points]
-        mirrored_points = list(reversed(mirrored_points))
-        if dist(points[-1], mirrored_points[0]) <= TOLERANCE:
-            mirrored_points = mirrored_points[1:]
+        yellow_top_points = points[: discontinuity_index + 1]
+        red_top_points = points[discontinuity_index:]
+        if len(yellow_top_points) >= 2:
+            positive_y_top.append(Polyline3(yellow_top_points))
+        if len(red_top_points) >= 2:
+            discontinuity_top.append(Polyline3(red_top_points))
 
-        mirrored.append(Polyline3((*points, *mirrored_points)))
-    return tuple(mirrored)
+    return (tuple(positive_y_top), tuple(discontinuity_top))
 
 
 def process_station_lines(
@@ -157,86 +166,76 @@ def process_station_lines(
     return tuple(Polyline3(row) for row in connected)
 
 
-def get_node_array(polylines: Iterable[Polyline3]) -> NodeArray:
-    rows: list[tuple[Point3, ...]] = []
+def station_top_positive_y_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
+    points: list[Point3] = []
     for polyline in polylines:
-        points = _dedupe(
-            (float(point[0]), float(point[1]), float(point[2]))
-            for point in polyline.to_array(tolerance=TOLERANCE)
+        polyline_points = tuple(
+            _clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE)
         )
-        if points[-1][2] > points[0][2]:
-            points = tuple(reversed(points))
-
-        lengths = tuple(dist(start, end) for start, end in zip(points, points[1:], strict=False))
-        total = sum(lengths)
-
-        row: list[Point3] = []
-        for node_index in range(NODES_ON_POLYLINE):
-            target = total * node_index / (NODES_ON_POLYLINE - 1)
-            walked = 0.0
-            for start, end, length in zip(points, points[1:], lengths, strict=True):
-                next_walked = walked + length
-                if target <= next_walked or end == points[-1]:
-                    ratio = 0.0 if length == 0.0 else (target - walked) / length
-                    row.append(
-                        (
-                            start[0] + (end[0] - start[0]) * ratio,
-                            start[1] + (end[1] - start[1]) * ratio,
-                            start[2] + (end[2] - start[2]) * ratio,
-                        )
-                    )
-                    break
-                walked = next_walked
-
-        nodes = tuple(row)
-        x = float(median(point[0] for point in nodes))
-        rows.append(tuple((x, point[1], point[2]) for point in nodes))
-
-    return tuple(rows)
+        positive_y_points = tuple(point for point in polyline_points if point[1] > TOLERANCE)
+        if positive_y_points:
+            points.append(max(positive_y_points, key=lambda point: point[2]))
+    return tuple(points)
 
 
-def mesh_node_array(nodes: NodeArray) -> Mesh3:
-    width = len(nodes[0])
-    vertices = tuple(point for row in nodes for point in row)
-    edges: set[tuple[int, int]] = set()
-    faces: list[tuple[int, ...]] = []
-
-    for row_index in range(len(nodes)):
-        start = row_index * width
-        for column_index in range(width - 1):
-            edges.add((start + column_index, start + column_index + 1))
-
-    for row_index in range(len(nodes) - 1):
-        start = row_index * width
-        next_start = (row_index + 1) * width
-        for column_index in range(width):
-            edges.add((start + column_index, next_start + column_index))
-        for column_index in range(width - 1):
-            faces.append(
-                (
-                    start + column_index,
-                    next_start + column_index,
-                    next_start + column_index + 1,
-                    start + column_index + 1,
-                )
+def station_top_discontinuity_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
+    points: list[Point3] = []
+    for polyline in polylines:
+        discontinuities = tuple(
+            _clean_point(point)
+            for point in polyline.discontinuities(
+                min_angle_degrees=KEEL_DISCONTINUITY_ANGLE_DEGREES,
+                min_segment_length=TOLERANCE,
             )
+        )
+        if discontinuities:
+            points.append(max(discontinuities, key=lambda point: point[2]))
+    return tuple(points)
 
-    return Mesh3(vertices, tuple(faces), tuple(sorted(edges)))
+
+def station_end_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
+    return tuple(_clean_point(polyline.end) for polyline in polylines)
 
 
-def view_node_array(nodes: NodeArray) -> None:
+def view_processed_station_lines(
+    polylines: Iterable[Polyline3],
+    top_positive_y_points: Iterable[Point3] = (),
+    top_discontinuities: Iterable[Point3] = (),
+    end_points: Iterable[Point3] = (),
+) -> None:
+    polylines = tuple(polylines)
     scene = Scene(name="processed_station_polylines")
-    for index, row in enumerate(nodes):
+    for index, polyline in enumerate(polylines):
         scene = scene.add(
-            row,
+            polyline.points(),
             name=f"station_{index:02d}",
-            style=DisplayStyle(color=hsv_to_rgb(index / max(len(nodes), 1), 0.72, 0.92)),
+            style=DisplayStyle(color=hsv_to_rgb(index / max(len(polylines), 1), 0.72, 0.92)),
         )
 
-    starts = tuple(row[0] for row in nodes)
-    scene.add(PointCloud3(starts), name="station_starts", style=START_NODE_STYLE).view(
-        title="processed station polylines"
-    )
+    positive_y_points = tuple(top_positive_y_points)
+    if positive_y_points:
+        scene = scene.add(
+            PointCloud3(positive_y_points),
+            name="station_top_positive_y_points",
+            style=TOP_POSITIVE_Y_STYLE,
+        )
+
+    discontinuities = tuple(top_discontinuities)
+    if discontinuities:
+        scene = scene.add(
+            PointCloud3(discontinuities),
+            name="station_top_discontinuities",
+            style=DISCONTINUITY_STYLE,
+        )
+
+    ends = tuple(end_points)
+    if ends:
+        scene = scene.add(
+            PointCloud3(ends),
+            name="station_end_points",
+            style=END_POINT_STYLE,
+        )
+    scene.view(title="processed station polylines")
 
 
 def view_original_station_lines(polylines: Iterable[Polyline3]) -> None:
@@ -256,6 +255,55 @@ def _polyline_length(points: tuple[Point3, ...]) -> float:
     return sum(dist(start, end) for start, end in zip(points, points[1:], strict=False))
 
 
+def _prepare_station_line(polyline: Polyline3) -> Polyline3:
+    points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+    points = _trim_after_top_positive_y(points)
+    prepared = Polyline3(points)
+    if prepared.end[2] > prepared.start[2]:
+        prepared = prepared.reverse()
+    return prepared
+
+
+def _top_discontinuity_index(points: tuple[Point3, ...]) -> int | None:
+    discontinuities = Polyline3(points).discontinuities(
+        min_angle_degrees=KEEL_DISCONTINUITY_ANGLE_DEGREES,
+        min_segment_length=TOLERANCE,
+    )
+    if not discontinuities:
+        return None
+
+    discontinuity_indices: list[int] = []
+    for discontinuity in discontinuities:
+        point = _clean_point(discontinuity)
+        index, distance = min(
+            ((index, dist(candidate, point)) for index, candidate in enumerate(points)),
+            key=lambda item: item[1],
+        )
+        if distance <= TOLERANCE:
+            discontinuity_indices.append(index)
+
+    if not discontinuity_indices:
+        return None
+    return max(discontinuity_indices, key=lambda index: points[index][2])
+
+
+def _trim_after_top_positive_y(points: tuple[Point3, ...]) -> tuple[Point3, ...]:
+    top_index = _top_positive_y_index(points)
+    if top_index is None or top_index == 0 or top_index == len(points) - 1:
+        return points
+    return points[: top_index + 1]
+
+
+def _top_positive_y_index(points: tuple[Point3, ...]) -> int | None:
+    positive_y_points = (
+        (index, point) for index, point in enumerate(points) if point[1] > TOLERANCE
+    )
+    top = max(positive_y_points, key=lambda item: item[1][2], default=None)
+    if top is None:
+        return None
+    return top[0]
+
+
 def _clean_point(point: object) -> Point3:
     coordinates = cast(Sequence[float], point)
     x, y, z = (float(coordinates[0]), float(coordinates[1]), float(coordinates[2]))
@@ -264,13 +312,16 @@ def _clean_point(point: object) -> Point3:
     return (x, y, z)
 
 
-PROCESSED_STATION_POLYLINES = process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
-MIRRORED_STATION_POLYLINES = mirror_station_lines(PROCESSED_STATION_POLYLINES)
-MIRRORED_STATION_NODES = get_node_array(MIRRORED_STATION_POLYLINES)
-MIRRORED_STATION_MESH = mesh_node_array(MIRRORED_STATION_NODES)
-
-
 if __name__ == "__main__":
+    from wireframe import STATION_POLYLINES
+
+    processed_station_polylines = prepare_station_lines(
+        process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
+    )
     view_original_station_lines(STATION_POLYLINES)
-    view_node_array(MIRRORED_STATION_NODES)
-    MIRRORED_STATION_MESH.view(title="mirrored linesplan station mesh")
+    view_processed_station_lines(
+        processed_station_polylines,
+        station_top_positive_y_points(processed_station_polylines),
+        station_top_discontinuity_points(processed_station_polylines),
+        station_end_points(processed_station_polylines),
+    )

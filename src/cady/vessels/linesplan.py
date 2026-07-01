@@ -21,7 +21,7 @@ _Face: TypeAlias = tuple[int, int, int]
 _Edge: TypeAlias = tuple[int, int]
 _NodeArray: TypeAlias = tuple[tuple[_Point3, ...], ...]
 
-_DEFAULT_NODES_PER_STATION = 48
+_DEFAULT_NODES_ON_POLYLINE = 48
 _DEFAULT_TOLERANCE = 1e-3
 _DEFAULT_SNAP_TOLERANCE = 1000.0
 
@@ -31,22 +31,32 @@ class Linesplan:
     """Cleaned, mirrored station polylines for a vessel linesplan."""
 
     polylines: tuple[Polyline3, ...]
+    nodes_on_polyline: int = _DEFAULT_NODES_ON_POLYLINE
 
-    def __init__(self, polylines: Iterable[Polyline3]) -> None:
+    def __init__(
+        self,
+        polylines: Iterable[Polyline3],
+        *,
+        nodes_on_polyline: int = _DEFAULT_NODES_ON_POLYLINE,
+    ) -> None:
         polylines = tuple(polylines)
         if len(polylines) < 2:
             raise ValueError("Linesplan requires at least two station polylines")
+        nodes_on_polyline = _validate_nodes_on_polyline(nodes_on_polyline)
         object.__setattr__(self, "polylines", polylines)
+        object.__setattr__(self, "nodes_on_polyline", nodes_on_polyline)
 
     @classmethod
     def from_dxf(
         cls,
         path: str | Path,
         *,
+        nodes_on_polyline: int = _DEFAULT_NODES_ON_POLYLINE,
         tolerance: float = _DEFAULT_TOLERANCE,
         snap_tolerance: float = _DEFAULT_SNAP_TOLERANCE,
     ) -> Linesplan:
         """Read station lines from a DXF and return cleaned station polylines."""
+        nodes_on_polyline = _validate_nodes_on_polyline(nodes_on_polyline)
         _validate_tolerance(tolerance, "tolerance")
         _validate_tolerance(snap_tolerance, "snap_tolerance")
 
@@ -60,39 +70,52 @@ class Linesplan:
             snap_tolerance,
             tolerance=tolerance,
         )
-        return cls(_mirror_station_lines(station_lines, tolerance=tolerance))
+        return cls(
+            _mirror_station_lines(station_lines, tolerance=tolerance),
+            nodes_on_polyline=nodes_on_polyline,
+        )
 
     def to_grid_wireframe(
         self,
         *,
-        nodes_per_station: int = _DEFAULT_NODES_PER_STATION,
+        nodes_on_polyline: int | None = None,
+        nodes_per_station: int | None = None,
         tolerance: float = _DEFAULT_TOLERANCE,
     ) -> Wireframe3:
         """Sample stations into an equal-width grid wireframe."""
-        _validate_nodes_per_station(nodes_per_station)
+        nodes_on_polyline = _resolve_nodes_on_polyline(
+            nodes_on_polyline,
+            nodes_per_station,
+            default=self.nodes_on_polyline,
+        )
         _validate_tolerance(tolerance, "tolerance")
 
-        nodes = _node_array(self.polylines, nodes_per_station, tolerance=tolerance)
+        nodes = _node_array(self.polylines, nodes_on_polyline, tolerance=tolerance)
         vertices = tuple(point for row in nodes for point in row)
-        return Wireframe3.from_edges(vertices, _grid_edges(len(nodes), nodes_per_station))
+        return Wireframe3.from_edges(vertices, _grid_edges(len(nodes), nodes_on_polyline))
 
     def to_mesh(
         self,
         *,
-        nodes_per_station: int = _DEFAULT_NODES_PER_STATION,
+        nodes_on_polyline: int | None = None,
+        nodes_per_station: int | None = None,
         tolerance: float = _DEFAULT_TOLERANCE,
     ) -> Mesh3:
         """Return a closed triangular mesh from the station grid."""
-        _validate_nodes_per_station(nodes_per_station)
+        nodes_on_polyline = _resolve_nodes_on_polyline(
+            nodes_on_polyline,
+            nodes_per_station,
+            default=self.nodes_on_polyline,
+        )
         _validate_tolerance(tolerance, "tolerance")
 
         grid = self.to_grid_wireframe(
-            nodes_per_station=nodes_per_station,
+            nodes_on_polyline=nodes_on_polyline,
             tolerance=tolerance,
         )
-        front_row = grid.vertices[:nodes_per_station]
-        back_row = tuple(reversed(grid.vertices[-nodes_per_station:]))
-        faces = _triangular_grid_faces(len(self.polylines), nodes_per_station)
+        front_row = grid.vertices[:nodes_on_polyline]
+        back_row = tuple(reversed(grid.vertices[-nodes_on_polyline:]))
+        faces = _triangular_grid_faces(len(self.polylines), nodes_on_polyline)
         side_mesh = Mesh3(
             grid.vertices,
             faces,
@@ -266,7 +289,7 @@ def _mirror_station_lines(
 
 def _node_array(
     polylines: Iterable[Polyline3],
-    nodes_per_station: int,
+    nodes_on_polyline: int,
     *,
     tolerance: float,
 ) -> _NodeArray:
@@ -290,8 +313,8 @@ def _node_array(
             raise ValueError("each station line must have non-zero length")
 
         row: list[_Point3] = []
-        for node_index in range(nodes_per_station):
-            target = total * node_index / (nodes_per_station - 1)
+        for node_index in range(nodes_on_polyline):
+            target = total * node_index / (nodes_on_polyline - 1)
             walked = 0.0
             for start, end, length in zip(points, points[1:], lengths, strict=True):
                 next_walked = walked + length
@@ -437,9 +460,27 @@ def _dedupe(points: Iterable[_Point3], *, tolerance: float) -> tuple[_Point3, ..
     return tuple(kept)
 
 
-def _validate_nodes_per_station(nodes_per_station: int) -> None:
-    if nodes_per_station < 2:
-        raise ValueError("nodes_per_station must be at least 2")
+def _resolve_nodes_on_polyline(
+    nodes_on_polyline: int | None,
+    nodes_per_station: int | None,
+    *,
+    default: int,
+) -> int:
+    if nodes_on_polyline is not None and nodes_per_station is not None:
+        raise ValueError("use either nodes_on_polyline or nodes_per_station, not both")
+    if nodes_on_polyline is not None:
+        return _validate_nodes_on_polyline(nodes_on_polyline)
+    if nodes_per_station is not None:
+        return _validate_nodes_on_polyline(nodes_per_station)
+    return _validate_nodes_on_polyline(default)
+
+
+def _validate_nodes_on_polyline(nodes_on_polyline: object) -> int:
+    if not isinstance(nodes_on_polyline, int) or isinstance(nodes_on_polyline, bool):
+        raise TypeError("nodes_on_polyline must be an integer")
+    if nodes_on_polyline < 2:
+        raise ValueError("nodes_on_polyline must be at least 2")
+    return nodes_on_polyline
 
 
 def _validate_tolerance(tolerance: float, name: str) -> None:

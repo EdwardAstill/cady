@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, sqrt
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 from cady.operations.coordinates import cross3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
@@ -71,6 +71,18 @@ class Spline2:
     def boundary(self) -> tuple[Point2, Point2]:
         return self.bounds()
 
+    @property
+    def length(self) -> float:
+        length = sum(
+            _cubic_bezier_length2(
+                cast(tuple[Point2, Point2, Point2, Point2], self.control_points[index : index + 4])
+            )
+            for index in range(0, len(self.control_points) - 1, 3)
+        )
+        if self.closed and self.control_points[0] != self.control_points[-1]:
+            length += _distance2(self.control_points[-1], self.control_points[0])
+        return length
+
     def points(self) -> tuple[Point2, ...]:
         if self.closed and self.control_points[0] != self.control_points[-1]:
             return self.control_points + (self.control_points[0],)
@@ -129,6 +141,15 @@ class Spline3:
     @property
     def boundary(self) -> tuple[Point3, Point3]:
         return self.bounds()
+
+    @property
+    def length(self) -> float:
+        return sum(
+            _cubic_bezier_length3(
+                cast(tuple[Point3, Point3, Point3, Point3], self.control_points[index : index + 4])
+            )
+            for index in range(0, len(self.control_points) - 1, 3)
+        )
 
     def points(self) -> tuple[Point3, ...]:
         return self.control_points
@@ -272,6 +293,88 @@ def _point_distance(start: Point2 | Point3, end: Point2 | Point3) -> float:
 
 def _distance2(start: Point2, end: Point2) -> float:
     return sqrt((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2)
+
+
+def _cubic_bezier_length2(points: tuple[Point2, Point2, Point2, Point2]) -> float:
+    p0, p1, p2, p3 = points
+    return _cubic_bezier_length2_recursive(p0, p1, p2, p3, depth=0)
+
+
+def _cubic_bezier_length2_recursive(
+    p0: Point2,
+    p1: Point2,
+    p2: Point2,
+    p3: Point2,
+    *,
+    depth: int,
+) -> float:
+    chord = _distance2(p0, p3)
+    control = _distance2(p0, p1) + _distance2(p1, p2) + _distance2(p2, p3)
+    if depth >= 16 or control - chord <= 1e-9:
+        return 0.5 * (control + chord)
+
+    p01 = _midpoint2(p0, p1)
+    p12 = _midpoint2(p1, p2)
+    p23 = _midpoint2(p2, p3)
+    p012 = _midpoint2(p01, p12)
+    p123 = _midpoint2(p12, p23)
+    p0123 = _midpoint2(p012, p123)
+    return _cubic_bezier_length2_recursive(
+        p0,
+        p01,
+        p012,
+        p0123,
+        depth=depth + 1,
+    ) + _cubic_bezier_length2_recursive(
+        p0123,
+        p123,
+        p23,
+        p3,
+        depth=depth + 1,
+    )
+
+
+def _cubic_bezier_length3(points: tuple[Point3, Point3, Point3, Point3]) -> float:
+    p0, p1, p2, p3 = points
+    return _cubic_bezier_length3_recursive(p0, p1, p2, p3, depth=0)
+
+
+def _cubic_bezier_length3_recursive(
+    p0: Point3,
+    p1: Point3,
+    p2: Point3,
+    p3: Point3,
+    *,
+    depth: int,
+) -> float:
+    chord = _point_distance(p0, p3)
+    control = _point_distance(p0, p1) + _point_distance(p1, p2) + _point_distance(p2, p3)
+    if depth >= 16 or control - chord <= 1e-9:
+        return 0.5 * (control + chord)
+
+    p01 = _midpoint(p0, p1)
+    p12 = _midpoint(p1, p2)
+    p23 = _midpoint(p2, p3)
+    p012 = _midpoint(p01, p12)
+    p123 = _midpoint(p12, p23)
+    p0123 = _midpoint(p012, p123)
+    return _cubic_bezier_length3_recursive(
+        p0,
+        p01,
+        p012,
+        p0123,
+        depth=depth + 1,
+    ) + _cubic_bezier_length3_recursive(
+        p0123,
+        p123,
+        p23,
+        p3,
+        depth=depth + 1,
+    )
+
+
+def _midpoint2(left: Point2, right: Point2) -> Point2:
+    return ((left[0] + right[0]) * 0.5, (left[1] + right[1]) * 0.5)
 
 
 def _append_cubic_points(

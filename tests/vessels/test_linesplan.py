@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cady.geometry import Mesh3, Wireframe3
 from cady.vessels import Linesplan
 
@@ -30,6 +32,40 @@ def test_linesplan_grid_wireframe_samples_station_grid() -> None:
     assert isinstance(wireframe, Wireframe3)
     assert len(wireframe.vertices) == 65 * 48
     assert len(wireframe.edges) == 6192
+
+
+def test_linesplan_from_dxf_nodes_on_polyline_sets_default_sample_count() -> None:
+    linesplan = Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=12)
+
+    wireframe = linesplan.to_grid_wireframe()
+
+    assert linesplan.nodes_on_polyline == 12
+    assert len(wireframe.vertices) == 65 * 12
+    assert len(wireframe.edges) == 1548
+
+
+def test_linesplan_grid_wireframe_accepts_legacy_nodes_per_station_override() -> None:
+    linesplan = Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=12)
+
+    wireframe = linesplan.to_grid_wireframe(nodes_per_station=8)
+
+    assert len(wireframe.vertices) == 65 * 8
+    assert len(wireframe.edges) == 1032
+
+
+def test_linesplan_rejects_invalid_nodes_on_polyline() -> None:
+    with pytest.raises(TypeError, match="nodes_on_polyline must be an integer"):
+        Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=12.5)
+
+    with pytest.raises(ValueError, match="nodes_on_polyline must be at least 2"):
+        Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=1)
+
+
+def test_linesplan_rejects_conflicting_sample_count_names() -> None:
+    linesplan = Linesplan.from_dxf(LINESPLAN_DXF)
+
+    with pytest.raises(ValueError, match="use either nodes_on_polyline or nodes_per_station"):
+        linesplan.to_grid_wireframe(nodes_on_polyline=12, nodes_per_station=8)
 
 
 def test_linesplan_to_mesh_returns_closed_triangular_mesh() -> None:

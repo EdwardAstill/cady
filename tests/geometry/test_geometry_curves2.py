@@ -75,6 +75,15 @@ def test_curve2_length_properties_are_exact_for_segments_and_circular_curves() -
     )
 
 
+def test_spline2_length_property_contributes_to_polyline_length() -> None:
+    spline = Spline2(((0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 0.0)))
+    line = Line2((3.0, 0.0), (3.0, 4.0))
+    polyline = Polyline2((spline, line))
+
+    assert spline.length == pytest.approx(3.0)
+    assert polyline.length == pytest.approx(7.0)
+
+
 def test_polyline2_open_and_closed_array_flags() -> None:
     open_polyline = Polyline2(((0, 0), (1, 0), (1, 1)))
     closed_polyline = Polyline2(((0, 0), (1, 0), (1, 1), (0, 0)), closed=True)
@@ -86,6 +95,46 @@ def test_polyline2_open_and_closed_array_flags() -> None:
     assert isinstance(closed_array, np.ndarray)
     np.testing.assert_allclose(open_array, [[0, 0], [1, 0], [1, 1]])
     np.testing.assert_allclose(closed_array, [[0, 0], [1, 0], [1, 1]])
+
+
+def test_polyline2_start_end_and_reverse() -> None:
+    polyline = Polyline2(((0, 0), (1, 0), (1, 1)))
+
+    assert polyline.start == (0, 0)
+    assert polyline.end == (1, 1)
+
+    reversed_polyline = polyline.reverse()
+
+    assert reversed_polyline.start == (1, 1)
+    assert reversed_polyline.end == (0, 0)
+    assert reversed_polyline.points() == ((1, 1), (1, 0), (0, 0))
+
+
+def test_polyline2_discontinuities_return_sharp_turn_vertices() -> None:
+    polyline = Polyline2(((0, 0), (1, 0), (2, 0), (2, 1), (2, 2)))
+
+    assert polyline.discontinuities(min_angle_degrees=45.0) == ((2, 0),)
+    assert polyline.discontinuities(min_angle_degrees=100.0) == ()
+
+
+def test_polyline2_closed_discontinuities_include_wraparound_vertices() -> None:
+    polyline = Polyline2(((0, 0), (1, 0), (1, 1), (0, 1)), closed=True)
+
+    assert polyline.discontinuities(min_angle_degrees=80.0) == (
+        (0, 0),
+        (1, 0),
+        (1, 1),
+        (0, 1),
+    )
+
+
+def test_polyline2_discontinuities_can_ignore_short_segments() -> None:
+    polyline = Polyline2(((0, 0), (0.01, 0), (0.01, 1)))
+
+    assert polyline.discontinuities(
+        min_angle_degrees=45.0,
+        min_segment_length=0.1,
+    ) == ()
 
 
 def test_polyline2_with_curves_must_be_discretized_before_array_conversion() -> None:

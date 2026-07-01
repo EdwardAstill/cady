@@ -94,6 +94,22 @@ def test_curve3_length_properties_are_exact_for_lines_and_arcs() -> None:
     assert polyline.length == pytest.approx(7.0 + pi)
 
 
+def test_spline3_length_property_contributes_to_polyline_length() -> None:
+    spline = Spline3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (3.0, 0.0, 0.0),
+        )
+    )
+    line = Line3((3.0, 0.0, 0.0), (3.0, 4.0, 0.0))
+    polyline = Polyline3((spline, line))
+
+    assert spline.length == pytest.approx(3.0)
+    assert polyline.length == pytest.approx(7.0)
+
+
 def test_spline3_factory_and_adaptive_sampling() -> None:
     spline = spline3(
         (
@@ -184,6 +200,38 @@ def test_polyline3_is_open_wire_data_without_to_mesh() -> None:
     assert polyline.points() == ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
     with pytest.raises(GeometryError, match="must be closed"):
         polyline.to_mesh(tolerance=1e-3)
+
+
+def test_polyline3_start_end_and_reverse_preserves_line_segments() -> None:
+    first = Line3((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
+    second = Line3((1.0, 0.0, 0.0), (1.0, 2.0, 0.0))
+    polyline = Polyline3((first, second))
+
+    assert polyline.start == (0.0, 0.0, 0.0)
+    assert polyline.end == (1.0, 2.0, 0.0)
+
+    reversed_polyline = polyline.reverse()
+
+    assert reversed_polyline.start == (1.0, 2.0, 0.0)
+    assert reversed_polyline.end == (0.0, 0.0, 0.0)
+    assert reversed_polyline.curves == (
+        Line3((1.0, 2.0, 0.0), (1.0, 0.0, 0.0)),
+        Line3((1.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+    )
+
+
+def test_polyline3_discontinuities_return_sharp_turn_vertices() -> None:
+    polyline = Polyline3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 0.0, 1.0),
+        )
+    )
+
+    assert polyline.discontinuities(min_angle_degrees=45.0) == ((2.0, 0.0, 0.0),)
+    assert polyline.discontinuities(min_angle_degrees=100.0) == ()
 
 
 def test_closed_polyline3_dedupes_repeated_final_vertex() -> None:
