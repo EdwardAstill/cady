@@ -13,6 +13,8 @@ from cady.errors import ReadError
 from cady.files import dxf
 from cady.geometry import Mesh3, Polyline3, Wireframe3
 from cady.operations.meshes import classify_linesplan_curves
+from cady.operations.meshing import closed_polyline_mesh3
+from cady.operations.triangulation import TriangulationGuide
 
 _Point3: TypeAlias = tuple[float, float, float]
 _Face: TypeAlias = tuple[int, int, int]
@@ -88,13 +90,28 @@ class Linesplan:
             nodes_per_station=nodes_per_station,
             tolerance=tolerance,
         )
+        front_row = grid.vertices[:nodes_per_station]
+        back_row = tuple(reversed(grid.vertices[-nodes_per_station:]))
         faces = _triangular_grid_faces(len(self.polylines), nodes_per_station)
-        mesh = Mesh3(
+        side_mesh = Mesh3(
             grid.vertices,
             faces,
             _face_edges(faces),
         )
-        closed = _weld_mesh(mesh, tolerance=tolerance).close_boundary(tolerance=tolerance)
+        front_cap = closed_polyline_mesh3(
+            Polyline3(front_row, closed=True),
+            tolerance=tolerance,
+            guide=_cap_triangulation_guide(front_row, tolerance=tolerance),
+        )
+        back_cap = closed_polyline_mesh3(
+            Polyline3(back_row, closed=True),
+            tolerance=tolerance,
+            guide=_cap_triangulation_guide(back_row, tolerance=tolerance),
+        )
+        closed = _weld_mesh(
+            Mesh3.merged((side_mesh, front_cap, back_cap)),
+            tolerance=tolerance,
+        )
         return Mesh3(closed.vertices, closed.faces, _face_edges(closed.faces))
 
 
@@ -345,6 +362,21 @@ def _face_edges(faces: Iterable[Sequence[int]]) -> tuple[_Edge, ...]:
         for start, end in zip(face, (*face[1:], face[0]), strict=True):
             edges.add((min(start, end), max(start, end)))
     return tuple(sorted(edges))
+
+
+def _cap_triangulation_guide(
+    points: Sequence[_Point3],
+    *,
+    tolerance: float,
+) -> TriangulationGuide | None:
+    lengths: list[float] = []
+    for start, end in zip(points, (*points[1:], points[0]), strict=True):
+        length = dist(start, end)
+        if length > tolerance:
+            lengths.append(length)
+    if not lengths:
+        return None
+    return TriangulationGuide(max_edge_length=max(lengths) * 1.000001)
 
 
 def _weld_mesh(mesh: Mesh3, *, tolerance: float) -> Mesh3:

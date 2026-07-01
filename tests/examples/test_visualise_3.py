@@ -133,27 +133,60 @@ def test_mesh_decimate_prints_summary_without_opening_viewer(
 
     assert completed.returncode == 0, completed.stdout
     assert "cady mesh decimation demo" in completed.stdout
-    assert "source: 247 vertices, 678 edges, 432 faces" in completed.stdout
-    assert "decimated: 77 vertices, 196 edges, 120 faces" in completed.stdout
+    assert "views: surface, closed-box, closed-cylinder, linesplan-dxf" in completed.stdout
+    assert "open height-field mesh" in completed.stdout
+    assert "source: 247 vertices, 678 edges, 432 faces, closed=no" in completed.stdout
+    assert "decimated: 77 vertices, 196 edges, 120 faces, closed=no" in completed.stdout
     assert "target faces: 120" in completed.stdout
     assert "removed faces: 312" in completed.stdout
+    assert "closed box mesh" in completed.stdout
+    assert "source: 8 vertices, 18 edges, 12 faces, closed=yes" in completed.stdout
+    assert "decimated: 7 vertices, 15 edges, 10 faces, closed=yes" in completed.stdout
+    assert "closed cylinder mesh" in completed.stdout
+    assert "source: 26 vertices, 72 edges, 48 faces, closed=yes" in completed.stdout
+    assert "decimated: 10 vertices, 24 edges, 16 faces, closed=yes" in completed.stdout
+    assert "closed linesplan mesh from DXF" in completed.stdout
+    assert "source: 778 vertices, 2328 edges, 1552 faces, closed=yes" in completed.stdout
+    assert "decimated: 152 vertices, 450 edges, 300 faces, closed=yes" in completed.stdout
     assert "VisPy viewer skipped." in completed.stdout
 
 
-def test_mesh_decimate_scene_draws_faces_and_all_face_edges() -> None:
+def test_mesh_decimate_scenes_draw_faces_and_all_face_edges() -> None:
     module = _load_example_script("mesh_decimate")
 
-    source = module.build_source_mesh()
-    decimated = module.mesh_with_face_edges(source.decimate(120, tolerance=1e-9))
-    scene = module.build_scene(source, decimated)
-    prepared = prepare_scene(scene, tolerance=1e-9)
+    results = tuple(
+        module.decimate_case(case, tolerance=1e-9)
+        for case in module.build_cases("all")
+    )
 
-    assert [mesh.name for mesh in prepared.meshes] == ["source_mesh", "decimated_mesh"]
-    assert [mesh.render_mode for mesh in prepared.meshes] == ["shaded", "shaded"]
-    assert [(len(mesh.faces), len(mesh.edges)) for mesh in prepared.meshes] == [
-        (432, 678),
-        (120, 196),
+    assert [result.key for result in results] == [
+        "surface",
+        "closed-box",
+        "closed-cylinder",
+        "linesplan-dxf",
     ]
+    assert [
+        (
+            len(result.source.faces),
+            len(result.source.edges),
+            len(result.decimated.faces),
+            len(result.decimated.edges),
+            module._closed_state(result.decimated),
+        )
+        for result in results
+    ] == [
+        (432, 678, 120, 196, "no"),
+        (12, 18, 10, 15, "yes"),
+        (48, 72, 16, 24, "yes"),
+        (1552, 2328, 300, 450, "yes"),
+    ]
+
+    for result in results:
+        prepared = prepare_scene(module.build_result_scene(result), tolerance=1e-9)
+        assert [mesh.name for mesh in prepared.meshes] == ["source_mesh", "decimated_mesh"]
+        assert [mesh.render_mode for mesh in prepared.meshes] == ["shaded", "shaded"]
+        assert all(len(mesh.faces) > 0 for mesh in prepared.meshes)
+        assert all(len(mesh.edges) > 0 for mesh in prepared.meshes)
 
 
 def test_pointcloud2mesh_scene_overlays_clouds_and_meshes() -> None:

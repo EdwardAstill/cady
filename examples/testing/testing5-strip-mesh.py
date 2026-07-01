@@ -453,7 +453,7 @@ def refined_rows_to_strip_mesh(
         raise ValueError("at least two refined rows are required to build strips")
 
     vertices: list[Point3] = []
-    vertex_lookup: dict[Point3, int] = {}
+    vertex_lookup: dict[tuple[float, float, float], int] = {}
     row_vertex_indices = [
         [index_point(vertices, vertex_lookup, point) for point in row.points]
         for row in rows
@@ -942,7 +942,7 @@ def unique_points(
 
 def index_point(
     vertices: list[Point3],
-    vertex_lookup: dict[Point3, int],
+    vertex_lookup: dict[tuple[float, float, float], int],
     point: PointLike3,
 ) -> int:
     vertex = as_vec3(point)

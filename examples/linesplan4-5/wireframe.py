@@ -1,16 +1,14 @@
-"""Read a DXF as a Wireframe3 and visualise it.
+"""Read station lines from a DXF as a Wireframe3 and visualise them.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/linesplan/wireframe.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/linesplan/wireframe.py
+    PYTHONPATH=src .venv/bin/python examples/linesplan6/wireframe.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/linesplan6/wireframe.py
 """
 
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, cast
 
 from cady import Camera, DirectionalLight, DisplayStyle, Polyline3, Scene, Wireframe3
 from cady.errors import ReadError
@@ -27,29 +25,9 @@ LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
 Point3 = tuple[float, float, float]
 
 
-class _PointTupleLike(Protocol):
-    def tuple(self) -> Point3: ...
-
-
-def station_polylines(
-    path: str | Path = LINESPLAN_DXF,
-    *,
-    tolerance: float = 1e-3,
-) -> tuple[Polyline3, ...]:
-    """Return classified DXF station lines as immutable Polyline3 values."""
-    network = classify_linesplan_curves(dxf.read_curves(path), tolerance=tolerance)
-    polylines = tuple(Polyline3(curve.vertices) for curve in network.sections)
-    if not polylines:
-        raise ReadError("DXF contained no station line geometry")
-    return polylines
-
-
-STATION_POLYLINES = station_polylines()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Read a DXF as a Wireframe3 and visualise it.",
+        description="Read station lines from a DXF as a Wireframe3 and visualise them.",
     )
     parser.add_argument(
         "--input",
@@ -58,17 +36,23 @@ def main() -> None:
         help="DXF file to read.",
     )
     parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=1e-3,
+        help="Tolerance used when classifying fallback station lines.",
+    )
+    parser.add_argument(
         "--no-view",
         action="store_true",
         help="Print summaries without opening a VisPy window.",
     )
     args = parser.parse_args()
 
-    wireframe = dxf.read_wireframe(args.input)
+    wireframe = read_station_wireframe(args.input, tolerance=args.tolerance)
 
-    print("cady wireframe demo")
+    print("cady station-line wireframe demo")
     print(f"input: {args.input}")
-    print_wireframe_summary("wireframe", wireframe)
+    print_wireframe_summary("station lines", wireframe)
 
     if args.no_view:
         print("VisPy viewer skipped.")
@@ -76,7 +60,14 @@ def main() -> None:
 
     from cady.view import view_scene
 
-    view_scene(build_scene(wireframe), title="linesplan 9m - wireframe")
+    view_scene(build_scene(wireframe), title="linesplan 9m - station lines")
+
+
+def read_station_wireframe(path: str | Path, *, tolerance: float = 1e-3) -> Wireframe3:
+    network = classify_linesplan_curves(dxf.read_curves(path), tolerance=tolerance)
+    if not network.sections:
+        raise ReadError("DXF contained no station line geometry")
+    return Wireframe3.from_polylines(Polyline3(curve.vertices) for curve in network.sections)
 
 
 def build_scene(wireframe: Wireframe3) -> Scene:
@@ -86,8 +77,8 @@ def build_scene(wireframe: Wireframe3) -> Scene:
     centre = _bounds_centre(lower, upper)
     camera = _fit_profile_camera(lower, upper)
     return (
-        Scene(name="linesplan_9m_wireframe", camera=camera, lights=(LIGHT,))
-        .add(wireframe, name="wireframe", style=WIRE_STYLE)
+        Scene(name="linesplan_9m_station_lines", camera=camera, lights=(LIGHT,))
+        .add(wireframe, name="station_lines", style=WIRE_STYLE)
         .with_metadata(target=_format_point(centre))
     )
 
@@ -122,10 +113,9 @@ def _bounds_centre(lower: Point3, upper: Point3) -> Point3:
 
 
 def _point_tuple(value: object) -> Point3:
-    if hasattr(value, "tuple"):
-        return cast(_PointTupleLike, value).tuple()
-    point = cast(Sequence[float], value)
-    return (float(point[0]), float(point[1]), float(point[2]))
+    point = value.tuple() if hasattr(value, "tuple") else value
+    x, y, z = point
+    return (float(x), float(y), float(z))
 
 
 def _format_point(point: Point3) -> str:

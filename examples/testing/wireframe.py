@@ -21,6 +21,9 @@ class Point3(NamedTuple):
 
     def tuple(self) -> tuple[float, float, float]:
         return (self.x, self.y, self.z)
+
+
+PointLike3 = tuple[float, float, float] | Point3
 EdgeIndex = tuple[int, int]
 
 RADIUS = 5.0
@@ -101,13 +104,13 @@ def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
     if not polyline.vertices:
         raise ValueError("linesplan polylines must contain at least one vertex")
 
-    y_values = [vertex.y for vertex in polyline.vertices]
+    y_values = [vertex[1] for vertex in polyline.vertices]
     return min(y_values), max(y_values)
 
 
 def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Point3] = []
-    vertex_indices: dict[Point3, int] = {}
+    vertex_indices: dict[tuple[float, float, float], int] = {}
     edges: list[EdgeIndex] = []
 
     for polyline in polylines:
@@ -123,17 +126,18 @@ def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
 
 def index_point(
     vertices: list[Point3],
-    vertex_indices: dict[Point3, int],
-    point: Point3,
+    vertex_indices: dict[tuple[float, float, float], int],
+    point: PointLike3,
 ) -> int:
-    key = point.tuple()
+    value = as_point3(point)
+    key = value.tuple()
     existing_index = vertex_indices.get(key)
     if existing_index is not None:
         return existing_index
 
     new_index = len(vertices)
     vertex_indices[key] = new_index
-    vertices.append(point)
+    vertices.append(value)
     return new_index
 
 
@@ -155,6 +159,12 @@ def edge_key(edge: EdgeIndex) -> EdgeIndex:
 def require_positive_tolerance(tolerance: float) -> None:
     if tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
+
+
+def as_point3(point: PointLike3) -> Point3:
+    if isinstance(point, Point3):
+        return point
+    return Point3(*point)
 
 
 def build_wireframe_object(*, radius: float, samples: int) -> WireframeObject:

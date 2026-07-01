@@ -38,8 +38,8 @@ def test_linesplan_to_mesh_returns_closed_triangular_mesh() -> None:
     mesh = linesplan.to_mesh()
 
     assert isinstance(mesh, Mesh3)
-    assert len(mesh.vertices) == 3118
-    assert len(mesh.faces) == 6232
+    assert len(mesh.vertices) == 3674
+    assert len(mesh.faces) == 7344
     assert all(len(face) == 3 for face in mesh.faces)
     face_edges = {
         tuple(sorted((start, end)))

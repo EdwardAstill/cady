@@ -215,7 +215,7 @@ def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
     if not polyline.vertices:
         raise ValueError("linesplan polylines must contain at least one vertex")
 
-    y_values = [vertex.y for vertex in polyline.vertices]
+    y_values = [vertex[1] for vertex in polyline.vertices]
     return min(y_values), max(y_values)
 
 
@@ -248,7 +248,7 @@ def slice_y_values(*, min_y: float, max_y: float, slices: int) -> tuple[float, .
 
 def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Point3] = []
-    vertex_indices: dict[Point3, int] = {}
+    vertex_indices: dict[tuple[float, float, float], int] = {}
     edges: list[EdgeIndex] = []
 
     for polyline in polylines:
@@ -287,10 +287,10 @@ def split_wireframe_with_planes(
 
 def _index_vertex(
     vertices: list[Point3],
-    vertex_indices: dict[Point3, int],
-    vertex: Point3,
+    vertex_indices: dict[tuple[float, float, float], int],
+    vertex: PointLike3,
 ) -> int:
-    point = vertex.tuple()
+    point = _as_vec3(vertex).tuple()
     existing_index = vertex_indices.get(point)
     if existing_index is not None:
         return existing_index
@@ -328,7 +328,7 @@ def _polyline_y_intersection(
     tolerance: float,
 ) -> Point3 | None:
     intersections: list[Point3] = []
-    vertices = tuple(polyline.vertices)
+    vertices = tuple(_as_vec3(vertex) for vertex in polyline.vertices)
 
     for start, end in zip(vertices, vertices[1:], strict=False):
         point = _edge_y_intersection(start, end, y, tolerance=tolerance)

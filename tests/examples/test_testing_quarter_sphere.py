@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from collections import Counter
 from math import isclose
 from pathlib import Path
 from types import ModuleType
 
 from cady.view import prepare_scene
+
+ROOT = Path(__file__).resolve().parents[2]
+TESTING_DIR = ROOT / "examples" / "testing"
 
 
 def test_slice_y_values_are_generated_from_min_max_and_count() -> None:
@@ -155,11 +159,86 @@ def test_intersection_nodes_to_edge_mesh_connects_matrix_neighbours() -> None:
     )
 
 
+def test_repair_examples_accept_tuple_backed_polyline_vertices() -> None:
+    for filename in ("testing2.py", "testing3.py", "testing4-bad.py"):
+        module = _load_testing_script(filename)
+
+        linesplan = module.quarter_sphere_linesplan(
+            radius=module.RADIUS,
+            samples=module.SAMPLES,
+        )
+        y_values = module.slice_y_values(
+            min_y=module.MIN_SLICE_Y,
+            max_y=module.MAX_SLICE_Y,
+            slices=module.SLICES,
+        )
+        wireframe = module.wireframe_from_polylines(linesplan)
+        wireframe_array = module.split_wireframe_with_planes(
+            linesplan,
+            y_values=y_values,
+        )
+        node_mesh = wireframe_array.to_mesh()
+
+        assert isinstance(linesplan[0].vertices[0], tuple)
+        assert len(wireframe.vertices) == 95
+        assert len(wireframe.edges) == 96
+        assert len(wireframe_array.node_array) == 3
+        assert all(len(row) == 8 for row in wireframe_array.node_array)
+        assert len(node_mesh.vertices) > 0
+
+
+def test_strip_mesh_example_uses_shared_tuple_backed_wireframe() -> None:
+    module = _load_testing_script("testing5-strip-mesh.py")
+
+    y_values = module.slice_y_values(
+        min_y=module.MIN_SLICE_Y,
+        max_y=module.MAX_SLICE_Y,
+        slices=module.SLICES,
+    )
+    strip_mesh = module.build_distance_refined_strip_mesh(
+        module.WIREFRAME_OBJECT.linesplan,
+        y_values=y_values,
+        max_segment_length=module.MAX_SEGMENT_LENGTH,
+        refinement_rows=module.REFINEMENT_ROWS,
+    )
+
+    assert isinstance(module.WIREFRAME_OBJECT.linesplan[0].vertices[0], tuple)
+    assert len(module.WIREFRAME_OBJECT.wireframe.vertices) == 95
+    assert len(strip_mesh.base_node_array) == 3
+    assert all(len(row) == 8 for row in strip_mesh.base_node_array)
+    assert len(strip_mesh.mesh.vertices) == 20
+    assert len(strip_mesh.mesh.faces) == 24
+
+
 def _load_testing_example() -> ModuleType:
-    path = Path(__file__).resolve().parents[2] / "examples" / "testing" / "testing.py"
-    spec = importlib.util.spec_from_file_location("quarter_sphere_testing", path)
+    return _load_testing_script("testing.py", "quarter_sphere_testing")
+
+
+def _load_testing_script(filename: str, name: str | None = None) -> ModuleType:
+    path = TESTING_DIR / filename
+    module_name = name or Path(filename).stem.replace("-", "_")
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise AssertionError(f"could not load {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    script_dir = str(path.parent)
+    add_to_path = script_dir not in sys.path
+    if add_to_path:
+        sys.path.insert(0, script_dir)
+    previous_wireframe = None
+    had_wireframe = False
+    if module_name != "wireframe":
+        had_wireframe = "wireframe" in sys.modules
+        previous_wireframe = sys.modules.pop("wireframe", None)
+    try:
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if module_name != "wireframe":
+            if had_wireframe:
+                sys.modules["wireframe"] = previous_wireframe
+            else:
+                sys.modules.pop("wireframe", None)
+        if add_to_path:
+            sys.path.remove(script_dir)

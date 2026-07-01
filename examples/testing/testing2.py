@@ -202,19 +202,19 @@ def validate_matching_y_bounds(
 def polyline_y_bounds(polyline: Polyline3) -> tuple[float, float]:
     if not polyline.vertices:
         raise ValueError("linesplan polylines must contain at least one vertex")
-    y_values = [vertex.y for vertex in polyline.vertices]
+    y_values = [vertex[1] for vertex in polyline.vertices]
     return min(y_values), max(y_values)
 
 
 def wireframe_from_polylines(polylines: Iterable[Polyline3]) -> Wireframe3:
     vertices: list[Point3] = []
-    vertex_indices: dict[Point3, int] = {}
+    vertex_indices: dict[tuple[float, float, float], int] = {}
     edges: list[tuple[int, int]] = []
 
     for polyline in polylines:
         previous: int | None = None
         for vertex in polyline.vertices:
-            point = vertex.tuple()
+            point = _as_vec3(vertex).tuple()
             current = vertex_indices.get(point)
             if current is None:
                 current = len(vertices)
@@ -387,7 +387,7 @@ def _polyline_y_intersection(
     tolerance: float,
 ) -> Point3 | None:
     nodes: list[Point3] = []
-    vertices = tuple(polyline.vertices)
+    vertices = tuple(_as_vec3(vertex) for vertex in polyline.vertices)
     for start, end in zip(vertices, vertices[1:], strict=False):
         point = _edge_y_intersection(start, end, y, tolerance=tolerance)
         if point is not None:
