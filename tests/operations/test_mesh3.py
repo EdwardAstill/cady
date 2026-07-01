@@ -5,6 +5,7 @@ import pytest
 
 from cady.errors import GeometryError
 from cady.geometry import Mesh3
+from cady.operations.mesh_topology import decimate_mesh_data
 from cady.operations.transforms import Transform3
 
 
@@ -132,3 +133,52 @@ def test_mesh_merged_offsets_face_indices() -> None:
 
     assert len(merged.vertices) == 6
     assert merged.faces == ((0, 1, 2), (3, 4, 5))
+
+
+def test_decimate_mesh_data_collapses_short_edges_to_target() -> None:
+    vertices = np.array(
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (1.0, 2.0, 0.0),
+            (2.0, 2.0, 0.0),
+        ],
+        dtype=np.float64,
+    )
+    faces = np.array(
+        [
+            (0, 1, 4),
+            (0, 4, 3),
+            (1, 2, 5),
+            (1, 5, 4),
+            (3, 4, 7),
+            (3, 7, 6),
+            (4, 5, 8),
+            (4, 8, 7),
+        ],
+        dtype=np.int64,
+    )
+    edges = np.array([(0, 1), (1, 2), (2, 5)], dtype=np.int64)
+
+    out_vertices, out_faces, out_edges = decimate_mesh_data(
+        vertices,
+        faces,
+        edges,
+        target_faces=4,
+        tolerance=1e-9,
+    )
+
+    assert out_vertices.dtype == np.float64
+    assert out_faces.dtype == np.int64
+    assert out_edges.dtype == np.int64
+    assert out_vertices.shape[1] == 3
+    assert out_faces.shape[1] == 3
+    assert out_edges.shape[1] == 2
+    assert len(out_faces) <= 4
+    assert len(out_vertices) < len(vertices)
+    assert int(np.max(out_faces)) < len(out_vertices)

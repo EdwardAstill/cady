@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import fsum
+from operator import index as operator_index
 from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
@@ -204,6 +205,30 @@ class Mesh3:
     def triangulated(self, *, tolerance: float = 1e-9) -> Mesh3:
         """Return an equivalent mesh whose faces are all triangles."""
         return Mesh3(self.vertices, self.triangulated_faces(tolerance=tolerance), self.edges)
+
+    def decimate(self, target_faces: int, *, tolerance: float = 1e-9) -> Mesh3:
+        """Return a simplified triangle mesh with at most ``target_faces`` faces."""
+        from cady.operations.mesh_topology import decimate_mesh_data
+
+        target_count = _validate_target_faces(target_faces)
+        _validate_tolerance(tolerance)
+        faces = self.triangulated_faces(tolerance=tolerance)
+        if len(faces) <= target_count:
+            return Mesh3(self.vertices, self.faces, self.edges)
+
+        vertices_array = np.array(self.vertices, dtype=np.float64)
+        faces_array = np.array(faces, dtype=np.int64)
+        edges_array = np.array(self.edges, dtype=np.int64)
+        if len(edges_array) == 0:
+            edges_array = np.empty((0, 2), dtype=np.int64)
+        decimated_vertices, decimated_faces, decimated_edges = decimate_mesh_data(
+            vertices_array,
+            faces_array,
+            edges_array,
+            target_faces=target_count,
+            tolerance=tolerance,
+        )
+        return _mesh_from_arrays(decimated_vertices, decimated_faces, decimated_edges)
 
     @property
     def area(self) -> float:
@@ -671,3 +696,13 @@ def _mesh3_volume(
 def _validate_tolerance(tolerance: float) -> None:
     if float(tolerance) <= 0.0:
         raise ValueError("tolerance must be positive")
+
+
+def _validate_target_faces(target_faces: int) -> int:
+    try:
+        count = operator_index(target_faces)
+    except TypeError as exc:
+        raise TypeError("target_faces must be an integer") from exc
+    if count < 1:
+        raise ValueError("target_faces must be positive")
+    return count

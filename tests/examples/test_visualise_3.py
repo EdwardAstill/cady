@@ -114,6 +114,48 @@ def test_pointcloud2mesh_prints_process_summary(import_env: dict[str, str]) -> N
     assert "VisPy viewer skipped." in completed.stdout
 
 
+def test_mesh_decimate_prints_summary_without_opening_viewer(
+    import_env: dict[str, str],
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "examples/scripts/mesh_decimate.py",
+            "--no-view",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=import_env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert "cady mesh decimation demo" in completed.stdout
+    assert "source: 247 vertices, 678 edges, 432 faces" in completed.stdout
+    assert "decimated: 77 vertices, 196 edges, 120 faces" in completed.stdout
+    assert "target faces: 120" in completed.stdout
+    assert "removed faces: 312" in completed.stdout
+    assert "VisPy viewer skipped." in completed.stdout
+
+
+def test_mesh_decimate_scene_draws_faces_and_all_face_edges() -> None:
+    module = _load_example_script("mesh_decimate")
+
+    source = module.build_source_mesh()
+    decimated = module.mesh_with_face_edges(source.decimate(120, tolerance=1e-9))
+    scene = module.build_scene(source, decimated)
+    prepared = prepare_scene(scene, tolerance=1e-9)
+
+    assert [mesh.name for mesh in prepared.meshes] == ["source_mesh", "decimated_mesh"]
+    assert [mesh.render_mode for mesh in prepared.meshes] == ["shaded", "shaded"]
+    assert [(len(mesh.faces), len(mesh.edges)) for mesh in prepared.meshes] == [
+        (432, 678),
+        (120, 196),
+    ]
+
+
 def test_pointcloud2mesh_scene_overlays_clouds_and_meshes() -> None:
     module = _load_example_script("pointcloud2mesh")
 

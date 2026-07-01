@@ -90,6 +90,72 @@ def test_mesh3_accepts_polygon_faces_and_triangulates_at_array_boundary() -> Non
     assert wireframe.edges == ((0, 1), (0, 3), (1, 2), (2, 3))
 
 
+def test_mesh_decimate_reduces_faces_and_remaps_edges() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (1.0, 2.0, 0.0),
+            (2.0, 2.0, 0.0),
+        ),
+        (
+            (0, 1, 4),
+            (0, 4, 3),
+            (1, 2, 5),
+            (1, 5, 4),
+            (3, 4, 7),
+            (3, 7, 6),
+            (4, 5, 8),
+            (4, 8, 7),
+        ),
+        ((0, 1), (1, 2), (2, 5), (5, 8), (7, 8), (6, 7), (3, 6), (0, 3)),
+    )
+
+    decimated = mesh.decimate(4, tolerance=1e-9)
+
+    assert len(decimated.faces) <= 4
+    assert len(decimated.faces) < len(mesh.faces)
+    assert len(decimated.vertices) < len(mesh.vertices)
+    assert all(len(face) == 3 for face in decimated.faces)
+    assert all(0 <= index < len(decimated.vertices) for face in decimated.faces for index in face)
+    assert all(0 <= index < len(decimated.vertices) for edge in decimated.edges for index in edge)
+
+
+def test_mesh_decimate_preserves_polygon_faces_when_no_reduction_is_needed() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    decimated = mesh.decimate(2, tolerance=1e-9)
+
+    assert decimated.faces == mesh.faces
+    assert decimated.vertices == mesh.vertices
+
+
+def test_mesh_decimate_validates_target_and_tolerance() -> None:
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        ((0, 1, 2),),
+    )
+
+    with pytest.raises(ValueError, match="target_faces"):
+        mesh.decimate(0)
+
+    with pytest.raises(ValueError, match="tolerance"):
+        mesh.decimate(1, tolerance=0.0)
+
+
 def test_mesh_from_points_reconstructs_with_advancing_front() -> None:
     points = (
         (0.0, 0.0, 0.0),
