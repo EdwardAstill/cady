@@ -26,7 +26,7 @@ FaceArray = NDArray[np.int64]
 
 @dataclass(frozen=True, slots=True)
 class TriangulationGuide:
-    """Optional constraints for simple boundary-guided triangulation."""
+    """Optional sizing constraints and output quality requirements."""
 
     target_edge_length: float | None = None
     max_edge_length: float | None = None
@@ -132,6 +132,39 @@ def triangulate_mesh3(
     return nodes_out, edges_out, faces
 
 
+def triangulate_triangle_mesh3(
+    nodes: object,
+    faces: object,
+    protected_edges: object,
+    *,
+    tolerance: float = 1e-9,
+    guide: TriangulationGuide | None = None,
+) -> tuple[PointArray3, EdgeArray, FaceArray]:
+    """Improve an existing planar triangle mesh while preserving protected edges."""
+    guide = _validate_guide(guide)
+    nodes_out = _coerce_points3(nodes)
+    protected_edges_out = _coerce_edges(protected_edges)
+    protected = _edge_key_set(protected_edges_out)
+    face_values = _coerce_faces(faces)
+    face_list = [(int(a), int(b), int(c)) for a, b, c in face_values]
+    if face_list:
+        face_list = _constrained_delaunay_faces(
+            nodes_out,
+            face_list,
+            protected_edges=protected,
+            tolerance=tolerance,
+        )
+        nodes_out, face_list = _refine_triangle_mesh3(
+            nodes_out,
+            face_list,
+            protected_edges=protected,
+            tolerance=tolerance,
+            guide=guide,
+        )
+    faces_out = _face_array(face_list)
+    return nodes_out, _add_internal_edges(protected_edges_out, faces_out), faces_out
+
+
 def _triangulate_mesh2_arrays(
     nodes: PointArray2,
     edges: EdgeArray,
@@ -156,6 +189,12 @@ def _triangulate_mesh2_arrays(
             )
         else:
             loop_faces = _triangulate_loop2(nodes_out, loop, tolerance)
+            loop_faces = _constrained_delaunay_faces(
+                nodes_out,
+                loop_faces,
+                protected_edges=protected_edges,
+                tolerance=tolerance,
+            )
         nodes_out, loop_faces = _refine_triangle_mesh2(
             nodes_out,
             loop_faces,
@@ -211,6 +250,14 @@ def _triangulate_mesh3_arrays(
                 loop_faces = [(loop[a], loop[b], loop[c]) for a, b, c in local_faces]
         else:
             local_faces = _triangulate_loop2(projection.points, local_loop, tolerance)
+            local_faces = _constrained_delaunay_faces(
+                projection.points,
+                local_faces,
+                protected_edges=_edge_key_set(
+                    np.asarray(tuple(loop_edges(len(loop))), dtype=np.int64)
+                ),
+                tolerance=tolerance,
+            )
             loop_faces = [(loop[a], loop[b], loop[c]) for a, b, c in local_faces]
         nodes_out, loop_faces = _refine_triangle_mesh3(
             nodes_out,
@@ -282,6 +329,15 @@ def _coerce_edges(value: object) -> EdgeArray:
         return np.empty((0, 2), dtype=np.int64)
     if array.ndim != 2 or array.shape[1] != 2:
         raise ValueError("edges must have shape (n, 2)")
+    return np.array(array, dtype=np.int64, copy=True)
+
+
+def _coerce_faces(value: object) -> FaceArray:
+    array = np.asarray(value, dtype=np.int64)
+    if array.size == 0:
+        return np.empty((0, 3), dtype=np.int64)
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError("faces must have shape (n, 3)")
     return np.array(array, dtype=np.int64, copy=True)
 
 
@@ -425,6 +481,7 @@ def _refine_triangle_mesh(
     guide: TriangulationGuide | None,
 ) -> tuple[NDArray[np.float64], list[FaceIndex]]:
     if not _guide_refines_faces(guide) or not faces:
+        _validate_min_triangle_angle(nodes, faces, guide=guide, tolerance=tolerance)
         return nodes, faces
 
     vertices = [np.array(node, dtype=np.float64, copy=True) for node in nodes]
@@ -512,7 +569,9 @@ def _refine_triangle_mesh(
             tolerance=tolerance,
         )
 
-    return np.asarray(vertices, dtype=np.float64), refined
+    nodes_out = np.asarray(vertices, dtype=np.float64)
+    _validate_min_triangle_angle(nodes_out, refined, guide=guide, tolerance=tolerance)
+    return nodes_out, refined
 
 
 def _constrained_delaunay_faces(
@@ -670,7 +729,6 @@ def _guide_refines_faces(guide: TriangulationGuide | None) -> bool:
     return guide is not None and (
         _guide_edge_length(guide) is not None
         or guide.max_area is not None
-        or guide.min_angle_degrees is not None
     )
 
 
@@ -724,6 +782,34 @@ def _next_refinement_split(
     if best_edge is not None:
         return ("edge", best_edge)
     return ("centroid", best_face)
+
+
+def _validate_min_triangle_angle(
+    nodes: NDArray[np.float64],
+    faces: list[FaceIndex],
+    *,
+    guide: TriangulationGuide | None,
+    tolerance: float,
+) -> None:
+    if guide is None or guide.min_angle_degrees is None:
+        return
+
+    limit = guide.min_angle_degrees
+    min_area = tolerance * tolerance
+    worst_angle: float | None = None
+    for face in faces:
+        if _triangle_area(nodes, face) <= min_area:
+            continue
+        angle = _min_angle_degrees(_face_edge_lengths(nodes, face))
+        if angle + 1e-9 >= limit:
+            continue
+        worst_angle = angle if worst_angle is None else min(worst_angle, angle)
+
+    if worst_angle is not None:
+        raise ValueError(
+            "triangulation produced a triangle angle "
+            f"{worst_angle:.6g} below min_angle_degrees {limit:.6g}"
+        )
 
 
 def _split_faces_on_edge(
@@ -1163,4 +1249,5 @@ __all__ = [
     "triangulate_curve3",
     "triangulate_mesh2",
     "triangulate_mesh3",
+    "triangulate_triangle_mesh3",
 ]

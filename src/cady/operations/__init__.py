@@ -21,6 +21,7 @@ from cady.operations.triangulation import (
     triangulate_curve3,
     triangulate_mesh2,
     triangulate_mesh3,
+    triangulate_triangle_mesh3,
 )
 
 Point2: TypeAlias = tuple[float, float]
@@ -187,4 +188,5 @@ __all__ = [
     "triangulate_curve3",
     "triangulate_mesh2",
     "triangulate_mesh3",
+    "triangulate_triangle_mesh3",
 ]

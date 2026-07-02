@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import acos, degrees
+
 import numpy as np
 import pytest
 
@@ -214,6 +216,47 @@ def test_triangulation_guide_refines_planar_3d_curve_with_steiner_nodes() -> Non
     assert mesh.edges == tuple((index, (index + 1) % 4) for index in range(4))
 
 
+def test_triangulation_guide_accepts_min_angle_when_output_satisfies_it() -> None:
+    nodes = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
+
+    out_nodes, _out_edges, faces = triangulate_mesh2(
+        nodes,
+        edges,
+        guide=TriangulationGuide(min_angle_degrees=20.0),
+    )
+
+    assert _min_face_angle(out_nodes, faces) >= 20.0
+
+
+def test_triangulation_guide_rejects_output_below_min_angle() -> None:
+    nodes = np.array(
+        [
+            [0.0, 0.0],
+            [4.0, 0.0],
+            [4.0, 1.0],
+            [0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
+
+    with pytest.raises(ValueError, match="below min_angle_degrees 20"):
+        triangulate_mesh2(
+            nodes,
+            edges,
+            guide=TriangulationGuide(min_angle_degrees=20.0),
+        )
+
+
 def test_invalid_guide_options_fail_explicitly() -> None:
     nodes = np.array(
         [
@@ -248,6 +291,32 @@ def _face_areas(nodes: np.ndarray, faces: np.ndarray) -> tuple[float, ...]:
         ac = nodes[c] - nodes[a]
         areas.append(abs(float(ab[0] * ac[1] - ab[1] * ac[0])) / 2.0)
     return tuple(areas)
+
+
+def _min_face_angle(nodes: np.ndarray, faces: np.ndarray) -> float:
+    return min(
+        _min_triangle_angle(
+            float(np.linalg.norm(nodes[a] - nodes[b])),
+            float(np.linalg.norm(nodes[b] - nodes[c])),
+            float(np.linalg.norm(nodes[c] - nodes[a])),
+        )
+        for a, b, c in faces
+    )
+
+
+def _min_triangle_angle(ab: float, bc: float, ca: float) -> float:
+    return min(
+        _angle_degrees(ab, ca, bc),
+        _angle_degrees(ab, bc, ca),
+        _angle_degrees(bc, ca, ab),
+    )
+
+
+def _angle_degrees(first: float, second: float, opposite: float) -> float:
+    cosine = (first * first + second * second - opposite * opposite) / (
+        2.0 * first * second
+    )
+    return degrees(acos(max(-1.0, min(1.0, cosine))))
 
 
 def _delaunay_violations(nodes: np.ndarray, faces: np.ndarray) -> int:

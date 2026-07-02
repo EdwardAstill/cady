@@ -64,6 +64,7 @@ src/cady/
   product/       Part, Assembly, Material, flattening
   view/          backend-independent Scene API and optional Vispy viewer helpers
   files/         flat DXF/STL/STEP facades
+  vessels/       vessel-specific helpers such as Linesplan station meshing
   document.py    immutable registry for drawings, parts, assemblies, and scenes
   errors.py      shared exception hierarchy
   utils.py       small validation and topology helpers
@@ -84,7 +85,8 @@ Authoring layer:
   `Region2`, `Mesh2`, `PointCloud2`
 - 3D geometry: `Line3`, `Arc3`, `Spline3`, `Polyline3`, `Plane3`, `Surface2`,
   `Surface3`, `Region3`, `Mesh3`, `Wireframe3`, `PointCloud3`, `Body3`
-- documents and products: `Drawing2`, `Part`, `Assembly`, `Document`, `Scene`
+- documents, products, and domain helpers: `Drawing2`, `Part`, `Assembly`,
+  `Document`, `Scene`, `Linesplan`
 
 Evaluation layer:
 
@@ -92,9 +94,13 @@ Evaluation layer:
   them. For type-checking clarity and safety, define small type aliases near the
   top of that file when they make the code easier to read.
 - `operations.transforms` owns `Transform2` and `Transform3`.
-- `operations.meshes`, `triangulation`, and `coordinates` own numeric algorithms.
+- `operations.coordinates`, `transforms`, `meshes`, `meshing`,
+  `mesh_clipping`, `mesh_topology`, `triangulation`, `advancing_front`,
+  `lofting`, and `wireframes` own numeric algorithms.
 - `measurement` owns object-level distance, intersection, area, and volume-style
   queries. It may import `geometry` objects.
+- `vessels` owns higher-level domain workflows such as DXF linesplan cleanup,
+  station sampling, and conversion to `Wireframe3` or `Mesh3`.
 
 Allowed flow:
 
@@ -156,12 +162,15 @@ Top-level `cady` re-exports currently include:
 Subpackage exports are broader than top-level exports:
 
 - `cady.operations` also exports `Transform2`, `Transform3`, transform helpers,
-  mesh helpers, triangulation helpers, and lightweight semantic constructors.
+  mesh clipping helpers, triangulation helpers, `TriangulationGuide`,
+  `sphere_triangles`, and lightweight semantic constructors.
 - `cady.measurement` exports object-level query helpers such as `distance(...)`
   and `intersection(...)`, plus their small result dataclasses.
 - `cady.drawing` also exports `DrawingItem`, `Dimension2`, and
   `format_measurement`.
 - `cady.product` also exports `FlattenedPart` and `ProductError`.
+- `cady.vessels` exports `Linesplan`; it is intentionally not re-exported from
+  top-level `cady`.
 - `cady.view` exposes backend-independent preparation types and helpers:
   `RenderScene`, `SceneLine`, `SceneMesh`, and `prepare_scene`. It lazily
   exposes viewer-opening helpers: `view_scene`, `view_target`, `view_mesh`,
@@ -215,8 +224,15 @@ Use `cady.operations` for array and primitive algorithms:
 - `meshes.py` contains mesh construction, primitive meshing, clipping, capping,
   boundary closure, topology, region-loop extraction, mesh-local projection
   helpers, mesh-local sampling helpers, and loft/wireframe helpers.
+- `meshing.py` owns conversion-oriented meshing helpers for closed polylines,
+  surface regions, and wireframe-to-mesh workflows.
+- `mesh_clipping.py` owns plane cuts and planar/boundary closure helpers.
+- `mesh_topology.py` owns mesh simplification and topology operations such as
+  decimation.
 - `transforms.py` contains `Transform2` and `Transform3`.
 - `triangulation.py` contains polygon triangulation and deduplication helpers.
+- `advancing_front.py`, `lofting.py`, and `wireframes.py` own focused surface
+  reconstruction, lofting, and wireframe algorithms.
 
 Operations code may import `numpy` and standard library modules. Keep it free of
 application-level package imports so it remains reusable and testable.
@@ -228,6 +244,21 @@ Use `cady.measurement` for object-level geometric queries:
 - exact curve length belongs on geometry values as `.length`, not in a
   measurement module.
 - `volume.py` is reserved for future meshable volume measurement.
+
+## Vessel Helpers
+
+`cady.vessels` contains domain-specific helpers that sit above geometry,
+operations, and file facades. Keep vessel workflows semantic at the public API
+and push numeric work into operations modules when it becomes reusable.
+
+- `Linesplan.from_dxf(...)` reads station curves through the DXF facade, cleans
+  and mirrors station polylines, and stores the configured sample count as
+  `nodes_on_polyline`.
+- `Linesplan.to_grid_wireframe(...)` samples stations into a `Wireframe3`.
+- `Linesplan.to_mesh(...)` builds a closed triangular `Mesh3` from the sampled
+  station grid and caps.
+- `nodes_per_station` remains a legacy override accepted by output methods, but
+  new code should prefer `nodes_on_polyline`.
 
 ## Files And I/O
 
@@ -335,6 +366,7 @@ Test areas:
 - `tests/drawing/`: drawings, layers, dimensions, entities
 - `tests/product/`: parts, assemblies, flattening
 - `tests/view/`: scene model and viewer smoke coverage
+- `tests/vessels/`: linesplan import, sampling, and meshing behavior
 - `tests/files/`: DXF/STL/STEP facades
 - `tests/examples/`: example script regressions
 - `tests/conventions/`: import boundaries, runtime dependency allowlist,

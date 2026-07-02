@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import fsum
+from math import fsum, sqrt
 from operator import index as operator_index
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,6 +22,7 @@ PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
     from cady.geometry.wireframe import Wireframe3
+    from cady.operations.triangulation import TriangulationGuide
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.style import RenderMode
     from cady.view.viewer import Projection
@@ -202,9 +203,52 @@ class Mesh3:
         _validate_tolerance(tolerance)
         return _triangulated_faces(self.vertices, self.faces, tolerance=tolerance)
 
-    def triangulated(self, *, tolerance: float = 1e-9) -> Mesh3:
+    def triangulated(
+        self,
+        *,
+        tolerance: float = 1e-9,
+        guide: TriangulationGuide | Literal["auto"] | None = None,
+        min_angle_degrees: float | None = None,
+    ) -> Mesh3:
         """Return an equivalent mesh whose faces are all triangles."""
-        return Mesh3(self.vertices, self.triangulated_faces(tolerance=tolerance), self.edges)
+        return self.triangulate(
+            tolerance=tolerance,
+            guide=guide,
+            min_angle_degrees=min_angle_degrees,
+        )
+
+    def merge_coplanar_faces(self, *, tolerance: float = 1e-9) -> Mesh3:
+        """Merge connected coplanar face groups into larger polygon faces."""
+        _validate_tolerance(tolerance)
+        face_groups = _coplanar_face_groups(self.vertices, self.faces, tolerance=tolerance)
+        faces: list[FaceIndex] = []
+        for group in face_groups:
+            if len(group.indices) > 1 and group.boundary is not None:
+                faces.append(group.boundary)
+            else:
+                faces.extend(self.faces[index] for index in group.indices)
+        return Mesh3(self.vertices, tuple(faces), _face_edges(tuple(faces)))
+
+    def triangulate(
+        self,
+        *,
+        tolerance: float = 1e-9,
+        guide: TriangulationGuide | Literal["auto"] | None = None,
+        min_angle_degrees: float | None = None,
+    ) -> Mesh3:
+        """Merge connected coplanar faces, then triangulate the merged polygon faces."""
+        _validate_tolerance(tolerance)
+        merged = self.merge_coplanar_faces(tolerance=tolerance)
+        face_groups = tuple(_FaceGroup((index,), face) for index, face in enumerate(merged.faces))
+        vertices, faces, edges = _triangulated_mesh(
+            merged.vertices,
+            merged.faces,
+            face_groups,
+            tolerance=tolerance,
+            guide=guide,
+            min_angle_degrees=min_angle_degrees,
+        )
+        return Mesh3(vertices, faces, edges)
 
     def decimate(self, target_faces: int, *, tolerance: float = 1e-9) -> Mesh3:
         """Return a simplified triangle mesh with at most ``target_faces`` faces."""
@@ -509,6 +553,507 @@ def _triangulated_faces(
         else:
             triangles.extend(_triangulated_polygon_face(vertices, face, tolerance=tolerance))
     return tuple(triangles)
+
+
+def _triangulated_mesh(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    face_groups: tuple[_FaceGroup, ...],
+    *,
+    tolerance: float,
+    guide: TriangulationGuide | Literal["auto"] | None,
+    min_angle_degrees: float | None,
+) -> tuple[tuple[Point3, ...], tuple[TriangleIndex, ...], tuple[EdgeIndex, ...]]:
+    output_vertices = list(vertices)
+    output_faces: list[TriangleIndex] = []
+    output_edges: set[EdgeIndex] = set()
+
+    for group in face_groups:
+        if len(group.indices) > 1 and group.boundary is not None:
+            _extend_triangulated_face_group(
+                vertices,
+                faces,
+                group,
+                output_vertices,
+                output_faces,
+                output_edges,
+                tolerance=tolerance,
+                guide=guide,
+                min_angle_degrees=min_angle_degrees,
+            )
+            continue
+
+        for face_index in group.indices:
+            _extend_triangulated_face(
+                vertices,
+                faces[face_index],
+                output_vertices,
+                output_faces,
+                output_edges,
+                tolerance=tolerance,
+                guide=guide,
+                min_angle_degrees=min_angle_degrees,
+            )
+
+    return tuple(output_vertices), tuple(output_faces), tuple(sorted(output_edges))
+
+
+def _extend_triangulated_face(
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    output_vertices: list[Point3],
+    output_faces: list[TriangleIndex],
+    output_edges: set[EdgeIndex],
+    *,
+    tolerance: float,
+    guide: TriangulationGuide | Literal["auto"] | None,
+    min_angle_degrees: float | None,
+) -> None:
+    from cady.operations.triangulation import triangulate_mesh3
+
+    nodes = np.asarray([vertices[index] for index in face], dtype=np.float64)
+    boundary = np.asarray(
+        tuple((index, (index + 1) % len(face)) for index in range(len(face))),
+        dtype=np.int64,
+    )
+    local_guide = (
+        _with_min_angle(None, min_angle_degrees)
+        if guide == "auto" and len(face) == 3
+        else _resolve_triangulation_guide(
+            nodes,
+            boundary,
+            None,
+            guide,
+            min_angle_degrees=min_angle_degrees,
+            tolerance=tolerance,
+        )
+    )
+    nodes_out, edges_out, local_faces = triangulate_mesh3(
+        nodes,
+        boundary,
+        tolerance=tolerance,
+        guide=local_guide,
+    )
+    index_map = list(face)
+    for index in range(len(face), len(nodes_out)):
+        index_map.append(len(output_vertices))
+        x, y, z = nodes_out[index]
+        output_vertices.append((float(x), float(y), float(z)))
+
+    for a, b, c in local_faces:
+        output_faces.append((index_map[int(a)], index_map[int(b)], index_map[int(c)]))
+    for start, end in edges_out:
+        output_edges.add(_edge_key(index_map[int(start)], index_map[int(end)]))
+
+
+def _extend_triangulated_face_group(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    group: _FaceGroup,
+    output_vertices: list[Point3],
+    output_faces: list[TriangleIndex],
+    output_edges: set[EdgeIndex],
+    *,
+    tolerance: float,
+    guide: TriangulationGuide | Literal["auto"] | None,
+    min_angle_degrees: float | None,
+) -> None:
+    from cady.operations.triangulation import triangulate_triangle_mesh3
+
+    source_indices = tuple(
+        sorted({vertex_index for face_index in group.indices for vertex_index in faces[face_index]})
+    )
+    boundary = group.boundary
+    if boundary is None:
+        return
+    if set(source_indices) == set(boundary):
+        _extend_triangulated_face(
+            vertices,
+            boundary,
+            output_vertices,
+            output_faces,
+            output_edges,
+            tolerance=tolerance,
+            guide=guide,
+            min_angle_degrees=min_angle_degrees,
+        )
+        return
+
+    local_by_source = {source_index: index for index, source_index in enumerate(source_indices)}
+    nodes = np.asarray([vertices[index] for index in source_indices], dtype=np.float64)
+    local_triangles: list[TriangleIndex] = []
+    for face_index in group.indices:
+        face = faces[face_index]
+        triangles = (
+            ((int(face[0]), int(face[1]), int(face[2])),)
+            if len(face) == 3
+            else _triangulated_polygon_face(vertices, face, tolerance=tolerance)
+        )
+        for triangle in triangles:
+            a, b, c = triangle
+            local_triangles.append((local_by_source[a], local_by_source[b], local_by_source[c]))
+
+    protected_edges = np.asarray(
+        tuple(
+            (local_by_source[start], local_by_source[end])
+            for start, end in zip(boundary, boundary[1:] + boundary[:1], strict=True)
+        ),
+        dtype=np.int64,
+    )
+    local_guide = (
+        None
+        if guide == "auto" and min_angle_degrees is None
+        else _resolve_triangulation_guide(
+            nodes,
+            protected_edges,
+            local_triangles,
+            guide,
+            min_angle_degrees=min_angle_degrees,
+            tolerance=tolerance,
+        )
+    )
+    nodes_out, edges_out, local_faces = triangulate_triangle_mesh3(
+        nodes,
+        np.asarray(local_triangles, dtype=np.int64),
+        protected_edges,
+        tolerance=tolerance,
+        guide=local_guide,
+    )
+    index_map = list(source_indices)
+    for index in range(len(source_indices), len(nodes_out)):
+        index_map.append(len(output_vertices))
+        x, y, z = nodes_out[index]
+        output_vertices.append((float(x), float(y), float(z)))
+
+    for a, b, c in local_faces:
+        output_faces.append((index_map[int(a)], index_map[int(b)], index_map[int(c)]))
+    for start, end in edges_out:
+        output_edges.add(_edge_key(index_map[int(start)], index_map[int(end)]))
+
+
+def _resolve_triangulation_guide(
+    nodes: PointArray3,
+    edges: NDArray[np.int64],
+    faces: list[TriangleIndex] | None,
+    guide: TriangulationGuide | Literal["auto"] | None,
+    *,
+    min_angle_degrees: float | None,
+    tolerance: float,
+) -> TriangulationGuide | None:
+    if guide != "auto":
+        return _with_min_angle(guide, min_angle_degrees)
+
+    from cady.operations.triangulation import TriangulationGuide
+
+    lengths = _local_edge_lengths(nodes, edges, faces)
+    lengths = tuple(sorted(length for length in lengths if length > tolerance))
+    if not lengths:
+        return _with_min_angle(None, min_angle_degrees)
+
+    lower = np.min(nodes, axis=0)
+    upper = np.max(nodes, axis=0)
+    span = float(np.linalg.norm(upper - lower))
+    if span <= tolerance:
+        return _with_min_angle(None, min_angle_degrees)
+
+    if faces is None and len(edges) > 4:
+        return _with_min_angle(
+            TriangulationGuide(max_edge_length=max(lengths[-1], span)),
+            min_angle_degrees,
+        )
+
+    typical = _percentile(lengths, 0.5)
+    span_floor = span / 12.0 if faces is None else span / 96.0
+    max_edge_length = max(min(typical, span / 8.0), span_floor, tolerance * 10.0)
+    return _with_min_angle(
+        TriangulationGuide(max_edge_length=max_edge_length),
+        min_angle_degrees,
+    )
+
+
+def _with_min_angle(
+    guide: TriangulationGuide | None,
+    min_angle_degrees: float | None,
+) -> TriangulationGuide | None:
+    if min_angle_degrees is None:
+        return guide
+
+    from cady.operations.triangulation import TriangulationGuide
+
+    if guide is None:
+        return TriangulationGuide(min_angle_degrees=min_angle_degrees)
+    return TriangulationGuide(
+        target_edge_length=guide.target_edge_length,
+        max_edge_length=guide.max_edge_length,
+        max_area=guide.max_area,
+        min_angle_degrees=min_angle_degrees,
+    )
+
+
+def _local_edge_lengths(
+    nodes: PointArray3,
+    edges: NDArray[np.int64],
+    faces: list[TriangleIndex] | None,
+) -> tuple[float, ...]:
+    edge_set: set[EdgeIndex] = {
+        _edge_key(int(start), int(end)) for start, end in edges if int(start) != int(end)
+    }
+    if faces is not None:
+        for face in faces:
+            edge_set.update(_triangle_edges(face))
+    return tuple(float(np.linalg.norm(nodes[start] - nodes[end])) for start, end in edge_set)
+
+
+def _triangle_edges(face: TriangleIndex) -> tuple[EdgeIndex, EdgeIndex, EdgeIndex]:
+    a, b, c = face
+    return (_edge_key(a, b), _edge_key(b, c), _edge_key(c, a))
+
+
+def _percentile(values: tuple[float, ...], fraction: float) -> float:
+    if len(values) == 1:
+        return values[0]
+    position = fraction * (len(values) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(values) - 1)
+    ratio = position - lower
+    return values[lower] * (1.0 - ratio) + values[upper] * ratio
+
+
+@dataclass(frozen=True, slots=True)
+class _FaceGroup:
+    indices: tuple[int, ...]
+    boundary: FaceIndex | None
+
+
+def _coplanar_face_groups(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    *,
+    tolerance: float,
+) -> tuple[_FaceGroup, ...]:
+    face_planes = tuple(_face_plane(vertices, face, tolerance=tolerance) for face in faces)
+    neighbours = _face_neighbours(faces)
+    groups: list[_FaceGroup] = []
+    visited: set[int] = set()
+
+    for face_index in range(len(faces)):
+        if face_index in visited:
+            continue
+
+        group = _connected_coplanar_group(
+            face_index,
+            neighbours,
+            face_planes,
+            vertices,
+            faces,
+            tolerance=tolerance,
+        )
+        visited.update(group)
+        groups.append(_face_group(faces, group))
+
+    return tuple(groups)
+
+
+def _face_group(faces: tuple[FaceIndex, ...], group: tuple[int, ...]) -> _FaceGroup:
+    if len(group) == 1:
+        return _FaceGroup(group, faces[group[0]])
+    return _FaceGroup(group, _simple_boundary_loop(faces[index] for index in group))
+
+
+def _connected_coplanar_group(
+    start: int,
+    neighbours: tuple[tuple[int, ...], ...],
+    face_planes: tuple[_FacePlane | None, ...],
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    *,
+    tolerance: float,
+) -> tuple[int, ...]:
+    start_plane = face_planes[start]
+    if start_plane is None:
+        return (start,)
+
+    group: list[int] = []
+    pending: deque[int] = deque((start,))
+    seen = {start}
+    while pending:
+        face_index = pending.popleft()
+        group.append(face_index)
+        for neighbour in neighbours[face_index]:
+            if neighbour in seen:
+                continue
+            plane = face_planes[neighbour]
+            if plane is None:
+                continue
+            parallel = _parallel_normals(start_plane.normal, plane.normal, tolerance=tolerance)
+            same_plane = _same_plane(start_plane, vertices, faces[neighbour], tolerance=tolerance)
+            if parallel and same_plane:
+                seen.add(neighbour)
+                pending.append(neighbour)
+
+    return tuple(sorted(group))
+
+
+def _simple_boundary_loop(group_faces: Iterable[FaceIndex]) -> FaceIndex | None:
+    edge_counts: defaultdict[EdgeIndex, int] = defaultdict(int)
+    directed_edges: list[EdgeIndex] = []
+    for face in group_faces:
+        for start, end in _directed_face_edges(face):
+            edge_counts[_edge_key(start, end)] += 1
+            directed_edges.append((start, end))
+
+    boundary_edges = [
+        (start, end) for start, end in directed_edges if edge_counts[_edge_key(start, end)] == 1
+    ]
+    if len(boundary_edges) < 3:
+        return None
+
+    next_by_start: dict[int, int] = {}
+    for start, end in boundary_edges:
+        if start in next_by_start:
+            return _undirected_boundary_loop(boundary_edges)
+        next_by_start[start] = end
+
+    start = min(next_by_start)
+    loop = [start]
+    current = start
+    while True:
+        if current not in next_by_start:
+            return _undirected_boundary_loop(boundary_edges)
+        current = next_by_start[current]
+        if current == start:
+            break
+        if current in loop:
+            return _undirected_boundary_loop(boundary_edges)
+        loop.append(current)
+
+    if len(loop) != len(boundary_edges):
+        return _undirected_boundary_loop(boundary_edges)
+    return tuple(loop)
+
+
+def _undirected_boundary_loop(boundary_edges: Iterable[EdgeIndex]) -> FaceIndex | None:
+    neighbours: defaultdict[int, list[int]] = defaultdict(list)
+    edge_count = 0
+    for start, end in boundary_edges:
+        neighbours[start].append(end)
+        neighbours[end].append(start)
+        edge_count += 1
+
+    if any(len(values) != 2 for values in neighbours.values()):
+        return None
+
+    start = min(neighbours)
+    previous = None
+    current = start
+    loop: list[int] = []
+    while True:
+        loop.append(current)
+        options = neighbours[current]
+        next_value = options[0] if options[0] != previous else options[1]
+        previous, current = current, next_value
+        if current == start:
+            break
+        if current in loop:
+            return None
+
+    if len(loop) != edge_count:
+        return None
+    return tuple(loop)
+
+
+def _face_neighbours(faces: tuple[FaceIndex, ...]) -> tuple[tuple[int, ...], ...]:
+    faces_by_edge: defaultdict[EdgeIndex, list[int]] = defaultdict(list)
+    for face_index, face in enumerate(faces):
+        for edge in _directed_face_edges(face):
+            faces_by_edge[_edge_key(*edge)].append(face_index)
+
+    neighbours: list[set[int]] = [set() for _ in faces]
+    for face_indices in faces_by_edge.values():
+        for face_index in face_indices:
+            neighbours[face_index].update(index for index in face_indices if index != face_index)
+    return tuple(tuple(sorted(values)) for values in neighbours)
+
+
+@dataclass(frozen=True, slots=True)
+class _FacePlane:
+    point: Point3
+    normal: Point3
+
+
+def _face_plane(
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    *,
+    tolerance: float,
+) -> _FacePlane | None:
+    points = tuple(vertices[index] for index in face)
+    origin = points[0]
+    for index in range(1, len(points) - 1):
+        normal = _cross3(_sub3(points[index], origin), _sub3(points[index + 1], origin))
+        length = _length3(normal)
+        if length > tolerance:
+            return _FacePlane(origin, _canonical_normal(_scale3(normal, 1.0 / length), tolerance))
+    return None
+
+
+def _same_plane(
+    plane: _FacePlane,
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    *,
+    tolerance: float,
+) -> bool:
+    return all(
+        abs(_dot3(_sub3(vertices[index], plane.point), plane.normal)) <= tolerance
+        for index in face
+    )
+
+
+def _parallel_normals(left: Point3, right: Point3, *, tolerance: float) -> bool:
+    return 1.0 - abs(_dot3(left, right)) <= tolerance
+
+
+def _directed_face_edges(face: FaceIndex) -> tuple[EdgeIndex, ...]:
+    return tuple(zip(face, face[1:] + face[:1], strict=True))
+
+
+def _edge_key(start: int, end: int) -> EdgeIndex:
+    return (min(start, end), max(start, end))
+
+
+def _canonical_normal(normal: Point3, tolerance: float) -> Point3:
+    for component in normal:
+        if abs(component) <= tolerance:
+            continue
+        if component < 0.0:
+            return (-normal[0], -normal[1], -normal[2])
+        break
+    return normal
+
+
+def _sub3(left: Point3, right: Point3) -> Point3:
+    return (left[0] - right[0], left[1] - right[1], left[2] - right[2])
+
+
+def _scale3(vector: Point3, value: float) -> Point3:
+    return (vector[0] * value, vector[1] * value, vector[2] * value)
+
+
+def _dot3(left: Point3, right: Point3) -> float:
+    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
+
+
+def _cross3(left: Point3, right: Point3) -> Point3:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def _length3(vector: Point3) -> float:
+    return sqrt(_dot3(vector, vector))
 
 
 def _triangulated_polygon_face(

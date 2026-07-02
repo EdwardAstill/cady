@@ -7,6 +7,7 @@ import pytest
 
 from cady.errors import ReadError
 from cady.geometry import Mesh3
+from cady.operations import TriangulationGuide
 from cady.operations.transforms import Transform3
 
 
@@ -88,6 +89,168 @@ def test_mesh3_accepts_polygon_faces_and_triangulates_at_array_boundary() -> Non
     assert faces.shape == (2, 3)
     assert {tuple(face) for face in faces.tolist()} == {(3, 0, 1), (1, 2, 3)}
     assert wireframe.edges == ((0, 1), (0, 3), (1, 2), (2, 3))
+
+
+def test_mesh_triangulate_merges_connected_coplanar_faces() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2), (0, 2, 3)),
+    )
+
+    triangulated = mesh.triangulate(tolerance=1e-9)
+
+    assert triangulated.vertices == mesh.vertices
+    assert set(triangulated.faces) == {(3, 0, 1), (1, 2, 3)}
+    assert (0, 2) not in triangulated.edges
+    assert (1, 3) in triangulated.edges
+
+
+def test_mesh_merge_coplanar_faces_returns_intermediate_polygon_mesh() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2), (0, 2, 3)),
+    )
+
+    merged = mesh.merge_coplanar_faces(tolerance=1e-9)
+
+    assert merged.vertices == mesh.vertices
+    assert len(merged.faces) == 1
+    assert set(merged.faces[0]) == {0, 1, 2, 3}
+    assert (0, 2) not in merged.edges
+
+
+def test_mesh_triangulate_discards_internal_vertices_after_coplanar_merge() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ),
+        ((0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)),
+    )
+
+    triangulated = mesh.triangulate(tolerance=1e-9, guide="auto")
+
+    assert not any(4 in face for face in triangulated.faces)
+    assert len(triangulated.vertices) >= 4
+    assert all(len(face) == 3 for face in triangulated.faces)
+
+
+def test_mesh_triangulate_auto_guide_refines_from_local_shape() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    triangulated = mesh.triangulate(tolerance=1e-6, guide="auto")
+
+    assert len(triangulated.vertices) > len(mesh.vertices)
+    assert len(triangulated.faces) > 2
+    assert all(len(face) == 3 for face in triangulated.faces)
+
+
+def test_mesh_triangulate_accepts_triangulation_guide() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    triangulated = mesh.triangulate(
+        tolerance=1e-6,
+        guide=TriangulationGuide(max_area=0.25),
+    )
+
+    assert len(triangulated.vertices) > len(mesh.vertices)
+    assert len(triangulated.faces) > 2
+    assert triangulated.vertices[4] == (1.0, 1.0, 0.0)
+    assert all(len(face) == 3 for face in triangulated.faces)
+
+
+def test_mesh_triangulate_rejects_min_angle_violations() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (4.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    with pytest.raises(ValueError, match="below min_angle_degrees 20"):
+        mesh.triangulate(
+            tolerance=1e-9,
+            guide=TriangulationGuide(min_angle_degrees=20.0),
+        )
+
+
+def test_mesh_triangulate_auto_can_reject_min_angle_violations() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (4.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2),),
+    )
+
+    with pytest.raises(ValueError, match="below min_angle_degrees 20"):
+        mesh.triangulate(
+            tolerance=1e-9,
+            guide="auto",
+            min_angle_degrees=20.0,
+        )
+
+
+def test_mesh_triangulate_uses_distributed_polygon_diagonals() -> None:
+    mesh = Mesh3(
+        (
+            (-1.65, -0.25, 0.0),
+            (-1.05, -0.9, 0.0),
+            (-0.2, -0.82, 0.0),
+            (0.35, -1.18, 0.0),
+            (1.35, -0.6, 0.0),
+            (1.7, 0.18, 0.0),
+            (0.85, 0.5, 0.0),
+            (0.55, 1.1, 0.0),
+            (-0.28, 0.68, 0.0),
+            (-1.18, 0.96, 0.0),
+            (-1.58, 0.35, 0.0),
+        ),
+        ((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),),
+    )
+
+    triangulated = mesh.triangulate(tolerance=1e-6)
+    face_counts = {
+        index: sum(index in face for face in triangulated.faces)
+        for index in range(len(triangulated.vertices))
+    }
+
+    assert len(triangulated.faces) == 9
+    assert max(face_counts.values()) < len(triangulated.faces)
+    assert all(len(face) == 3 for face in triangulated.faces)
 
 
 def test_mesh_decimate_reduces_faces_and_remaps_edges() -> None:
