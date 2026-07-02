@@ -1,7 +1,12 @@
-"""Triangulation for closed 2D and planar 3D curve or edge loops."""
+"""Compare cady polygon triangulation at different mesh sizes.
 
-from __future__ import annotations
+Run from the repository root:
 
+    PYTHONPATH=src .venv/bin/python examples/scripts/triangulate_polygon_resolutions.py
+"""
+
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import acos, ceil, degrees, isfinite, radians, sqrt, tan
 from typing import Literal, TypeAlias
@@ -9,11 +14,11 @@ from typing import Literal, TypeAlias
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.operations.mesh_topology import edge_loops
-from cady.utils import loop_edges
+from cady import Camera, DisplayStyle, Mesh3, Polyline3, Scene
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
+EdgeIndex: TypeAlias = tuple[int, int]
 FaceIndex: TypeAlias = tuple[int, int, int]
 RefinementSplit: TypeAlias = (
     tuple[Literal["edge"], tuple[int, int]] | tuple[Literal["centroid"], FaceIndex]
@@ -22,8 +27,70 @@ PointArray2 = NDArray[np.float64]
 PointArray3 = NDArray[np.float64]
 EdgeArray = NDArray[np.int64]
 FaceArray = NDArray[np.int64]
+ResolutionSpec: TypeAlias = float | Literal["auto"] | None
+MinAngleSpec: TypeAlias = float | None
+PointRows3: TypeAlias = Sequence[Point3] | NDArray[np.float64]
+EdgeRows: TypeAlias = Sequence[EdgeIndex] | NDArray[np.int64]
 
 
+# Local topology helpers copied into the example so it does not import operations.
+def loop_edges(count: int) -> tuple[EdgeIndex, ...]:
+    return tuple((index, (index + 1) % count) for index in range(count))
+
+
+def stitch_segments(segments: Iterable[EdgeIndex]) -> list[list[int]]:
+    neighbours: dict[int, set[int]] = defaultdict(set)
+    unused_edges: set[EdgeIndex] = set()
+    for start, end in segments:
+        if start == end:
+            continue
+        edge = (min(start, end), max(start, end))
+        if edge in unused_edges:
+            continue
+        unused_edges.add(edge)
+        neighbours[start].add(end)
+        neighbours[end].add(start)
+
+    loops: list[list[int]] = []
+    while unused_edges:
+        start, second = next(iter(unused_edges))
+        unused_edges.remove((start, second))
+        loop = [start, second]
+        previous = start
+        current = second
+
+        while current != start:
+            candidates = [
+                candidate
+                for candidate in neighbours[current]
+                if (min(current, candidate), max(current, candidate)) in unused_edges
+                and candidate != previous
+            ]
+            if not candidates:
+                break
+            following = candidates[0]
+            unused_edges.remove((min(current, following), max(current, following)))
+            loop.append(following)
+            previous, current = current, following
+
+        if loop[-1] == start:
+            loop.pop()
+        if len(loop) >= 3 and loop[0] != loop[-1]:
+            loops.append(loop)
+
+    return loops
+
+
+def edge_loops(edges: EdgeRows) -> tuple[tuple[int, ...], ...]:
+    edges_array = np.asarray(edges, dtype=np.int64)
+    if edges_array.size == 0:
+        return ()
+    if edges_array.ndim != 2 or edges_array.shape[1] != 2:
+        raise ValueError("edges must have shape (n, 2)")
+    return tuple(tuple(loop) for loop in stitch_segments((int(a), int(b)) for a, b in edges_array))
+
+
+# Local triangulation core copied into this example.
 @dataclass(frozen=True, slots=True)
 class TriangulationGuide:
     """Optional sizing constraints and output quality requirements."""
@@ -34,9 +101,6 @@ class TriangulationGuide:
     min_angle_degrees: float | None = None
 
 
-GuideSpec: TypeAlias = TriangulationGuide | Literal["auto"] | None
-
-
 @dataclass(frozen=True, slots=True)
 class _LoopProjection3:
     points: PointArray2
@@ -45,224 +109,21 @@ class _LoopProjection3:
     y_axis: NDArray[np.float64]
 
 
-def automatic_triangulation_guide(
-    nodes: object,
-    edges: object,
-    *,
-    tolerance: float = 1e-9,
-    faces: object | None = None,
-    min_angle_degrees: float | None = None,
-) -> TriangulationGuide | None:
-    """Estimate a conservative guide from local boundary feature sizes."""
-    nodes_out = _coerce_points_for_guide(nodes)
-    edges_out = _coerce_edges(edges)
-    faces_out = None if faces is None else _coerce_faces(faces)
-    return _automatic_guide_from_arrays(
-        nodes_out,
-        edges_out,
-        faces_out,
-        tolerance=tolerance,
-        min_angle_degrees=min_angle_degrees,
-    )
-
-
-def triangulate_curve2(
-    curve: object,
-    *,
-    tolerance: float,
-    guide: GuideSpec = None,
-):
-    """Fill a closed 2D curve and return a ``Mesh2``."""
-    from cady.geometry.mesh import Mesh2
-
-    if not getattr(curve, "closed", False):
-        raise ValueError("curve must be closed to triangulate")
-    to_array = getattr(curve, "to_array", None)
-    if not callable(to_array):
-        raise TypeError("curve must provide to_array(tolerance=...)")
-    nodes = _coerce_points2(to_array(tolerance=tolerance))
-    boundary_edges = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
-    local_guide = _resolve_guide(
-        guide,
-        nodes,
-        boundary_edges,
-        tolerance=tolerance,
-    )
-    nodes_out, boundary_edges, _all_edges, faces = _triangulate_mesh2_arrays(
-        nodes,
-        boundary_edges,
-        tolerance=tolerance,
-        guide=local_guide,
-    )
-    vertices = tuple((float(x), float(y)) for x, y in nodes_out)
-    edge_values = tuple((int(a), int(b)) for a, b in boundary_edges)
-    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
-    return Mesh2(vertices, face_values, edge_values)
-
-
-def triangulate_curve3(
-    curve: object,
-    *,
-    tolerance: float,
-    guide: GuideSpec = None,
-):
-    """Fill a closed planar 3D curve and return a ``Mesh3``."""
-    from cady.geometry.mesh import Mesh3
-
-    if not getattr(curve, "closed", False):
-        raise ValueError("curve must be closed to triangulate")
-    to_array = getattr(curve, "to_array", None)
-    if not callable(to_array):
-        raise TypeError("curve must provide to_array(tolerance=...)")
-    nodes = _coerce_points3(to_array(tolerance=tolerance))
-    boundary_edges = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
-    local_guide = _resolve_guide(
-        guide,
-        nodes,
-        boundary_edges,
-        tolerance=tolerance,
-    )
-    nodes_out, boundary_edges, _all_edges, faces = _triangulate_mesh3_arrays(
-        nodes,
-        boundary_edges,
-        tolerance=tolerance,
-        guide=local_guide,
-    )
-    vertices = tuple((float(x), float(y), float(z)) for x, y, z in nodes_out)
-    edge_values = tuple((int(a), int(b)) for a, b in boundary_edges)
-    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
-    return Mesh3(vertices, face_values, edge_values)
-
-
-def triangulate_mesh2(
-    nodes: object,
-    edges: object,
-    *,
-    tolerance: float = 1e-9,
-    guide: GuideSpec = None,
-) -> tuple[PointArray2, EdgeArray, FaceArray]:
-    """Triangulate closed 2D edge loops and return nodes, edges, and faces."""
-    nodes_in = _coerce_points2(nodes)
-    edges_in = _coerce_edges(edges)
-    local_guide = _resolve_guide(
-        guide,
-        nodes_in,
-        edges_in,
-        tolerance=tolerance,
-    )
-    nodes_out, _boundary_edges, edges_out, faces = _triangulate_mesh2_arrays(
-        nodes_in,
-        edges_in,
-        tolerance=tolerance,
-        guide=local_guide,
-    )
-    return nodes_out, edges_out, faces
-
-
 def triangulate_mesh3(
-    nodes: object,
-    edges: object,
+    nodes: PointRows3,
+    edges: EdgeRows,
     *,
     tolerance: float = 1e-9,
-    guide: GuideSpec = None,
+    guide: TriangulationGuide | None = None,
 ) -> tuple[PointArray3, EdgeArray, FaceArray]:
     """Project planar 3D edge loops and return nodes, edges, and faces."""
-    nodes_in = _coerce_points3(nodes)
-    edges_in = _coerce_edges(edges)
-    local_guide = _resolve_guide(
-        guide,
-        nodes_in,
-        edges_in,
-        tolerance=tolerance,
-    )
     nodes_out, _boundary_edges, edges_out, faces = _triangulate_mesh3_arrays(
-        nodes_in,
-        edges_in,
+        _coerce_points3(nodes),
+        _coerce_edges(edges),
         tolerance=tolerance,
-        guide=local_guide,
+        guide=guide,
     )
     return nodes_out, edges_out, faces
-
-
-def triangulate_triangle_mesh3(
-    nodes: object,
-    faces: object,
-    protected_edges: object,
-    *,
-    tolerance: float = 1e-9,
-    guide: GuideSpec = None,
-) -> tuple[PointArray3, EdgeArray, FaceArray]:
-    """Improve an existing planar triangle mesh while preserving protected edges."""
-    nodes_out = _coerce_points3(nodes)
-    protected_edges_out = _coerce_edges(protected_edges)
-    face_values = _coerce_faces(faces)
-    guide_out = _resolve_guide(
-        guide,
-        nodes_out,
-        protected_edges_out,
-        faces=face_values,
-        tolerance=tolerance,
-    )
-    protected = _edge_key_set(protected_edges_out)
-    face_list = [(int(a), int(b), int(c)) for a, b, c in face_values]
-    if face_list:
-        face_list = _constrained_delaunay_faces(
-            nodes_out,
-            face_list,
-            protected_edges=protected,
-            tolerance=tolerance,
-        )
-        nodes_out, face_list = _refine_triangle_mesh3(
-            nodes_out,
-            face_list,
-            protected_edges=protected,
-            tolerance=tolerance,
-            guide=guide_out,
-        )
-    faces_out = _face_array(face_list)
-    return nodes_out, _add_internal_edges(protected_edges_out, faces_out), faces_out
-
-
-def _triangulate_mesh2_arrays(
-    nodes: PointArray2,
-    edges: EdgeArray,
-    *,
-    tolerance: float,
-    guide: TriangulationGuide | None,
-) -> tuple[PointArray2, EdgeArray, EdgeArray, FaceArray]:
-    guide = _validate_guide(guide)
-    nodes_out, edges_out = _refine_edges2(
-        nodes,
-        edges,
-        guide,
-    )
-    faces: list[FaceIndex] = []
-    protected_edges = _edge_key_set(edges_out)
-    for loop in edge_loops(edges_out):
-        if _guide_refines_faces(guide):
-            nodes_out, loop_faces = _triangulate_seeded_loop2(
-                nodes_out,
-                loop,
-                tolerance,
-            )
-        else:
-            loop_faces = _triangulate_loop2(nodes_out, loop, tolerance)
-            loop_faces = _constrained_delaunay_faces(
-                nodes_out,
-                loop_faces,
-                protected_edges=protected_edges,
-                tolerance=tolerance,
-            )
-        nodes_out, loop_faces = _refine_triangle_mesh2(
-            nodes_out,
-            loop_faces,
-            protected_edges=protected_edges,
-            tolerance=tolerance,
-            guide=guide,
-        )
-        faces.extend(loop_faces)
-    faces_array = _face_array(faces)
-    return nodes_out, edges_out, _add_internal_edges(edges_out, faces_array), faces_array
 
 
 def _triangulate_mesh3_arrays(
@@ -329,163 +190,7 @@ def _triangulate_mesh3_arrays(
     return nodes_out, edges_out, _add_internal_edges(edges_out, faces_array), faces_array
 
 
-def triangulate2(
-    nodes: object,
-    edges: object,
-    *,
-    tolerance: float = 1e-9,
-    guide: GuideSpec = None,
-) -> tuple[PointArray2, FaceArray]:
-    """Compatibility wrapper returning ``(nodes, faces)`` for 2D loops."""
-    nodes_out, _edges, faces = triangulate_mesh2(
-        nodes,
-        edges,
-        tolerance=tolerance,
-        guide=guide,
-    )
-    return nodes_out, faces
-
-
-def triangulate3(
-    nodes: object,
-    edges: object,
-    *,
-    tolerance: float = 1e-9,
-    guide: GuideSpec = None,
-) -> tuple[PointArray3, FaceArray]:
-    """Compatibility wrapper returning ``(nodes, faces)`` for planar 3D loops."""
-    nodes_out, _edges, faces = triangulate_mesh3(
-        nodes,
-        edges,
-        tolerance=tolerance,
-        guide=guide,
-    )
-    return nodes_out, faces
-
-
-def _resolve_guide(
-    guide: GuideSpec,
-    nodes: NDArray[np.float64],
-    edges: EdgeArray,
-    *,
-    tolerance: float,
-    faces: FaceArray | None = None,
-) -> TriangulationGuide | None:
-    if guide == "auto":
-        return _automatic_guide_from_arrays(
-            nodes,
-            edges,
-            faces,
-            tolerance=tolerance,
-        )
-    return _validate_guide(guide)
-
-
-def _automatic_guide_from_arrays(
-    nodes: NDArray[np.float64],
-    edges: EdgeArray,
-    faces: FaceArray | None,
-    *,
-    tolerance: float,
-    min_angle_degrees: float | None = None,
-) -> TriangulationGuide | None:
-    lengths = np.asarray(
-        sorted(
-            length
-            for length in _local_edge_lengths_for_guide(nodes, edges, faces)
-            if length > tolerance
-        ),
-        dtype=np.float64,
-    )
-    if lengths.size == 0:
-        return _with_min_angle(None, min_angle_degrees)
-
-    lower = np.min(nodes, axis=0)
-    upper = np.max(nodes, axis=0)
-    span = float(np.linalg.norm(upper - lower))
-    if span <= tolerance:
-        return _with_min_angle(None, min_angle_degrees)
-
-    # Size against local boundary features; a global span disables concave detail.
-    boundary_feature = float(np.quantile(lengths, 0.40))
-    span_feature = span / 5.0
-    max_edge_length = max(tolerance * 8.0, min(boundary_feature, span_feature))
-    if min_angle_degrees is not None:
-        max_edge_length = min(
-            max_edge_length,
-            _min_angle_edge_length(float(lengths[0]), min_angle_degrees, tolerance=tolerance),
-        )
-    return _with_min_angle(
-        TriangulationGuide(max_edge_length=max_edge_length),
-        min_angle_degrees,
-    )
-
-
-def _with_min_angle(
-    guide: TriangulationGuide | None,
-    min_angle_degrees: float | None,
-) -> TriangulationGuide | None:
-    if min_angle_degrees is None:
-        return _validate_guide(guide)
-    if guide is None:
-        return _validate_guide(TriangulationGuide(min_angle_degrees=min_angle_degrees))
-    return _validate_guide(
-        TriangulationGuide(
-            target_edge_length=guide.target_edge_length,
-            max_edge_length=guide.max_edge_length,
-            max_area=guide.max_area,
-            min_angle_degrees=min_angle_degrees,
-        )
-    )
-
-
-def _min_angle_edge_length(
-    shortest_feature: float,
-    min_angle_degrees: float,
-    *,
-    tolerance: float,
-) -> float:
-    tangent = tan(radians(min_angle_degrees))
-    if tangent <= 0.0:
-        return max(shortest_feature, tolerance * 8.0)
-    return max(shortest_feature / tangent, tolerance * 8.0)
-
-
-def _local_edge_lengths_for_guide(
-    nodes: NDArray[np.float64],
-    edges: EdgeArray,
-    faces: FaceArray | None,
-) -> tuple[float, ...]:
-    edge_set = {
-        (min(int(start), int(end)), max(int(start), int(end)))
-        for start, end in edges
-        if int(start) != int(end)
-    }
-    if faces is not None:
-        for face in faces:
-            edge_set.update(_face_edges((int(face[0]), int(face[1]), int(face[2]))))
-    return tuple(float(np.linalg.norm(nodes[start] - nodes[end])) for start, end in edge_set)
-
-
-def _coerce_points_for_guide(value: object) -> NDArray[np.float64]:
-    array = np.asarray(value, dtype=np.float64)
-    if array.ndim != 2 or array.shape[1] not in (2, 3):
-        raise ValueError("nodes must have shape (n, 2) or (n, 3)")
-    if not np.all(np.isfinite(array)):
-        raise ValueError("nodes must contain only finite values")
-    return np.array(array, dtype=np.float64, copy=True)
-
-
-def _coerce_points2(value: object) -> PointArray2:
-    array = np.asarray(value, dtype=np.float64)
-    if array.ndim != 2 or array.shape[1] != 2:
-        raise ValueError("nodes must have shape (n, 2)")
-    if not np.all(np.isfinite(array)):
-        raise ValueError("nodes must contain only finite values")
-    return np.array(array, dtype=np.float64, copy=True)
-
-
-def _coerce_points3(value: object) -> PointArray3:
+def _coerce_points3(value: PointRows3) -> PointArray3:
     array = np.asarray(value, dtype=np.float64)
     if array.ndim != 2 or array.shape[1] != 3:
         raise ValueError("nodes must have shape (n, 3)")
@@ -494,21 +199,12 @@ def _coerce_points3(value: object) -> PointArray3:
     return np.array(array, dtype=np.float64, copy=True)
 
 
-def _coerce_edges(value: object) -> EdgeArray:
+def _coerce_edges(value: EdgeRows) -> EdgeArray:
     array = np.asarray(value, dtype=np.int64)
     if array.size == 0:
         return np.empty((0, 2), dtype=np.int64)
     if array.ndim != 2 or array.shape[1] != 2:
         raise ValueError("edges must have shape (n, 2)")
-    return np.array(array, dtype=np.int64, copy=True)
-
-
-def _coerce_faces(value: object) -> FaceArray:
-    array = np.asarray(value, dtype=np.int64)
-    if array.size == 0:
-        return np.empty((0, 3), dtype=np.int64)
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError("faces must have shape (n, 3)")
     return np.array(array, dtype=np.int64, copy=True)
 
 
@@ -533,14 +229,6 @@ def _guide_edge_length(guide: TriangulationGuide | None) -> float | None:
         return None
     values = [value for value in (guide.max_edge_length, guide.target_edge_length) if value]
     return min(values) if values else None
-
-
-def _refine_edges2(
-    nodes: PointArray2,
-    edges: EdgeArray,
-    guide: TriangulationGuide | None,
-) -> tuple[PointArray2, EdgeArray]:
-    return _refine_edges(nodes, edges, _guide_edge_length(guide))
 
 
 def _refine_edges3(
@@ -605,24 +293,6 @@ def _edge_key_set(edges: EdgeArray) -> set[tuple[int, int]]:
         for start, end in edges
         if int(start) != int(end)
     }
-
-
-def _refine_triangle_mesh2(
-    nodes: PointArray2,
-    faces: list[FaceIndex],
-    *,
-    protected_edges: set[tuple[int, int]],
-    tolerance: float,
-    guide: TriangulationGuide | None,
-) -> tuple[PointArray2, list[FaceIndex]]:
-    nodes_out, refined = _refine_triangle_mesh(
-        nodes,
-        faces,
-        protected_edges=protected_edges,
-        tolerance=tolerance,
-        guide=guide,
-    )
-    return nodes_out, refined
 
 
 def _refine_triangle_mesh3(
@@ -1412,14 +1082,618 @@ def _point_in_triangle(
     )
 
 
-__all__ = [
-    "TriangulationGuide",
-    "automatic_triangulation_guide",
-    "triangulate2",
-    "triangulate3",
-    "triangulate_curve2",
-    "triangulate_curve3",
-    "triangulate_mesh2",
-    "triangulate_mesh3",
-    "triangulate_triangle_mesh3",
-]
+# Example configuration and public helpers.
+TOLERANCE = 1e-6
+MAX_EDGE_LENGTHS: tuple[ResolutionSpec, ...] = (None, "auto", 0.75, 0.35, 0.18)
+MIN_ANGLE_DEGREES: tuple[MinAngleSpec, ...] = (None, 5.0, 10.0, 15.0)
+POLYGON_POINTS: tuple[Point3, ...] = (
+    (-1.65, -0.25, 0.0),
+    (-1.05, -0.9, 0.0),
+    (-0.2, -0.82, 0.0),
+    (0.35, -1.18, 0.0),
+    (1.35, -0.6, 0.0),
+    (1.7, 0.18, 0.0),
+    (0.85, 0.5, 0.0),
+    (0.55, 1.1, 0.0),
+    (-0.28, 0.68, 0.0),
+    (-1.18, 0.96, 0.0),
+    (-1.58, 0.35, 0.0),
+)
+NARROW_CHANNEL_POINTS: tuple[Point3, ...] = (
+    (-2.0, -1.0, 0.0),
+    (2.0, -1.0, 0.0),
+    (2.0, -0.55, 0.0),
+    (-1.15, -0.55, 0.0),
+    (-1.15, 0.55, 0.0),
+    (2.0, 0.55, 0.0),
+    (2.0, 1.0, 0.0),
+    (-2.0, 1.0, 0.0),
+)
+COMB_POINTS: tuple[Point3, ...] = (
+    (-2.0, -1.0, 0.0),
+    (2.0, -1.0, 0.0),
+    (2.0, 1.0, 0.0),
+    (1.65, 1.0, 0.0),
+    (1.65, 0.15, 0.0),
+    (1.25, 0.15, 0.0),
+    (1.25, 1.0, 0.0),
+    (0.85, 1.0, 0.0),
+    (0.85, 0.15, 0.0),
+    (0.45, 0.15, 0.0),
+    (0.45, 1.0, 0.0),
+    (0.05, 1.0, 0.0),
+    (0.05, 0.15, 0.0),
+    (-0.35, 0.15, 0.0),
+    (-0.35, 1.0, 0.0),
+    (-0.75, 1.0, 0.0),
+    (-0.75, 0.15, 0.0),
+    (-1.15, 0.15, 0.0),
+    (-1.15, 1.0, 0.0),
+    (-2.0, 1.0, 0.0),
+)
+THIN_NECK_POINTS: tuple[Point3, ...] = (
+    (-2.0, -0.9, 0.0),
+    (-0.8, -0.9, 0.0),
+    (-0.45, -0.25, 0.0),
+    (0.45, -0.25, 0.0),
+    (0.8, -0.9, 0.0),
+    (2.0, -0.9, 0.0),
+    (2.0, 0.9, 0.0),
+    (0.8, 0.9, 0.0),
+    (0.45, 0.25, 0.0),
+    (-0.45, 0.25, 0.0),
+    (-0.8, 0.9, 0.0),
+    (-2.0, 0.9, 0.0),
+)
+CRESCENT_POINTS: tuple[Point3, ...] = (
+    (0.9, -1.15, 0.0),
+    (0.15, -1.45, 0.0),
+    (-0.75, -1.25, 0.0),
+    (-1.35, -0.7, 0.0),
+    (-1.55, 0.0, 0.0),
+    (-1.35, 0.7, 0.0),
+    (-0.75, 1.25, 0.0),
+    (0.15, 1.45, 0.0),
+    (0.9, 1.15, 0.0),
+    (0.45, 0.72, 0.0),
+    (0.18, 0.25, 0.0),
+    (0.1, -0.25, 0.0),
+    (0.35, -0.78, 0.0),
+)
+LONG_SLIVER_POINTS: tuple[Point3, ...] = (
+    (-2.2, -0.04, 0.0),
+    (2.2, -0.04, 0.0),
+    (2.2, 0.04, 0.0),
+    (-2.2, 0.04, 0.0),
+)
+TAPERED_NEEDLE_POINTS: tuple[Point3, ...] = (
+    (-2.2, -0.18, 0.0),
+    (1.95, -0.08, 0.0),
+    (2.12, -0.02, 0.0),
+    (2.12, 0.02, 0.0),
+    (1.95, 0.08, 0.0),
+    (-2.2, 0.18, 0.0),
+)
+HAIRLINE_SLOT_POINTS: tuple[Point3, ...] = (
+    (-2.2, -0.28, 0.0),
+    (2.2, -0.28, 0.0),
+    (2.2, -0.18, 0.0),
+    (-1.85, -0.18, 0.0),
+    (-1.85, -0.14, 0.0),
+    (2.2, -0.14, 0.0),
+    (2.2, 0.28, 0.0),
+    (-2.2, 0.28, 0.0),
+)
+JAGGED_BAY_POINTS: tuple[Point3, ...] = (
+    (-2.0, -0.8, 0.0),
+    (-1.6, -1.1, 0.0),
+    (-1.1, -0.82, 0.0),
+    (-0.65, -1.18, 0.0),
+    (-0.2, -0.82, 0.0),
+    (0.25, -1.12, 0.0),
+    (0.8, -0.78, 0.0),
+    (1.4, -1.0, 0.0),
+    (1.9, -0.45, 0.0),
+    (1.55, 0.05, 0.0),
+    (1.9, 0.55, 0.0),
+    (1.25, 0.9, 0.0),
+    (0.75, 0.55, 0.0),
+    (0.35, 1.12, 0.0),
+    (-0.1, 0.58, 0.0),
+    (-0.55, 1.0, 0.0),
+    (-1.0, 0.48, 0.0),
+    (-1.55, 0.85, 0.0),
+    (-1.9, 0.2, 0.0),
+    (-1.45, -0.2, 0.0),
+)
+POLYGON_CASES: tuple[tuple[str, tuple[Point3, ...]], ...] = (
+    ("coastal concave", POLYGON_POINTS),
+    ("narrow channel", NARROW_CHANNEL_POINTS),
+    ("comb teeth", COMB_POINTS),
+    ("thin neck", THIN_NECK_POINTS),
+    ("crescent moon", CRESCENT_POINTS),
+    ("long sliver", LONG_SLIVER_POINTS),
+    ("tapered needle", TAPERED_NEEDLE_POINTS),
+    ("hairline slot", HAIRLINE_SLOT_POINTS),
+    ("jagged bay", JAGGED_BAY_POINTS),
+)
+
+MESH_STYLES = (
+    DisplayStyle(color=(0.52, 0.64, 0.74), opacity=0.82),
+    DisplayStyle(color=(0.35, 0.66, 0.58), opacity=0.82),
+    DisplayStyle(color=(0.84, 0.57, 0.34), opacity=0.82),
+    DisplayStyle(color=(0.73, 0.48, 0.70), opacity=0.82),
+    DisplayStyle(color=(0.62, 0.58, 0.36), opacity=0.82),
+)
+HEURISTIC_STYLE = DisplayStyle(color=(0.35, 0.66, 0.58), opacity=0.82)
+INPUT_POLYGON_STYLE = DisplayStyle(color=(0.05, 0.18, 0.32), render_mode="wireframe")
+
+
+def example_polyline() -> Polyline3:
+    return Polyline3(POLYGON_POINTS, closed=True)
+
+
+def polygon_mesh_from_points(points: Sequence[Point3]) -> Mesh3:
+    vertices = tuple((float(x), float(y), float(z)) for x, y, z in points)
+    face = tuple(range(len(vertices)))
+    return Mesh3(vertices, (face,), _polygon_face_edges((face,)))
+
+
+def polygon_mesh_from_polyline(polyline: Polyline3, *, tolerance: float = TOLERANCE) -> Mesh3:
+    return polygon_mesh_from_points(
+        tuple((float(x), float(y), float(z)) for x, y, z in polyline.to_array(tolerance=tolerance))
+    )
+
+
+def triangulate3d(
+    mesh: Mesh3,
+    *,
+    tolerance: float = TOLERANCE,
+    guide: TriangulationGuide | Literal["auto"] | None = None,
+    min_angle_degrees: float | None = None,
+) -> Mesh3:
+    if not isfinite(tolerance) or tolerance <= 0.0:
+        raise ValueError("tolerance must be positive")
+    if min_angle_degrees is not None and (
+        not isfinite(min_angle_degrees) or min_angle_degrees <= 0.0
+    ):
+        raise ValueError("min_angle_degrees must be positive")
+    if not mesh.faces:
+        return Mesh3(mesh.vertices, (), mesh.edges)
+
+    vertices_out: list[Point3] = []
+    faces_out: list[FaceIndex] = []
+    edges_out: set[EdgeIndex] = set()
+    for face in mesh.faces:
+        face_vertices = tuple(mesh.vertices[index] for index in face)
+        local_guide = (
+            _automatic_guide(
+                face_vertices,
+                tolerance=tolerance,
+                min_angle_degrees=min_angle_degrees,
+            )
+            if guide == "auto"
+            else guide
+        )
+        local_guide = _guide_with_min_angle(local_guide, min_angle_degrees)
+        nodes, edges, faces = triangulate_mesh3(
+            face_vertices,
+            loop_edges(len(face_vertices)),
+            tolerance=tolerance,
+            guide=local_guide,
+        )
+        offset = len(vertices_out)
+        vertices_out.extend((float(x), float(y), float(z)) for x, y, z in nodes)
+        faces_out.extend((int(a) + offset, int(b) + offset, int(c) + offset) for a, b, c in faces)
+        edges_out.update(
+            (min(int(a) + offset, int(b) + offset), max(int(a) + offset, int(b) + offset))
+            for a, b in edges
+        )
+    return Mesh3(tuple(vertices_out), tuple(faces_out), tuple(sorted(edges_out)))
+
+
+def triangulate_polygon(
+    polyline: Polyline3,
+    *,
+    max_edge_length: ResolutionSpec = None,
+    tolerance: float = TOLERANCE,
+) -> Mesh3:
+    if max_edge_length is not None and max_edge_length != "auto" and (
+        not isfinite(max_edge_length) or max_edge_length <= 0.0
+    ):
+        raise ValueError("max_edge_length must be positive")
+
+    guide = (
+        "auto"
+        if max_edge_length == "auto"
+        else None
+        if max_edge_length is None
+        else TriangulationGuide(max_edge_length=max_edge_length)
+    )
+    return triangulate3d(
+        polygon_mesh_from_polyline(polyline, tolerance=tolerance),
+        tolerance=tolerance,
+        guide=guide,
+    )
+
+
+def triangulate_polygon_heuristic(
+    polygon: Mesh3,
+    *,
+    tolerance: float = TOLERANCE,
+) -> Mesh3:
+    return triangulate3d(polygon, tolerance=tolerance, guide="auto")
+
+
+def triangulate_resolutions(
+    polyline: Polyline3,
+    *,
+    max_edge_lengths: Iterable[ResolutionSpec] = MAX_EDGE_LENGTHS,
+    tolerance: float = TOLERANCE,
+) -> tuple[tuple[ResolutionSpec, Mesh3], ...]:
+    return tuple(
+        (
+            max_edge_length,
+            triangulate_polygon(
+                polyline,
+                max_edge_length=max_edge_length,
+                tolerance=tolerance,
+            ),
+        )
+        for max_edge_length in max_edge_lengths
+    )
+
+
+def triangulate_shape_cases(
+    cases: Iterable[tuple[str, Sequence[Point3]]] = POLYGON_CASES,
+    *,
+    tolerance: float = TOLERANCE,
+) -> tuple[tuple[str, Mesh3, Mesh3], ...]:
+    return tuple(
+        (
+            name,
+            polygon,
+            triangulate3d(polygon, tolerance=tolerance, guide="auto"),
+        )
+        for name, points in cases
+        for polygon in (polygon_mesh_from_points(points),)
+    )
+
+
+def triangulate_min_angle_cases(
+    points: Sequence[Point3] = HAIRLINE_SLOT_POINTS,
+    *,
+    min_angle_degrees: Iterable[MinAngleSpec] = MIN_ANGLE_DEGREES,
+    tolerance: float = TOLERANCE,
+) -> tuple[tuple[MinAngleSpec, Mesh3, Mesh3], ...]:
+    polygon = polygon_mesh_from_points(points)
+    return tuple(
+        (
+            angle,
+            polygon,
+            triangulate3d(
+                polygon,
+                tolerance=tolerance,
+                guide="auto",
+                min_angle_degrees=angle,
+            ),
+        )
+        for angle in min_angle_degrees
+    )
+
+
+def build_scene(cases: tuple[tuple[ResolutionSpec, Mesh3], ...]) -> Scene:
+    spacing = 4.25
+    centre = (len(cases) - 1) / 2.0
+    scene = Scene(
+        "polygon_triangulation_sizes",
+        camera=Camera.orthographic(
+            position=(0.0, 0.0, 11.0),
+            target=(0.0, 0.0, 0.0),
+            up=(0.0, 1.0, 0.0),
+            scale=10.5,
+        ),
+    )
+    for index, (max_edge_length, mesh) in enumerate(cases):
+        offset = (index - centre) * spacing
+        scene = scene.add(
+            _translated_mesh(mesh, offset, 0.0, 0.0),
+            name=_case_name(max_edge_length),
+            style=MESH_STYLES[index % len(MESH_STYLES)],
+        )
+    return scene
+
+
+def build_min_angle_scene(cases: tuple[tuple[MinAngleSpec, Mesh3, Mesh3], ...]) -> Scene:
+    spacing = 5.0
+    centre = (len(cases) - 1) / 2.0
+    scene = Scene(
+        "polygon_triangulation_min_angles",
+        camera=Camera.orthographic(
+            position=(0.0, 0.0, 11.0),
+            target=(0.0, 0.0, 0.0),
+            up=(0.0, 1.0, 0.0),
+            scale=max(10.5, len(cases) * spacing),
+        ),
+    )
+    for index, (angle, polygon, mesh) in enumerate(cases):
+        offset = (index - centre) * spacing
+        case_name = _min_angle_case_name(angle)
+        scene = scene.add(
+            _translated_mesh(mesh, offset, 0.0, 0.0),
+            name=f"{case_name} triangles",
+            style=MESH_STYLES[index % len(MESH_STYLES)],
+        )
+        scene = scene.add(
+            _translated_mesh(_polygon_boundary_overlay(polygon), offset, 0.0, 0.0),
+            name=f"{case_name} input polygon",
+            style=INPUT_POLYGON_STYLE,
+        )
+    return scene
+
+
+def build_shape_scene(cases: tuple[tuple[str, Mesh3, Mesh3], ...]) -> Scene:
+    columns = 3
+    spacing_x = 5.0
+    spacing_y = 3.25
+    rows = max(1, ceil(len(cases) / columns))
+    scene = Scene(
+        "polygon_triangulation_shape_cases",
+        camera=Camera.orthographic(
+            position=(0.0, 0.0, 15.0),
+            target=(0.0, 0.0, 0.0),
+            up=(0.0, 1.0, 0.0),
+            scale=max(columns * spacing_x, rows * spacing_y) * 1.1,
+        ),
+    )
+    for index, (name, polygon, mesh) in enumerate(cases):
+        column = index % columns
+        row = index // columns
+        x_offset = (column - (columns - 1) / 2.0) * spacing_x
+        y_offset = ((rows - 1) / 2.0 - row) * spacing_y
+        scene = scene.add(
+            _translated_mesh(mesh, x_offset, y_offset, 0.0),
+            name=f"{name} heuristic triangles",
+            style=MESH_STYLES[index % len(MESH_STYLES)],
+        )
+        scene = scene.add(
+            _translated_mesh(_polygon_boundary_overlay(polygon), x_offset, y_offset, 0.0),
+            name=f"{name} input polygon",
+            style=INPUT_POLYGON_STYLE,
+        )
+    return scene
+
+
+def build_heuristic_scene(polygon: Mesh3, *, tolerance: float = TOLERANCE) -> Scene:
+    lower, upper = polygon.bounds()
+    centre = (
+        (lower[0] + upper[0]) / 2.0,
+        (lower[1] + upper[1]) / 2.0,
+        (lower[2] + upper[2]) / 2.0,
+    )
+    span = max(upper[0] - lower[0], upper[1] - lower[1], upper[2] - lower[2], 1.0)
+    return (
+        Scene(
+            "polygon_triangulation_heuristic",
+            camera=Camera.orthographic(
+                position=(centre[0], centre[1], centre[2] + span * 2.5),
+                target=centre,
+                up=(0.0, 1.0, 0.0),
+                scale=span * 1.25,
+            ),
+        )
+        .add(
+            triangulate_polygon_heuristic(polygon, tolerance=tolerance),
+            name="heuristic triangles",
+            style=HEURISTIC_STYLE,
+        )
+        .add(_polygon_boundary_overlay(polygon), name="input polygon", style=INPUT_POLYGON_STYLE)
+    )
+
+
+def mesh_summary(cases: tuple[tuple[ResolutionSpec, Mesh3], ...]) -> str:
+    lines = ["cady polygon triangulation size comparison"]
+    for max_edge_length, mesh in cases:
+        lines.append(
+            f"{_case_name(max_edge_length)}: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces"
+        )
+    return "\n".join(lines)
+
+
+def heuristic_summary(polygon: Mesh3, mesh: Mesh3) -> str:
+    return "\n".join(
+        (
+            "cady polygon heuristic triangulation",
+            f"input polygon: {len(polygon.vertices)} vertices, {len(polygon.faces)} face",
+            f"heuristic mesh: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces",
+        )
+    )
+
+
+def shape_summary(cases: tuple[tuple[str, Mesh3, Mesh3], ...]) -> str:
+    lines = ["cady polygon triangulation shape cases"]
+    for name, polygon, mesh in cases:
+        lines.append(
+            f"{name}: {len(polygon.vertices)} boundary vertices -> "
+            f"{len(mesh.vertices)} vertices, {len(mesh.faces)} faces"
+        )
+    return "\n".join(lines)
+
+
+def min_angle_summary(cases: tuple[tuple[MinAngleSpec, Mesh3, Mesh3], ...]) -> str:
+    lines = ["cady skinny polygon min-angle comparison"]
+    for angle, polygon, mesh in cases:
+        lines.append(
+            f"{_min_angle_case_name(angle)}: {len(polygon.vertices)} boundary vertices -> "
+            f"{len(mesh.vertices)} vertices, {len(mesh.faces)} faces, "
+            f"worst angle {_mesh_min_angle_degrees(mesh):.3g}"
+        )
+    return "\n".join(lines)
+
+
+def main() -> None:
+    polyline = example_polyline()
+    polygon = polygon_mesh_from_polyline(polyline, tolerance=TOLERANCE)
+    heuristic_mesh = triangulate_polygon_heuristic(polygon, tolerance=TOLERANCE)
+    cases = triangulate_resolutions(polyline)
+    shape_cases = triangulate_shape_cases()
+    min_angle_cases = triangulate_min_angle_cases()
+
+    print(mesh_summary(cases))
+    build_scene(cases).view(
+        tolerance=TOLERANCE,
+        title="polygon triangulation sizes",
+    )
+
+    print()
+    print(heuristic_summary(polygon, heuristic_mesh))
+    build_heuristic_scene(polygon, tolerance=TOLERANCE).view(
+        tolerance=TOLERANCE,
+        title="polygon triangulation auto heuristic",
+    )
+    print()
+    print(shape_summary(shape_cases))
+    build_shape_scene(shape_cases).view(
+        tolerance=TOLERANCE,
+        title="polygon triangulation shape cases",
+    )
+    print()
+    print(min_angle_summary(min_angle_cases))
+    build_min_angle_scene(min_angle_cases).view(
+        tolerance=TOLERANCE,
+        title="skinny polygon min angle comparison",
+    )
+    print("done")
+
+
+# Example-specific helpers.
+def _automatic_guide(
+    vertices: tuple[Point3, ...],
+    *,
+    tolerance: float,
+    min_angle_degrees: float | None = None,
+) -> TriangulationGuide | None:
+    nodes = np.asarray(vertices, dtype=np.float64)
+    edges = np.asarray(loop_edges(len(vertices)), dtype=np.int64)
+    lengths = np.asarray(
+        sorted(length for length in _local_edge_lengths(nodes, edges) if length > tolerance),
+        dtype=np.float64,
+    )
+    if lengths.size == 0:
+        return None
+
+    lower = np.min(nodes, axis=0)
+    upper = np.max(nodes, axis=0)
+    span = float(np.linalg.norm(upper - lower))
+    if span <= tolerance:
+        return None
+
+    # Size against local boundary features; a global span disables concave detail.
+    boundary_feature = float(np.quantile(lengths, 0.40))
+    span_feature = span / 5.0
+    max_edge_length = max(tolerance * 8.0, min(boundary_feature, span_feature))
+    if min_angle_degrees is not None:
+        max_edge_length = min(
+            max_edge_length,
+            _min_angle_edge_length(float(lengths[0]), min_angle_degrees, tolerance=tolerance),
+        )
+    return TriangulationGuide(max_edge_length=max_edge_length)
+
+
+def _guide_with_min_angle(
+    guide: TriangulationGuide | None,
+    min_angle_degrees: float | None,
+) -> TriangulationGuide | None:
+    if min_angle_degrees is None:
+        return guide
+    if guide is None:
+        return TriangulationGuide(min_angle_degrees=min_angle_degrees)
+    return TriangulationGuide(
+        target_edge_length=guide.target_edge_length,
+        max_edge_length=guide.max_edge_length,
+        max_area=guide.max_area,
+        min_angle_degrees=min_angle_degrees,
+    )
+
+
+def _min_angle_edge_length(
+    shortest_feature: float,
+    min_angle_degrees: float,
+    *,
+    tolerance: float,
+) -> float:
+    tangent = tan(radians(min_angle_degrees))
+    if tangent <= 0.0:
+        return max(shortest_feature, tolerance * 8.0)
+    return max(shortest_feature / tangent, tolerance * 8.0)
+
+
+def _local_edge_lengths(nodes: PointArray3, edges: EdgeArray) -> tuple[float, ...]:
+    edge_set = {(min(int(start), int(end)), max(int(start), int(end))) for start, end in edges}
+    return tuple(float(np.linalg.norm(nodes[start] - nodes[end])) for start, end in edge_set)
+
+
+def _polygon_face_edges(faces: Iterable[tuple[int, ...]]) -> tuple[EdgeIndex, ...]:
+    edges: set[EdgeIndex] = set()
+    for face in faces:
+        for start, end in zip(face, face[1:] + face[:1], strict=True):
+            edges.add((min(start, end), max(start, end)))
+    return tuple(sorted(edges))
+
+
+def _polygon_boundary_overlay(polygon: Mesh3) -> Mesh3:
+    vertices = tuple((x, y, z + 0.025) for x, y, z in polygon.vertices)
+    return Mesh3(vertices, (), _polygon_face_edges(polygon.faces))
+
+
+def _translated_mesh(mesh: Mesh3, x_offset: float, y_offset: float, z_offset: float) -> Mesh3:
+    return Mesh3(
+        tuple((x + x_offset, y + y_offset, z + z_offset) for x, y, z in mesh.vertices),
+        mesh.faces,
+        mesh.edges,
+    )
+
+
+def _case_name(max_edge_length: ResolutionSpec) -> str:
+    if max_edge_length is None:
+        return "original boundary"
+    if max_edge_length == "auto":
+        return "auto guide"
+    return f"max edge {max_edge_length:g}"
+
+
+def _min_angle_case_name(min_angle_degrees: MinAngleSpec) -> str:
+    if min_angle_degrees is None:
+        return "auto guide"
+    return f"min angle {min_angle_degrees:g}"
+
+
+def _mesh_min_angle_degrees(mesh: Mesh3) -> float:
+    return min(
+        _triangle_min_angle_degrees(tuple(mesh.vertices[index] for index in face))
+        for face in mesh.faces
+    )
+
+
+def _triangle_min_angle_degrees(points: tuple[Point3, Point3, Point3]) -> float:
+    a, b, c = points
+    ab = _distance3(a, b)
+    bc = _distance3(b, c)
+    ca = _distance3(c, a)
+    return min(
+        _angle_degrees(ab, ca, bc),
+        _angle_degrees(ab, bc, ca),
+        _angle_degrees(bc, ca, ab),
+    )
+
+
+def _distance3(left: Point3, right: Point3) -> float:
+    return sqrt(
+        (left[0] - right[0]) * (left[0] - right[0])
+        + (left[1] - right[1]) * (left[1] - right[1])
+        + (left[2] - right[2]) * (left[2] - right[2])
+    )
+
+
+if __name__ == "__main__":
+    main()

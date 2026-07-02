@@ -227,7 +227,18 @@ class Mesh3:
                 faces.append(group.boundary)
             else:
                 faces.extend(self.faces[index] for index in group.indices)
-        return Mesh3(self.vertices, tuple(faces), _face_edges(tuple(faces)))
+        if not faces:
+            return Mesh3(self.vertices, (), ())
+
+        simplified_faces = tuple(
+            _simplified_face_boundary(self.vertices, face, tolerance=tolerance) for face in faces
+        )
+        vertices, remapped_faces, edges = _compact_polygon_mesh(
+            self.vertices,
+            simplified_faces,
+            _face_edges(simplified_faces),
+        )
+        return Mesh3(vertices, remapped_faces, edges)
 
     def triangulate(
         self,
@@ -273,6 +284,39 @@ class Mesh3:
             tolerance=tolerance,
         )
         return _mesh_from_arrays(decimated_vertices, decimated_faces, decimated_edges)
+
+    def remesh(
+        self,
+        *,
+        target_edge_length: float | None = None,
+        iterations: int = 10,
+        feature_angle_degrees: float | None = 50.0,
+        protect_boundary: bool = True,
+        long_factor: float = 4.0 / 3.0,
+        short_factor: float = 4.0 / 5.0,
+        relaxation: float = 0.5,
+        project: bool = True,
+        tolerance: float = 1e-9,
+    ) -> Mesh3:
+        """Return a feature-preserving isotropic triangle remesh."""
+        from cady.operations.mesh_topology import remesh_mesh_data
+
+        _validate_tolerance(tolerance)
+        remeshed_vertices, remeshed_faces, remeshed_edges = remesh_mesh_data(
+            self.vertices,
+            self.triangulated_faces(tolerance=tolerance),
+            self.edges,
+            target_edge_length=target_edge_length,
+            iterations=iterations,
+            feature_angle_degrees=feature_angle_degrees,
+            protect_boundary=protect_boundary,
+            long_factor=long_factor,
+            short_factor=short_factor,
+            relaxation=relaxation,
+            project=project,
+            tolerance=tolerance,
+        )
+        return _mesh_from_arrays(remeshed_vertices, remeshed_faces, remeshed_edges)
 
     @property
     def area(self) -> float:
@@ -360,7 +404,7 @@ class Mesh3:
         When *snap_tolerance* is set, boundary vertices within that distance
         of the plane but not already on it are projected onto the plane.
         New projected vertices are appended and used for the cap while the
-        originals stay connected, creating thin gaps that ``close_boundary``
+        originals stay connected, creating thin gaps that ``close_mesh``
         can fill.
         """
         from cady.operations.mesh_clipping import close_planar_cap
@@ -411,30 +455,35 @@ class Mesh3:
         )
         return _mesh_from_arrays(closed_vertices, closed_faces, closed_edges)
 
-    def close_boundary(
+    def close_mesh(
         self,
         *,
         tolerance: float = 1e-3,
     ) -> Mesh3:
-        """Close all planar boundary holes in the mesh.
+        """Close planar boundary loops with polygon faces.
 
         Detects boundary edges (edges appearing in exactly one face), stitches
-        them into loops, fits a best-fit plane to each loop, and triangulates
-        planar loops.
+        them into loops, validates that each loop is planar, and adds one
+        polygon face per loop.
 
         Raises ``ValueError`` if any boundary loop is non-planar.
         """
-        from cady.operations.mesh_clipping import close_boundary as _close_boundary_ops
-
         _validate_tolerance(tolerance)
-        vertices, faces, edges = self.to_array(tolerance=tolerance)
-        closed_vertices, closed_faces, closed_edges = _close_boundary_ops(
-            vertices,
-            faces,
-            edges,
-            tolerance=tolerance,
-        )
-        return _mesh_from_arrays(closed_vertices, closed_faces, closed_edges)
+        if not self.faces:
+            return self
+
+        loops = _mesh_boundary_loops(self.faces)
+        if not loops:
+            return self
+
+        cap_faces: list[FaceIndex] = []
+        for loop in loops:
+            face = tuple(reversed(loop))
+            _validate_planar_boundary_loop(self.vertices, face, tolerance=tolerance)
+            cap_faces.append(face)
+
+        faces = (*self.faces, *cap_faces)
+        return Mesh3(self.vertices, faces, _face_edges(faces))
 
     def close_holes(
         self,
@@ -447,7 +496,7 @@ class Mesh3:
         Not yet implemented.
         """
         raise NotImplementedError(
-            "close_holes is not implemented; use close_boundary for planar hole filling"
+            "close_holes is not implemented; use close_mesh for planar hole filling"
         )
 
     def to_wireframe(self) -> Wireframe3:
@@ -531,6 +580,74 @@ def _face_edges(faces: tuple[FaceIndex, ...]) -> tuple[EdgeIndex, ...]:
         for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
             edges.add((min(start, end), max(start, end)))
     return tuple(sorted(edges))
+
+
+def _simplified_face_boundary(
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    *,
+    tolerance: float,
+) -> FaceIndex:
+    simplified: list[int] = list(face)
+    while len(simplified) > 3:
+        next_face: list[int] = [
+            current
+            for index, current in enumerate(simplified)
+            if not _is_straight_boundary_vertex(
+                vertices,
+                simplified[index - 1],
+                current,
+                simplified[(index + 1) % len(simplified)],
+                tolerance=tolerance,
+            )
+        ]
+        if len(next_face) < 3 or len(next_face) == len(simplified):
+            break
+        simplified = next_face
+    return tuple(simplified)
+
+
+def _is_straight_boundary_vertex(
+    vertices: tuple[Point3, ...],
+    previous: int,
+    current: int,
+    following: int,
+    *,
+    tolerance: float,
+) -> bool:
+    before = _sub3(vertices[current], vertices[previous])
+    after = _sub3(vertices[following], vertices[current])
+    before_length = _length3(before)
+    after_length = _length3(after)
+    if before_length <= tolerance or after_length <= tolerance:
+        return True
+    if _dot3(before, after) <= 0.0:
+        return False
+    return _length3(_cross3(before, after)) <= tolerance * max(before_length, after_length)
+
+
+def _compact_polygon_mesh(
+    vertices: tuple[Point3, ...],
+    faces: tuple[FaceIndex, ...],
+    edges: tuple[EdgeIndex, ...],
+) -> tuple[tuple[Point3, ...], tuple[FaceIndex, ...], tuple[EdgeIndex, ...]]:
+    used = sorted(
+        {index for face in faces for index in face}
+        | {index for edge in edges for index in edge}
+    )
+    if len(used) == len(vertices) and all(old == new for new, old in enumerate(used)):
+        return vertices, faces, edges
+
+    remap = {old: new for new, old in enumerate(used)}
+    remapped_faces = tuple(tuple(remap[index] for index in face) for face in faces)
+    remapped_edges = tuple(
+        sorted(
+            _edge_key(remap[start], remap[end])
+            for start, end in edges
+            if start in remap and end in remap
+        )
+    )
+    return tuple(vertices[index] for index in used), remapped_faces, remapped_edges
 
 
 def _fan_triangulated_face(face: FaceIndex) -> tuple[TriangleIndex, ...]:
@@ -743,31 +860,14 @@ def _resolve_triangulation_guide(
     if guide != "auto":
         return _with_min_angle(guide, min_angle_degrees)
 
-    from cady.operations.triangulation import TriangulationGuide
+    from cady.operations.triangulation import automatic_triangulation_guide
 
-    lengths = _local_edge_lengths(nodes, edges, faces)
-    lengths = tuple(sorted(length for length in lengths if length > tolerance))
-    if not lengths:
-        return _with_min_angle(None, min_angle_degrees)
-
-    lower = np.min(nodes, axis=0)
-    upper = np.max(nodes, axis=0)
-    span = float(np.linalg.norm(upper - lower))
-    if span <= tolerance:
-        return _with_min_angle(None, min_angle_degrees)
-
-    if faces is None and len(edges) > 4:
-        return _with_min_angle(
-            TriangulationGuide(max_edge_length=max(lengths[-1], span)),
-            min_angle_degrees,
-        )
-
-    typical = _percentile(lengths, 0.5)
-    span_floor = span / 12.0 if faces is None else span / 96.0
-    max_edge_length = max(min(typical, span / 8.0), span_floor, tolerance * 10.0)
-    return _with_min_angle(
-        TriangulationGuide(max_edge_length=max_edge_length),
-        min_angle_degrees,
+    return automatic_triangulation_guide(
+        nodes,
+        edges,
+        faces=faces,
+        tolerance=tolerance,
+        min_angle_degrees=min_angle_degrees,
     )
 
 
@@ -788,35 +888,6 @@ def _with_min_angle(
         max_area=guide.max_area,
         min_angle_degrees=min_angle_degrees,
     )
-
-
-def _local_edge_lengths(
-    nodes: PointArray3,
-    edges: NDArray[np.int64],
-    faces: list[TriangleIndex] | None,
-) -> tuple[float, ...]:
-    edge_set: set[EdgeIndex] = {
-        _edge_key(int(start), int(end)) for start, end in edges if int(start) != int(end)
-    }
-    if faces is not None:
-        for face in faces:
-            edge_set.update(_triangle_edges(face))
-    return tuple(float(np.linalg.norm(nodes[start] - nodes[end])) for start, end in edge_set)
-
-
-def _triangle_edges(face: TriangleIndex) -> tuple[EdgeIndex, EdgeIndex, EdgeIndex]:
-    a, b, c = face
-    return (_edge_key(a, b), _edge_key(b, c), _edge_key(c, a))
-
-
-def _percentile(values: tuple[float, ...], fraction: float) -> float:
-    if len(values) == 1:
-        return values[0]
-    position = fraction * (len(values) - 1)
-    lower = int(position)
-    upper = min(lower + 1, len(values) - 1)
-    ratio = position - lower
-    return values[lower] * (1.0 - ratio) + values[upper] * ratio
 
 
 @dataclass(frozen=True, slots=True)
@@ -1137,6 +1208,71 @@ def _boundary_loops(halfedges: list[tuple[int, int]]) -> list[list[int]]:
         loops.append(loop)
 
     return sorted(loops, key=lambda loop: (-len(loop), loop))
+
+
+def _mesh_boundary_loops(faces: tuple[FaceIndex, ...]) -> list[list[int]]:
+    halfedges = _boundary_halfedges(faces)
+    if not halfedges:
+        return []
+
+    neighbours: defaultdict[int, list[int]] = defaultdict(list)
+    unused_edges: set[EdgeIndex] = set()
+    for start, end in halfedges:
+        edge = _edge_key(start, end)
+        unused_edges.add(edge)
+        neighbours[start].append(end)
+        neighbours[end].append(start)
+
+    if any(len(values) != 2 for values in neighbours.values()):
+        raise GeometryError("mesh boundary is not a closed polyline")
+
+    loops: list[list[int]] = []
+    while unused_edges:
+        start = min(index for edge in unused_edges for index in edge)
+        loop: list[int] = []
+        previous: int | None = None
+        current = start
+
+        while True:
+            loop.append(current)
+            candidates = [
+                candidate
+                for candidate in sorted(neighbours[current])
+                if candidate != previous and _edge_key(current, candidate) in unused_edges
+            ]
+            if not candidates:
+                raise GeometryError("mesh boundary is not a closed polyline")
+            following = candidates[0]
+            unused_edges.remove(_edge_key(current, following))
+            previous, current = current, following
+            if current == start:
+                break
+            if current in loop:
+                raise GeometryError("mesh boundary is not a closed polyline")
+
+        if len(loop) < 3:
+            raise GeometryError("mesh boundary is not a closed polyline")
+        loops.append(loop)
+
+    return sorted(loops, key=lambda loop: (-len(loop), loop))
+
+
+def _validate_planar_boundary_loop(
+    vertices: tuple[Point3, ...],
+    face: FaceIndex,
+    *,
+    tolerance: float,
+) -> None:
+    from cady.geometry.plane3 import Plane3
+
+    points = tuple(vertices[index] for index in face)
+    plane = Plane3.fit(points)
+    deviation = plane.max_deviation(points)
+    if deviation > tolerance:
+        raise ValueError(
+            f"Boundary loop is non-planar (max deviation {deviation:.3e} > "
+            f"tolerance {tolerance:.3e})"
+        )
 
 
 def _polyline_from_loop(vertices: tuple[Point3, ...], loop: list[int]) -> PointArray3:

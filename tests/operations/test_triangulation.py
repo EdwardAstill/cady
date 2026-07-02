@@ -8,6 +8,7 @@ import pytest
 from cady.geometry.polyline import Polyline2, Polyline3
 from cady.operations import (
     TriangulationGuide,
+    automatic_triangulation_guide,
     triangulate2,
     triangulate3,
     triangulate_curve2,
@@ -164,6 +165,61 @@ def test_triangulation_guide_refines_boundary_edges() -> None:
     assert len(faces) >= 2
     assert _max_face_edge_length(out_nodes, faces) <= 0.75 + 1e-9
     assert _delaunay_violations(out_nodes, faces) == 0
+
+
+def test_automatic_triangulation_guide_uses_local_feature_size() -> None:
+    nodes = _comb_nodes3()
+    edges = _loop_edges(len(nodes))
+
+    guide = automatic_triangulation_guide(nodes, edges, tolerance=1e-6)
+
+    assert guide is not None
+    assert guide.max_edge_length is not None
+    assert guide.max_edge_length < 1.0
+
+
+def test_automatic_triangulation_guide_sizes_skinny_shape_for_min_angle() -> None:
+    nodes = np.array(
+        [
+            [-2.2, -0.28, 0.0],
+            [2.2, -0.28, 0.0],
+            [2.2, -0.18, 0.0],
+            [-1.85, -0.18, 0.0],
+            [-1.85, -0.14, 0.0],
+            [2.2, -0.14, 0.0],
+            [2.2, 0.28, 0.0],
+            [-2.2, 0.28, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    edges = _loop_edges(len(nodes))
+
+    guide = automatic_triangulation_guide(
+        nodes,
+        edges,
+        tolerance=1e-6,
+        min_angle_degrees=15.0,
+    )
+
+    assert guide is not None
+    assert guide.max_edge_length is not None
+    assert guide.max_edge_length < 0.15
+    assert guide.min_angle_degrees == 15.0
+
+
+def test_triangulate_mesh3_accepts_auto_guide() -> None:
+    nodes = _comb_nodes3()
+    edges = _loop_edges(len(nodes))
+
+    out_nodes, _out_edges, faces = triangulate_mesh3(
+        nodes,
+        edges,
+        tolerance=1e-6,
+        guide="auto",
+    )
+
+    assert len(out_nodes) > len(nodes)
+    assert len(faces) > len(nodes) - 2
 
 
 def test_triangulation_guide_max_area_inserts_steiner_nodes() -> None:
@@ -364,3 +420,35 @@ def _point_in_circumcircle(
 
 def _cross(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
     return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+
+
+def _loop_edges(count: int) -> np.ndarray:
+    return np.asarray(tuple((index, (index + 1) % count) for index in range(count)), dtype=np.int64)
+
+
+def _comb_nodes3() -> np.ndarray:
+    return np.asarray(
+        (
+            (-2.0, -1.0, 0.0),
+            (2.0, -1.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (1.65, 1.0, 0.0),
+            (1.65, 0.15, 0.0),
+            (1.25, 0.15, 0.0),
+            (1.25, 1.0, 0.0),
+            (0.85, 1.0, 0.0),
+            (0.85, 0.15, 0.0),
+            (0.45, 0.15, 0.0),
+            (0.45, 1.0, 0.0),
+            (0.05, 1.0, 0.0),
+            (0.05, 0.15, 0.0),
+            (-0.35, 0.15, 0.0),
+            (-0.35, 1.0, 0.0),
+            (-0.75, 1.0, 0.0),
+            (-0.75, 0.15, 0.0),
+            (-1.15, 0.15, 0.0),
+            (-1.15, 1.0, 0.0),
+            (-2.0, 1.0, 0.0),
+        ),
+        dtype=np.float64,
+    )

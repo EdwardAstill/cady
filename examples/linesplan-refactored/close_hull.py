@@ -36,8 +36,7 @@ class LinesplanHull:
     mesh_patches: tuple[Mesh3, ...]
     keel_cap_mesh: Mesh3
     combined_mesh: Mesh3
-    closed_mesh: Mesh3 | None
-    close_error: Exception | None
+    closed_mesh: Mesh3
 
 
 def close_linesplan_hull(lofted_patches: Iterable[LoftedPatch]) -> LinesplanHull:
@@ -54,7 +53,7 @@ def close_linesplan_hull(lofted_patches: Iterable[LoftedPatch]) -> LinesplanHull
     mesh_patches = (*half_meshes, *mirrored_meshes)
     keel_cap_mesh = keel_end_cap_mesh(keel_end_rows(keel_boundary_rows(patches)))
     combined_mesh = combine_meshes((*mesh_patches, keel_cap_mesh))
-    closed_mesh, close_error = try_close_mesh(combined_mesh)
+    closed_mesh = combined_mesh.close_mesh(tolerance=TOLERANCE)
     return LinesplanHull(
         lofted_patches=patches,
         boundary_extensions=boundary_extensions,
@@ -64,7 +63,6 @@ def close_linesplan_hull(lofted_patches: Iterable[LoftedPatch]) -> LinesplanHull
         keel_cap_mesh=keel_cap_mesh,
         combined_mesh=combined_mesh,
         closed_mesh=closed_mesh,
-        close_error=close_error,
     )
 
 
@@ -170,14 +168,6 @@ def mirror_meshes(meshes: Iterable[Mesh3]) -> tuple[Mesh3, ...]:
 def combine_meshes(meshes: Iterable[Mesh3]) -> Mesh3:
     """Merge and weld mesh patches before boundary closure."""
     return weld_mesh(Mesh3.merged(meshes), tolerance=TOLERANCE)
-
-
-def try_close_mesh(mesh: Mesh3) -> tuple[Mesh3 | None, Exception | None]:
-    """Close the mesh boundary, returning the failure instead of raising it."""
-    try:
-        return mesh.close_boundary(tolerance=TOLERANCE), None
-    except ValueError as exc:
-        return None, exc
 
 
 def weld_mesh(mesh: Mesh3, *, tolerance: float) -> Mesh3:

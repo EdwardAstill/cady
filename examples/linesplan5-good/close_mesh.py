@@ -65,7 +65,7 @@ for a, b in edges:
         welded_edges.add((min(start, end), max(start, end)))
 
 _WELDED_MESH = Mesh3(tuple(vertices), tuple(welded_faces), tuple(sorted(welded_edges)))
-CLOSED_MESH = _WELDED_MESH.close_boundary(tolerance=TOLERANCE)
+CLOSED_MESH = _WELDED_MESH.close_mesh(tolerance=TOLERANCE)
 closed_mesh = CLOSED_MESH
 
 

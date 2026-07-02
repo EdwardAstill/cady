@@ -56,7 +56,7 @@ def _edge_occurrence_counts(mesh: Mesh3) -> Counter[tuple[int, int]]:
     """Return Counter mapping each edge (min,max) to its occurrence count."""
     counts: Counter[tuple[int, int]] = Counter()
     for face in mesh.faces:
-        indices = [face[0], face[1], face[2]]
+        indices = [int(index) for index in face]
         for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
             counts[(min(start, end), max(start, end))] += 1
     return counts
@@ -114,27 +114,28 @@ def test_close_planar_rejects_negative_tolerance() -> None:
         mesh.close_planar((0, 0, 1), (0, 0, 1), tolerance=0.0)
 
 
-# ── close_boundary ────────────────────────────────────────────────────────
+# ── close_mesh ────────────────────────────────────────────────────────────
 
 
-def test_close_boundary_fills_open_ends_of_extrusion() -> None:
-    """A box missing the top face should be closed by close_boundary."""
+def test_close_mesh_fills_open_ends_with_polygon_faces() -> None:
+    """A box missing the top face should be closed by close_mesh."""
     mesh = _cube_minus_top()
-    result = mesh.close_boundary(tolerance=1e-6)
+    result = mesh.close_mesh(tolerance=1e-6)
 
     assert isinstance(result, Mesh3)
     assert result is not mesh
-    assert len(result.faces) == len(mesh.faces) + 2  # quad → 2 tris
+    assert len(result.faces) == len(mesh.faces) + 1
+    assert len(result.faces[-1]) == 4
     assert _all_edges_manifold(result)
 
 
-def test_close_boundary_is_noop_when_already_closed() -> None:
+def test_close_mesh_is_noop_when_already_closed() -> None:
     mesh = _cube_mesh()
-    result = mesh.close_boundary(tolerance=1e-6)
+    result = mesh.close_mesh(tolerance=1e-6)
     assert len(result.faces) == len(mesh.faces)
 
 
-def test_close_boundary_raises_for_non_planar_boundary() -> None:
+def test_close_mesh_raises_for_non_planar_boundary() -> None:
     # A cube missing the top face, but with one top vertex displaced
     # so the 4-vertex boundary loop is non-planar
     vertices = (
@@ -162,10 +163,10 @@ def test_close_boundary_raises_for_non_planar_boundary() -> None:
 
     mesh = Mesh3(vertices, faces)
     with pytest.raises(ValueError, match="non-planar"):
-        mesh.close_boundary(tolerance=1e-6)
+        mesh.close_mesh(tolerance=1e-6)
 
 
-def test_close_boundary_fills_multiple_holes() -> None:
+def test_close_mesh_fills_multiple_holes_with_polygon_faces() -> None:
     """A box missing top AND bottom faces should get both closed."""
     vertices = _cube_vertices()
     faces = tuple(
@@ -177,10 +178,10 @@ def test_close_boundary_fills_multiple_holes() -> None:
         )
     )
     mesh = Mesh3(vertices, faces)
-    result = mesh.close_boundary(tolerance=1e-6)
+    result = mesh.close_mesh(tolerance=1e-6)
 
-    # 4 cap triangles (2 per missing quad face)
-    assert len(result.faces) == len(mesh.faces) + 4
+    assert len(result.faces) == len(mesh.faces) + 2
+    assert all(len(face) == 4 for face in result.faces[-2:])
     assert _all_edges_manifold(result)
 
 
@@ -351,8 +352,8 @@ def test_close_planar_snap_projects_nearby_boundary() -> None:
         assert original in result.vertices
 
 
-def test_close_planar_snap_creates_gaps_for_close_boundary() -> None:
-    """After a snap-cap, close_boundary can run without error on the gaps."""
+def test_close_planar_snap_creates_gaps_for_close_mesh() -> None:
+    """After a snap-cap, close_mesh can run without error on the gaps."""
     mesh = _cube_minus_top_displaced()
     snapped = mesh.close_planar(
         plane_origin=(0.0, 0.0, 1.0),
@@ -363,8 +364,8 @@ def test_close_planar_snap_creates_gaps_for_close_boundary() -> None:
     # Snap-cap creates gaps — not manifold yet
     assert not _all_edges_manifold(snapped)
     # The gaps are thin strips between the original boundary and the projected
-    # cap boundary.  close_boundary fills both loops, so it adds faces.
-    result = snapped.close_boundary(tolerance=0.03)
+    # cap boundary.  close_mesh fills both loops, so it adds faces.
+    result = snapped.close_mesh(tolerance=0.03)
     assert len(result.faces) > len(snapped.faces)
 
 

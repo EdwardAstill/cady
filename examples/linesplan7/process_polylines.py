@@ -1,66 +1,64 @@
-"""Clean, connect, orient, and split station polylines.
-
-The linesplan DXF contains station geometry as many curve fragments. This
-process turns those fragments into station rows that are consistent enough to
-loft: duplicate points are removed, near-zero centreline offsets are snapped to
-zero, fragments are connected, station polylines are oriented top-to-bottom,
-and the oriented rows are converted to points before the top region is split at
-the keel discontinuity.
-"""
+"""Clean, join, split, and inspect station polylines."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from colorsys import hsv_to_rgb
 from math import dist
 from statistics import median
 from typing import TypeAlias, cast
 
-from cady import Polyline3
+from cady import DisplayStyle, PointCloud3, Polyline3, Scene, Wireframe3
 
 Point3: TypeAlias = tuple[float, float, float]
+PolylineGroup: TypeAlias = tuple[Polyline3, ...]
+ProcessedPolylineGroups: TypeAlias = tuple[PolylineGroup, PolylineGroup]
 
 TOLERANCE = 1e-3
 SNAP_TOLERANCE = 1000.0
 MIN_STATION_FRAGMENT_LENGTH = 1.0
 KEEL_DISCONTINUITY_ANGLE_DEGREES = 60.0
+TOP_POSITIVE_Y_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
+DISCONTINUITY_STYLE = DisplayStyle(color=(1.0, 0.18, 0.05), point_size=12.0)
+END_POINT_STYLE = DisplayStyle(color=(0.1, 0.82, 0.24), point_size=10.0)
+SOURCE_STATION_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 
 
-@dataclass(frozen=True, slots=True)
-class ProcessedStations:
-    """Station rows and the derived points used by later mesh processes."""
-
-    connected_lines: tuple[Polyline3, ...]
-    prepared_lines: tuple[Polyline3, ...]
-    yellow_top_lines: tuple[Polyline3, ...]
-    red_top_lines: tuple[Polyline3, ...]
-    top_positive_y_points: tuple[Point3, ...]
-    top_discontinuity_points: tuple[Point3, ...]
-    station_end_points: tuple[Point3, ...]
+def process_polylines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
+    station_lines = process_station_lines(polylines, SNAP_TOLERANCE)
+    station_lines = prepare_station_lines(station_lines)
+    return split_station_lines(station_lines)
 
 
-def process_stations(polylines: Iterable[Polyline3]) -> ProcessedStations:
-    """Run the complete station cleanup process."""
-    connected = connect_station_fragments(polylines, SNAP_TOLERANCE)
-    oriented = orient_station_lines(connected)
-    prepared = prepare_station_lines(oriented)
-    yellow_top_lines, red_top_lines = split_station_lines(prepared)
-    return ProcessedStations(
-        connected_lines=connected,
-        prepared_lines=prepared,
-        yellow_top_lines=yellow_top_lines,
-        red_top_lines=red_top_lines,
-        top_positive_y_points=station_top_positive_y_points(prepared),
-        top_discontinuity_points=station_top_discontinuity_points(prepared),
-        station_end_points=station_end_points(prepared),
-    )
+def prepare_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
+    return tuple(_prepare_station_line(polyline) for polyline in polylines)
 
 
-def connect_station_fragments(
+def split_station_lines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
+    positive_y_top: list[Polyline3] = []
+    discontinuity_top: list[Polyline3] = []
+
+    for polyline in polylines:
+        points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+        discontinuity_index = _top_discontinuity_index(points)
+        if discontinuity_index is None:
+            positive_y_top.append(Polyline3(points))
+            continue
+
+        yellow_top_points = points[: discontinuity_index + 1]
+        red_top_points = points[discontinuity_index:]
+        if len(yellow_top_points) >= 2:
+            positive_y_top.append(Polyline3(yellow_top_points))
+        if len(red_top_points) >= 2:
+            discontinuity_top.append(Polyline3(red_top_points))
+
+    return (tuple(positive_y_top), tuple(discontinuity_top))
+
+
+def process_station_lines(
     polylines: Iterable[Polyline3],
     snap_tolerance: float,
 ) -> tuple[Polyline3, ...]:
-    """Join station fragments whose endpoints or endpoint-to-segment snaps match."""
     rows: list[tuple[Point3, ...]] = []
     for polyline in polylines:
         row = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
@@ -76,7 +74,6 @@ def connect_station_fragments(
             match_row: tuple[Point3, ...] | None = None
 
             for index, candidate in enumerate(rows):
-                # Drop exact duplicate fragments before trying to join geometry.
                 if len(row) == len(candidate):
                     same = max(dist(a, b) for a, b in zip(row, candidate, strict=True))
                     flipped = max(dist(a, b) for a, b in zip(row, reversed(candidate), strict=True))
@@ -99,9 +96,6 @@ def connect_station_fragments(
                     match_row = joins[0]
                     break
 
-                # Some station fragments terminate near the middle of another
-                # fragment. Insert the snapped endpoint into the target row so
-                # the final connected station keeps that geometric detail.
                 best_snap: tuple[float, tuple[Point3, ...]] | None = None
                 for source, target in ((candidate, row), (row, candidate)):
                     for endpoint_index in (0, -1):
@@ -172,42 +166,7 @@ def connect_station_fragments(
     return tuple(Polyline3(row) for row in connected)
 
 
-def prepare_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
-    """Convert oriented station lines to cleaned, trimmed point rows."""
-    return tuple(_prepare_station_line(polyline) for polyline in polylines)
-
-
-def orient_station_lines(polylines: Iterable[Polyline3]) -> tuple[Polyline3, ...]:
-    """Orient connected station polylines for consistent lofting."""
-    return tuple(_orient_station_line(polyline) for polyline in polylines)
-
-
-def split_station_lines(
-    polylines: Iterable[Polyline3],
-) -> tuple[tuple[Polyline3, ...], tuple[Polyline3, ...]]:
-    """Split station lines into the yellow positive-y top and red keel top groups."""
-    positive_y_top: list[Polyline3] = []
-    discontinuity_top: list[Polyline3] = []
-
-    for polyline in polylines:
-        points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
-        discontinuity_index = _top_discontinuity_index(points)
-        if discontinuity_index is None:
-            positive_y_top.append(Polyline3(points))
-            continue
-
-        yellow_top_points = points[: discontinuity_index + 1]
-        red_top_points = points[discontinuity_index:]
-        if len(yellow_top_points) >= 2:
-            positive_y_top.append(Polyline3(yellow_top_points))
-        if len(red_top_points) >= 2:
-            discontinuity_top.append(Polyline3(red_top_points))
-
-    return (tuple(positive_y_top), tuple(discontinuity_top))
-
-
 def station_top_positive_y_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
-    """Return the highest positive-y point on each prepared station line."""
     points: list[Point3] = []
     for polyline in polylines:
         polyline_points = tuple(
@@ -220,7 +179,6 @@ def station_top_positive_y_points(polylines: Iterable[Polyline3]) -> tuple[Point
 
 
 def station_top_discontinuity_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
-    """Return the highest keel discontinuity detected on each prepared station line."""
     points: list[Point3] = []
     for polyline in polylines:
         discontinuities = tuple(
@@ -236,8 +194,53 @@ def station_top_discontinuity_points(polylines: Iterable[Polyline3]) -> tuple[Po
 
 
 def station_end_points(polylines: Iterable[Polyline3]) -> tuple[Point3, ...]:
-    """Return cleaned end points for the prepared station lines."""
     return tuple(_clean_point(polyline.end) for polyline in polylines)
+
+
+def view_processed_station_lines(
+    polylines: Iterable[Polyline3],
+    top_positive_y_points: Iterable[Point3] = (),
+    top_discontinuities: Iterable[Point3] = (),
+    end_points: Iterable[Point3] = (),
+) -> None:
+    polylines = tuple(polylines)
+    scene = Scene(name="processed_station_polylines")
+    for index, polyline in enumerate(polylines):
+        scene = scene.add(
+            polyline.points(),
+            name=f"station_{index:02d}",
+            style=DisplayStyle(color=hsv_to_rgb(index / max(len(polylines), 1), 0.72, 0.92)),
+        )
+
+    positive_y_points = tuple(top_positive_y_points)
+    if positive_y_points:
+        scene = scene.add(
+            PointCloud3(positive_y_points),
+            name="station_top_positive_y_points",
+            style=TOP_POSITIVE_Y_STYLE,
+        )
+
+    discontinuities = tuple(top_discontinuities)
+    if discontinuities:
+        scene = scene.add(
+            PointCloud3(discontinuities),
+            name="station_top_discontinuities",
+            style=DISCONTINUITY_STYLE,
+        )
+
+    ends = tuple(end_points)
+    if ends:
+        scene = scene.add(
+            PointCloud3(ends),
+            name="station_end_points",
+            style=END_POINT_STYLE,
+        )
+    scene.view(title="processed station polylines")
+
+
+def view_original_station_lines(polylines: Iterable[Polyline3]) -> None:
+    wireframe = Wireframe3.from_polylines(polylines)
+    wireframe.view(title="original station polylines", style=SOURCE_STATION_STYLE)
 
 
 def _dedupe(points: Iterable[Point3]) -> tuple[Point3, ...]:
@@ -255,13 +258,10 @@ def _polyline_length(points: tuple[Point3, ...]) -> float:
 def _prepare_station_line(polyline: Polyline3) -> Polyline3:
     points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
     points = _trim_after_top_positive_y(points)
-    return Polyline3(points)
-
-
-def _orient_station_line(polyline: Polyline3) -> Polyline3:
-    if polyline.end[2] > polyline.start[2]:
-        return polyline.reverse()
-    return polyline
+    prepared = Polyline3(points)
+    if prepared.end[2] > prepared.start[2]:
+        prepared = prepared.reverse()
+    return prepared
 
 
 def _top_discontinuity_index(points: tuple[Point3, ...]) -> int | None:
@@ -289,9 +289,7 @@ def _top_discontinuity_index(points: tuple[Point3, ...]) -> int | None:
 
 def _trim_after_top_positive_y(points: tuple[Point3, ...]) -> tuple[Point3, ...]:
     top_index = _top_positive_y_index(points)
-    # Bow stations can start on the centreline and then step outboard; that
-    # first outboard point is part of the contour, not a trim boundary.
-    if top_index is None or top_index <= 1 or top_index == len(points) - 1:
+    if top_index is None or top_index == 0 or top_index == len(points) - 1:
         return points
     return points[: top_index + 1]
 
@@ -312,3 +310,18 @@ def _clean_point(point: object) -> Point3:
     if abs(y) <= TOLERANCE:
         y = 0.0
     return (x, y, z)
+
+
+if __name__ == "__main__":
+    from wireframe import STATION_POLYLINES
+
+    processed_station_polylines = prepare_station_lines(
+        process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
+    )
+    view_original_station_lines(STATION_POLYLINES)
+    view_processed_station_lines(
+        processed_station_polylines,
+        station_top_positive_y_points(processed_station_polylines),
+        station_top_discontinuity_points(processed_station_polylines),
+        station_end_points(processed_station_polylines),
+    )

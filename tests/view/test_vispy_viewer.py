@@ -24,6 +24,8 @@ from cady.view.vispy.canvas import (
     _require_vispy,
     _select_vispy_shader_backend,
 )
+from cady.view.vispy.draw_batches import element_index_data as _element_index_data
+from cady.view.vispy.draw_batches import line_batch as _line_batch
 from cady.view.vispy.draw_batches import mesh_edge_color as _mesh_edge_color
 from cady.view.vispy.interaction import (
     ViewerInteractionState,
@@ -57,6 +59,12 @@ from cady.view.vispy.overlays import (
 from cady.view.vispy.overlays import (
     scale_bar_overlay as _scale_bar_overlay,
 )
+
+
+class _FakeGloo:
+    @staticmethod
+    def IndexBuffer(data: np.ndarray) -> np.ndarray:
+        return np.asarray(data)
 
 
 def test_vispy_viewer_module_imports_without_opening_window() -> None:
@@ -181,6 +189,25 @@ def test_prepare_scene_accepts_wire_polyline_targets() -> None:
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.5], [1.0, 1.0, 0.5]],
     )
     np.testing.assert_array_equal(prepared.lines[0].indices, [[0, 1], [1, 2]])
+
+
+def test_vispy_line_batches_use_uint16_indices_when_possible() -> None:
+    wire = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.5), (1.0, 1.0, 0.5))
+    prepared = prepare_scene(Scene("wires").add(wire), tolerance=1e-3)
+
+    batch = _line_batch(prepared.lines[0], _FakeGloo())
+
+    assert isinstance(batch.index_buffer, np.ndarray)
+    assert batch.index_buffer.dtype == np.uint16
+    np.testing.assert_array_equal(batch.index_buffer, [[0, 1], [1, 2]])
+
+
+def test_vispy_index_data_keeps_uint32_when_needed() -> None:
+    indices = np.array([[0, np.iinfo(np.uint16).max + 1]], dtype=np.uint32)
+
+    converted = _element_index_data(indices)
+
+    assert converted.dtype == np.uint32
 
 
 def test_prepare_scene_uses_explicit_mesh_edges_for_wire_meshes() -> None:

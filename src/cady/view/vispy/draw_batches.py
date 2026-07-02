@@ -12,6 +12,7 @@ from cady.view.scene import RenderScene, SceneLine, SceneMesh
 from cady.view.vispy.mesh_buffers import orientation_edges, shaded_face_buffers
 
 DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
+_UINT16_MAX = int(np.iinfo(np.uint16).max)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,18 @@ def vertex_attributes(
     )
 
 
+def element_index_data(indices: np.ndarray) -> np.ndarray:
+    """Return GL element indices using the narrowest portable unsigned dtype."""
+    if indices.size == 0:
+        return np.ascontiguousarray(indices, dtype=np.uint16)
+    dtype = np.uint16 if int(np.max(indices)) <= _UINT16_MAX else np.uint32
+    return np.ascontiguousarray(indices, dtype=dtype)
+
+
+def index_buffer(indices: np.ndarray, gloo: Any) -> object:
+    return gloo.IndexBuffer(element_index_data(indices))
+
+
 def solid_color_vertices(
     vertices: np.ndarray,
     color: tuple[float, float, float],
@@ -72,7 +85,7 @@ def line_batch(line: SceneLine, gloo: Any) -> DrawBatch:
         normals=normals,
         colors=colors,
         primitive="lines",
-        index_buffer=gloo.IndexBuffer(line.indices),
+        index_buffer=index_buffer(line.indices, gloo),
     )
 
 
@@ -90,7 +103,7 @@ def face_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
         normals=normals,
         colors=color_data,
         primitive="triangles",
-        index_buffer=gloo.IndexBuffer(face_indices),
+        index_buffer=index_buffer(face_indices, gloo),
     )
 
 
@@ -112,7 +125,7 @@ def edge_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
         normals=normals,
         colors=colors,
         primitive="lines",
-        index_buffer=gloo.IndexBuffer(edge_indices),
+        index_buffer=index_buffer(edge_indices, gloo),
     )
 
 
@@ -177,6 +190,8 @@ __all__ = [
     "DrawBatch",
     "SceneBounds",
     "build_canvas_geometry",
+    "element_index_data",
+    "index_buffer",
     "mesh_edge_color",
     "solid_color_vertices",
 ]

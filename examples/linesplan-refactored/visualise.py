@@ -26,7 +26,7 @@ def print_summary(
     hull: LinesplanHull,
     merged_coplanar_mesh: Mesh3 | None = None,
     cleaned_mesh: Mesh3 | None = None,
-    decimated_mesh: Mesh3 | None = None,
+    cleaned_top_face: Mesh3 | None = None,
 ) -> None:
     """Print the stable summary used to verify the example."""
     print(
@@ -40,14 +40,11 @@ def print_summary(
         f"{len(hull.combined_mesh.faces)} faces",
         flush=True,
     )
-    if hull.closed_mesh is None:
-        print(f"closed mesh: failed - {hull.close_error}", flush=True)
-    else:
-        print(
-            f"closed mesh: {len(hull.closed_mesh.vertices)} vertices, "
-            f"{len(hull.closed_mesh.faces)} faces",
-            flush=True,
-        )
+    print(
+        f"closed mesh: {len(hull.closed_mesh.vertices)} vertices, "
+        f"{len(hull.closed_mesh.faces)} faces",
+        flush=True,
+    )
     if merged_coplanar_mesh is not None:
         print(
             f"merged coplanar mesh: {len(merged_coplanar_mesh.vertices)} vertices, "
@@ -60,21 +57,22 @@ def print_summary(
             f"{len(cleaned_mesh.faces)} faces",
             flush=True,
         )
-    if decimated_mesh is not None:
+    if cleaned_top_face is not None:
         print(
-            f"decimated mesh: {len(decimated_mesh.vertices)} vertices, "
-            f"{len(decimated_mesh.faces)} faces",
+            f"cleaned top face: {len(cleaned_top_face.vertices)} vertices, "
+            f"{len(cleaned_top_face.faces)} faces",
             flush=True,
         )
 
 
 def view_final_mesh(hull: LinesplanHull) -> None:
-    """Display the closed mesh, or the combined open mesh if closure failed."""
-    final_mesh = hull.closed_mesh or hull.combined_mesh
-    final_title = (
-        "closed linesplan mesh" if hull.closed_mesh is not None else "combined linesplan mesh"
-    )
-    final_mesh.view(title=final_title)
+    """Display the closed hull mesh."""
+    hull.closed_mesh.view(title="closed linesplan mesh")
+
+
+def view_combined_mesh(hull: LinesplanHull) -> None:
+    """Display the welded mesh immediately before boundary closure."""
+    hull.combined_mesh.view(title="combined linesplan mesh before boundary closure")
 
 
 def view_cleaned_mesh(mesh: Mesh3) -> None:
@@ -82,9 +80,9 @@ def view_cleaned_mesh(mesh: Mesh3) -> None:
     mesh.view(title="cleaned triangular linesplan mesh")
 
 
-def view_decimated_mesh(mesh: Mesh3) -> None:
-    """Display the decimated triangular hull mesh."""
-    mesh.view(title="decimated triangular linesplan mesh")
+def view_cleaned_top_face(mesh: Mesh3) -> None:
+    """Display the cleaned triangular top face."""
+    mesh.view(title="cleaned triangular linesplan top face")
 
 
 def view_merged_coplanar_mesh(mesh: Mesh3) -> None:
@@ -99,6 +97,7 @@ def view_full_walkthrough(
 ) -> None:
     """Display the intermediate scenes followed by the final mesh."""
     view_intermediate_objects(source_stations, processed, hull)
+    view_combined_mesh(hull)
     view_final_mesh(hull)
 
 

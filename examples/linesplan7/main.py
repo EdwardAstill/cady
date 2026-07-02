@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from math import dist
 from typing import TypeAlias
 
+import numpy as np
 from loft_polylines import get_node_array, mesh_node_array
+from pizza_triangulate import pizza_triangulate_mesh
 from process_polylines import (
     SNAP_TOLERANCE,
     prepare_station_lines,
@@ -20,6 +22,7 @@ from process_polylines import (
     view_original_station_lines,
     view_processed_station_lines,
 )
+from remesh import isotropic_remesh
 from wireframe import STATION_POLYLINES
 
 from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene
@@ -31,6 +34,7 @@ PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
 TOLERANCE = 1e-3
+NODE_SPACING = 1000.0
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
 MIRROR_PLANE_NORMAL: Point3 = (0.0, 1.0, 0.0)
 
@@ -40,6 +44,8 @@ MIRRORED_YELLOW_STYLE = DisplayStyle(color=(0.35, 0.62, 0.9), render_mode="wiref
 MIRRORED_RED_STYLE = DisplayStyle(color=(0.45, 0.78, 0.5), render_mode="wireframe")
 START_POINT_STYLE = DisplayStyle(color=(0.95, 0.95, 0.12), point_size=8.0)
 END_POINT_STYLE = DisplayStyle(color=(0.1, 0.82, 0.24), point_size=8.0)
+PIZZA_STYLE = DisplayStyle(color=(0.9, 0.4, 0.2), render_mode="wireframe")
+REMESH_STYLE = DisplayStyle(color=(0.2, 0.6, 0.9), render_mode="wireframe")
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,11 +72,13 @@ class KeelBoundaryPair:
 
 def loft_polyline_groups(
     polyline_groups: Iterable[PolylineGroup],
+    *,
+    node_spacing: float = NODE_SPACING,
 ) -> tuple[LoftedMeshPatch, ...]:
     patches: list[LoftedMeshPatch] = []
     for group_index, polyline_group in enumerate(polyline_groups):
         if polyline_group:
-            nodes = get_node_array(polyline_group)
+            nodes = get_node_array(polyline_group, node_spacing=node_spacing)
             patches.append(
                 LoftedMeshPatch(
                     group_index=group_index,
@@ -329,6 +337,14 @@ def build_split_polyline_scene(polyline_groups: tuple[PolylineGroup, PolylineGro
     return scene
 
 
+def build_comparison_scene(before: Mesh3, after: Mesh3) -> Scene:
+    return (
+        Scene(name="linesplan_remesh_comparison")
+        .add(before, name="pizza_triangulated", style=PIZZA_STYLE)
+        .add(after, name="isotropic_remesh", style=REMESH_STYLE)
+    )
+
+
 def view_intermediate_objects() -> None:
     view_original_station_lines(STATION_POLYLINES)
     view_processed_station_lines(
@@ -349,7 +365,7 @@ RED_TOP_POLYLINES = POLYLINE_GROUPS[1]
 STATION_GREEN_POINTS = station_end_points(PREPARED_STATION_POLYLINES)
 LOFTED_MESH_PATCHES = tuple(
     mark_mesh_boundary_nodes(patch, STATION_GREEN_POINTS)
-    for patch in loft_polyline_groups(POLYLINE_GROUPS)
+    for patch in loft_polyline_groups(POLYLINE_GROUPS, node_spacing=NODE_SPACING)
 )
 YELLOW_MESH_NODES = tuple(node for patch in LOFTED_MESH_PATCHES for node in patch.yellow_nodes)
 GREEN_MESH_NODES = tuple(node for patch in LOFTED_MESH_PATCHES for node in patch.green_nodes)
@@ -369,6 +385,25 @@ KEEL_END_ROWS = keel_end_rows(KEEL_BOUNDARY_ROWS)
 KEEL_CAP_MESH = keel_end_cap_mesh(KEEL_END_ROWS)
 COMBINED_MESH = combine_meshes((*MESH_PATCHES, KEEL_CAP_MESH))
 CLOSED_MESH, CLOSE_ERROR = try_close_mesh(COMBINED_MESH)
+FINAL_MESH = CLOSED_MESH if CLOSED_MESH is not None else COMBINED_MESH
+TRIANGULATED_MESH = pizza_triangulate_mesh(FINAL_MESH)
+
+TRI_V = np.array(TRIANGULATED_MESH.vertices, dtype=np.float64)
+TRI_F = np.array(TRIANGULATED_MESH.faces, dtype=np.int64)
+REMESHED_V, REMESHED_F = isotropic_remesh(
+    TRI_V,
+    TRI_F,
+    target_edge_length=None,
+    iterations=6,
+    feature_angle_degrees=None,
+    protect_boundary=True,
+    project=False,
+    verbose=True,
+)
+REMESHED_MESH = Mesh3(
+    tuple(tuple(v) for v in REMESHED_V),  # type: ignore[arg-type]
+    tuple(tuple(int(i) for i in f) for f in REMESHED_F),  # type: ignore[arg-type]
+)
 
 
 def main() -> None:
@@ -388,37 +423,47 @@ def main() -> None:
     parser.add_argument(
         "--final-only",
         action="store_true",
-        help="View only the final closed or combined mesh.",
+        help="View only the final remeshed mesh.",
+    )
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Show pizza-triangulated (before) and remeshed (after) overlaid.",
     )
     args = parser.parse_args()
 
     print(f"polyline groups: yellow={len(YELLOW_TOP_POLYLINES)}, red={len(RED_TOP_POLYLINES)}")
     print(f"mesh patches: {len(MESH_PATCHES)}")
     print(
-        f"combined mesh: {len(COMBINED_MESH.vertices)} vertices, "
-        f"{len(COMBINED_MESH.faces)} faces"
+        f"combined mesh: {len(COMBINED_MESH.vertices)} vertices, {len(COMBINED_MESH.faces)} faces"
     )
     if CLOSED_MESH is None:
         print(f"closed mesh: failed - {CLOSE_ERROR}")
     else:
         print(f"closed mesh: {len(CLOSED_MESH.vertices)} vertices, {len(CLOSED_MESH.faces)} faces")
+    print(
+        f"triangulated mesh: {len(TRIANGULATED_MESH.vertices)} vertices, "
+        f"{len(TRIANGULATED_MESH.faces)} faces"
+    )
+    print(
+        f"remeshed mesh: {len(REMESHED_MESH.vertices)} vertices, {len(REMESHED_MESH.faces)} faces"
+    )
 
     if args.no_view:
         return
 
     if args.patches:
         build_patch_scene(MESH_PATCHES).view(title="linesplan mesh patches")
+    elif args.compare:
+        build_comparison_scene(TRIANGULATED_MESH, REMESHED_MESH).view(
+            title="linesplan remesh: pizza (orange) vs isotropic (blue)"
+        )
     elif args.final_only:
-        if CLOSED_MESH is None:
-            COMBINED_MESH.view(title="combined linesplan mesh")
-        else:
-            CLOSED_MESH.view(title="closed linesplan mesh")
+        REMESHED_MESH.view(title="remeshed linesplan mesh")
     else:
         view_intermediate_objects()
-        if CLOSED_MESH is None:
-            COMBINED_MESH.view(title="combined linesplan mesh")
-        else:
-            CLOSED_MESH.view(title="closed linesplan mesh")
+        TRIANGULATED_MESH.view(title="triangulated linesplan mesh (before)")
+        REMESHED_MESH.view(title="remeshed linesplan mesh (after)")
 
 
 if __name__ == "__main__":

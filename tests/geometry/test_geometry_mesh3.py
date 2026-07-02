@@ -129,6 +129,40 @@ def test_mesh_merge_coplanar_faces_returns_intermediate_polygon_mesh() -> None:
     assert (0, 2) not in merged.edges
 
 
+def test_mesh_merge_coplanar_faces_simplifies_straight_boundary_vertices() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 4), (0, 4, 5), (1, 2, 3), (1, 3, 4)),
+    )
+
+    merged = mesh.merge_coplanar_faces(tolerance=1e-9)
+    edge_points = {
+        frozenset((merged.vertices[start], merged.vertices[end])) for start, end in merged.edges
+    }
+
+    assert merged.vertices == (
+        (0.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (2.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    assert len(merged.faces) == 1
+    assert set(merged.faces[0]) == {0, 1, 2, 3}
+    assert edge_points == {
+        frozenset(((0.0, 0.0, 0.0), (2.0, 0.0, 0.0))),
+        frozenset(((2.0, 0.0, 0.0), (2.0, 1.0, 0.0))),
+        frozenset(((2.0, 1.0, 0.0), (0.0, 1.0, 0.0))),
+        frozenset(((0.0, 1.0, 0.0), (0.0, 0.0, 0.0))),
+    }
+
+
 def test_mesh_triangulate_discards_internal_vertices_after_coplanar_merge() -> None:
     mesh = Mesh3(
         (
@@ -141,9 +175,11 @@ def test_mesh_triangulate_discards_internal_vertices_after_coplanar_merge() -> N
         ((0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)),
     )
 
+    merged = mesh.merge_coplanar_faces(tolerance=1e-9)
     triangulated = mesh.triangulate(tolerance=1e-9, guide="auto")
 
-    assert not any(4 in face for face in triangulated.faces)
+    assert merged.vertices == mesh.vertices[:4]
+    assert not any(4 in face for face in merged.faces)
     assert len(triangulated.vertices) >= 4
     assert all(len(face) == 3 for face in triangulated.faces)
 
@@ -163,6 +199,16 @@ def test_mesh_triangulate_auto_guide_refines_from_local_shape() -> None:
 
     assert len(triangulated.vertices) > len(mesh.vertices)
     assert len(triangulated.faces) > 2
+    assert all(len(face) == 3 for face in triangulated.faces)
+
+
+def test_mesh_triangulate_auto_guide_resolves_comb_teeth() -> None:
+    mesh = Mesh3(_comb_vertices(), (tuple(range(20)),))
+
+    triangulated = mesh.triangulate(tolerance=1e-6, guide="auto")
+
+    assert len(triangulated.vertices) > len(mesh.vertices)
+    assert len(triangulated.faces) > len(mesh.vertices) - 2
     assert all(len(face) == 3 for face in triangulated.faces)
 
 
@@ -222,6 +268,31 @@ def test_mesh_triangulate_auto_can_reject_min_angle_violations() -> None:
             guide="auto",
             min_angle_degrees=20.0,
         )
+
+
+def test_mesh_triangulate_auto_enforces_min_angle_on_skinny_polygon() -> None:
+    mesh = Mesh3(
+        (
+            (-2.2, -0.28, 0.0),
+            (2.2, -0.28, 0.0),
+            (2.2, -0.18, 0.0),
+            (-1.85, -0.18, 0.0),
+            (-1.85, -0.14, 0.0),
+            (2.2, -0.14, 0.0),
+            (2.2, 0.28, 0.0),
+            (-2.2, 0.28, 0.0),
+        ),
+        ((0, 1, 2, 3, 4, 5, 6, 7),),
+    )
+
+    triangulated = mesh.triangulate(
+        tolerance=1e-6,
+        guide="auto",
+        min_angle_degrees=15.0,
+    )
+
+    assert (len(triangulated.vertices), len(triangulated.faces)) == (280, 433)
+    assert _min_mesh_angle(triangulated) >= 15.0
 
 
 def test_mesh_triangulate_uses_distributed_polygon_diagonals() -> None:
@@ -317,6 +388,64 @@ def test_mesh_decimate_validates_target_and_tolerance() -> None:
 
     with pytest.raises(ValueError, match="tolerance"):
         mesh.decimate(1, tolerance=0.0)
+
+
+def test_mesh_remesh_refines_polygon_faces_to_isotropic_triangles() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2, 3),),
+    )
+
+    remeshed = mesh.remesh(
+        target_edge_length=0.35,
+        iterations=3,
+        feature_angle_degrees=None,
+        tolerance=1e-9,
+    )
+
+    assert len(remeshed.faces) > len(mesh.triangulated_faces(tolerance=1e-9))
+    assert all(len(face) == 3 for face in remeshed.faces)
+    assert remeshed.bounds() == mesh.bounds()
+    assert max(_mesh_edge_lengths(remeshed)) < 1.0
+    np.testing.assert_allclose(np.asarray(remeshed.vertices)[:, 2], 0.0)
+
+
+def test_mesh_remesh_preserves_edge_only_meshes() -> None:
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+        (),
+        ((0, 1),),
+    )
+
+    remeshed = mesh.remesh(target_edge_length=0.25, iterations=4, tolerance=1e-9)
+
+    assert remeshed.vertices == mesh.vertices
+    assert remeshed.faces == ()
+    assert remeshed.edges == mesh.edges
+
+
+def test_mesh_remesh_validates_options() -> None:
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        ((0, 1, 2),),
+    )
+
+    with pytest.raises(ValueError, match="target_edge_length"):
+        mesh.remesh(target_edge_length=0.0)
+
+    with pytest.raises(ValueError, match="iterations"):
+        mesh.remesh(iterations=-1)
+
+    with pytest.raises(ValueError, match="long_factor"):
+        mesh.remesh(long_factor=1.0)
+
+    with pytest.raises(ValueError, match="tolerance"):
+        mesh.remesh(tolerance=0.0)
 
 
 def test_mesh_from_points_reconstructs_with_advancing_front() -> None:
@@ -664,6 +793,46 @@ def _guide_polyline_dxf() -> list[str]:
     ]
 
 
+def _mesh_edge_lengths(mesh: Mesh3) -> tuple[float, ...]:
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    edges = {
+        (min(start, end), max(start, end))
+        for face in mesh.faces
+        for start, end in zip(face, face[1:] + face[:1], strict=True)
+    }
+    return tuple(float(np.linalg.norm(vertices[end] - vertices[start])) for start, end in edges)
+
+
+def _min_mesh_angle(mesh: Mesh3) -> float:
+    return min(
+        _min_triangle_angle(
+            np.array(mesh.vertices[a]),
+            np.array(mesh.vertices[b]),
+            np.array(mesh.vertices[c]),
+        )
+        for a, b, c in mesh.faces
+    )
+
+
+def _min_triangle_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+    ab = float(np.linalg.norm(a - b))
+    bc = float(np.linalg.norm(b - c))
+    ca = float(np.linalg.norm(c - a))
+    return min(
+        _angle_degrees(ab, ca, bc),
+        _angle_degrees(ab, bc, ca),
+        _angle_degrees(bc, ca, ab),
+    )
+
+
+def _angle_degrees(first: float, second: float, opposite: float) -> float:
+    denominator = 2.0 * first * second
+    if denominator <= 0.0:
+        return 0.0
+    cosine = (first * first + second * second - opposite * opposite) / denominator
+    return float(np.degrees(np.arccos(max(-1.0, min(1.0, cosine)))))
+
+
 def test_mesh_rejects_out_of_range_faces() -> None:
     with pytest.raises(ValueError, match="outside"):
         Mesh3(((0.0, 0.0, 0.0),), ((0, 1, 2),))
@@ -702,3 +871,28 @@ def test_mesh_to_wireframe_empty_faces() -> None:
 
 def test_mesh_from_dxf_removed() -> None:
     assert not hasattr(Mesh3, "from_dxf")
+
+
+def _comb_vertices() -> tuple[tuple[float, float, float], ...]:
+    return (
+        (-2.0, -1.0, 0.0),
+        (2.0, -1.0, 0.0),
+        (2.0, 1.0, 0.0),
+        (1.65, 1.0, 0.0),
+        (1.65, 0.15, 0.0),
+        (1.25, 0.15, 0.0),
+        (1.25, 1.0, 0.0),
+        (0.85, 1.0, 0.0),
+        (0.85, 0.15, 0.0),
+        (0.45, 0.15, 0.0),
+        (0.45, 1.0, 0.0),
+        (0.05, 1.0, 0.0),
+        (0.05, 0.15, 0.0),
+        (-0.35, 0.15, 0.0),
+        (-0.35, 1.0, 0.0),
+        (-0.75, 1.0, 0.0),
+        (-0.75, 0.15, 0.0),
+        (-1.15, 0.15, 0.0),
+        (-1.15, 1.0, 0.0),
+        (-2.0, 1.0, 0.0),
+    )

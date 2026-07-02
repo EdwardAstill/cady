@@ -15,6 +15,7 @@ from cady.operations.meshes import (
 from cady.operations.transforms import Transform2, Transform3
 from cady.operations.triangulation import (
     TriangulationGuide,
+    automatic_triangulation_guide,
     triangulate2,
     triangulate3,
     triangulate_curve2,
@@ -164,6 +165,7 @@ __all__ = [
     "Transform2",
     "Transform3",
     "TriangulationGuide",
+    "automatic_triangulation_guide",
     "arc2",
     "arc3",
     "box",

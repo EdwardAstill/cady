@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from cady.operations.coordinates import add3, scale3
 from cady.operations.triangulation import (
+    GuideSpec,
     TriangulationGuide,
     triangulate_curve2,
     triangulate_curve3,
@@ -39,7 +40,7 @@ def closed_polyline_mesh2(
     polyline: object,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
+    guide: GuideSpec = None,
 ) -> Mesh2:
     """Fill a closed 2D polyline."""
     return triangulate_curve2(polyline, tolerance=tolerance, guide=guide)
@@ -49,7 +50,7 @@ def closed_polyline_mesh3(
     polyline: object,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
+    guide: GuideSpec = None,
 ) -> Mesh3:
     """Fill a closed planar 3D polyline."""
     return triangulate_curve3(polyline, tolerance=tolerance, guide=guide)
@@ -59,7 +60,7 @@ def wireframe_mesh(
     wireframe: object,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
+    guide: GuideSpec = None,
 ) -> Mesh3:
     """Triangulate closed planar wireframe edge loops into a ``Mesh3``."""
     from cady.geometry.mesh import Mesh3

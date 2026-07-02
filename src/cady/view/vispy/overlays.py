@@ -11,7 +11,7 @@ import numpy as np
 from cady.view.camera import Camera
 from cady.view.overlay import LocalAxesOverlay, ScaleBarOverlay
 from cady.view.scene import RenderScene
-from cady.view.vispy.draw_batches import solid_color_vertices
+from cady.view.vispy.draw_batches import index_buffer, solid_color_vertices
 
 LOCAL_AXIS_COLORS: tuple[tuple[float, float, float], ...] = (
     (0.9, 0.05, 0.05),
@@ -194,7 +194,7 @@ class LocalAxesRenderer:
             positions=np.ascontiguousarray(positions, dtype=np.float32),
             normals=normals,
             colors=np.ascontiguousarray(axis_colors, dtype=np.float32),
-            index_buffer=gloo.IndexBuffer(indices),
+            index_buffer=index_buffer(indices, gloo),
             local_centre=local_centre,
             gloo=gloo,
             visible=overlay.visible,
