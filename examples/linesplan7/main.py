@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from math import dist
 from typing import TypeAlias
 
-import numpy as np
 from loft_polylines import get_node_array, mesh_node_array
 from pizza_triangulate import pizza_triangulate_mesh
 from process_polylines import (
@@ -22,7 +21,6 @@ from process_polylines import (
     view_original_station_lines,
     view_processed_station_lines,
 )
-from remesh import isotropic_remesh
 from wireframe import STATION_POLYLINES
 
 from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene
@@ -34,7 +32,7 @@ PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
 TOLERANCE = 1e-3
-NODE_SPACING = 1000.0
+NODE_SPACING = 2000.0
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
 MIRROR_PLANE_NORMAL: Point3 = (0.0, 1.0, 0.0)
 
@@ -44,8 +42,6 @@ MIRRORED_YELLOW_STYLE = DisplayStyle(color=(0.35, 0.62, 0.9), render_mode="wiref
 MIRRORED_RED_STYLE = DisplayStyle(color=(0.45, 0.78, 0.5), render_mode="wireframe")
 START_POINT_STYLE = DisplayStyle(color=(0.95, 0.95, 0.12), point_size=8.0)
 END_POINT_STYLE = DisplayStyle(color=(0.1, 0.82, 0.24), point_size=8.0)
-PIZZA_STYLE = DisplayStyle(color=(0.9, 0.4, 0.2), render_mode="wireframe")
-REMESH_STYLE = DisplayStyle(color=(0.2, 0.6, 0.9), render_mode="wireframe")
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,14 +333,6 @@ def build_split_polyline_scene(polyline_groups: tuple[PolylineGroup, PolylineGro
     return scene
 
 
-def build_comparison_scene(before: Mesh3, after: Mesh3) -> Scene:
-    return (
-        Scene(name="linesplan_remesh_comparison")
-        .add(before, name="pizza_triangulated", style=PIZZA_STYLE)
-        .add(after, name="isotropic_remesh", style=REMESH_STYLE)
-    )
-
-
 def view_intermediate_objects() -> None:
     view_original_station_lines(STATION_POLYLINES)
     view_processed_station_lines(
@@ -388,23 +376,6 @@ CLOSED_MESH, CLOSE_ERROR = try_close_mesh(COMBINED_MESH)
 FINAL_MESH = CLOSED_MESH if CLOSED_MESH is not None else COMBINED_MESH
 TRIANGULATED_MESH = pizza_triangulate_mesh(FINAL_MESH)
 
-TRI_V = np.array(TRIANGULATED_MESH.vertices, dtype=np.float64)
-TRI_F = np.array(TRIANGULATED_MESH.faces, dtype=np.int64)
-REMESHED_V, REMESHED_F = isotropic_remesh(
-    TRI_V,
-    TRI_F,
-    target_edge_length=None,
-    iterations=6,
-    feature_angle_degrees=None,
-    protect_boundary=True,
-    project=False,
-    verbose=True,
-)
-REMESHED_MESH = Mesh3(
-    tuple(tuple(v) for v in REMESHED_V),  # type: ignore[arg-type]
-    tuple(tuple(int(i) for i in f) for f in REMESHED_F),  # type: ignore[arg-type]
-)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -423,12 +394,7 @@ def main() -> None:
     parser.add_argument(
         "--final-only",
         action="store_true",
-        help="View only the final remeshed mesh.",
-    )
-    parser.add_argument(
-        "--compare",
-        action="store_true",
-        help="Show pizza-triangulated (before) and remeshed (after) overlaid.",
+        help="View only the final triangulated mesh.",
     )
     args = parser.parse_args()
 
@@ -445,25 +411,17 @@ def main() -> None:
         f"triangulated mesh: {len(TRIANGULATED_MESH.vertices)} vertices, "
         f"{len(TRIANGULATED_MESH.faces)} faces"
     )
-    print(
-        f"remeshed mesh: {len(REMESHED_MESH.vertices)} vertices, {len(REMESHED_MESH.faces)} faces"
-    )
 
     if args.no_view:
         return
 
     if args.patches:
         build_patch_scene(MESH_PATCHES).view(title="linesplan mesh patches")
-    elif args.compare:
-        build_comparison_scene(TRIANGULATED_MESH, REMESHED_MESH).view(
-            title="linesplan remesh: pizza (orange) vs isotropic (blue)"
-        )
     elif args.final_only:
-        REMESHED_MESH.view(title="remeshed linesplan mesh")
+        TRIANGULATED_MESH.view(title="triangulated linesplan mesh")
     else:
         view_intermediate_objects()
-        TRIANGULATED_MESH.view(title="triangulated linesplan mesh (before)")
-        REMESHED_MESH.view(title="remeshed linesplan mesh (after)")
+        TRIANGULATED_MESH.view(title="triangulated linesplan mesh")
 
 
 if __name__ == "__main__":
