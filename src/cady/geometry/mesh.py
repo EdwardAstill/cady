@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import fsum, sqrt
 from operator import index as operator_index
-from typing import TYPE_CHECKING, Literal, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,7 +22,6 @@ PointArray3: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
     from cady.geometry.wireframe import Wireframe3
-    from cady.operations.triangulation import TriangulationGuide
     from cady.view import Camera, DisplayStyle, Light
     from cady.view.style import RenderMode
     from cady.view.viewer import Projection
@@ -207,13 +206,19 @@ class Mesh3:
         self,
         *,
         tolerance: float = 1e-9,
-        guide: TriangulationGuide | Literal["auto"] | None = None,
+        algorithm: str = "ear_delaunay_refinement",
+        target_edge_length: float | None = None,
+        max_edge_length: float | None = None,
+        max_area: float | None = None,
         min_angle_degrees: float | None = None,
     ) -> Mesh3:
         """Return an equivalent mesh whose faces are all triangles."""
         return self.triangulate(
             tolerance=tolerance,
-            guide=guide,
+            algorithm=algorithm,
+            target_edge_length=target_edge_length,
+            max_edge_length=max_edge_length,
+            max_area=max_area,
             min_angle_degrees=min_angle_degrees,
         )
 
@@ -244,7 +249,10 @@ class Mesh3:
         self,
         *,
         tolerance: float = 1e-9,
-        guide: TriangulationGuide | Literal["auto"] | None = None,
+        algorithm: str = "ear_delaunay_refinement",
+        target_edge_length: float | None = None,
+        max_edge_length: float | None = None,
+        max_area: float | None = None,
         min_angle_degrees: float | None = None,
     ) -> Mesh3:
         """Merge connected coplanar faces, then triangulate the merged polygon faces."""
@@ -256,7 +264,10 @@ class Mesh3:
             merged.faces,
             face_groups,
             tolerance=tolerance,
-            guide=guide,
+            algorithm=algorithm,
+            target_edge_length=target_edge_length,
+            max_edge_length=max_edge_length,
+            max_area=max_area,
             min_angle_degrees=min_angle_degrees,
         )
         return Mesh3(vertices, faces, edges)
@@ -678,7 +689,10 @@ def _triangulated_mesh(
     face_groups: tuple[_FaceGroup, ...],
     *,
     tolerance: float,
-    guide: TriangulationGuide | Literal["auto"] | None,
+    algorithm: str,
+    target_edge_length: float | None,
+    max_edge_length: float | None,
+    max_area: float | None,
     min_angle_degrees: float | None,
 ) -> tuple[tuple[Point3, ...], tuple[TriangleIndex, ...], tuple[EdgeIndex, ...]]:
     output_vertices = list(vertices)
@@ -695,7 +709,10 @@ def _triangulated_mesh(
                 output_faces,
                 output_edges,
                 tolerance=tolerance,
-                guide=guide,
+                algorithm=algorithm,
+                target_edge_length=target_edge_length,
+                max_edge_length=max_edge_length,
+                max_area=max_area,
                 min_angle_degrees=min_angle_degrees,
             )
             continue
@@ -708,7 +725,10 @@ def _triangulated_mesh(
                 output_faces,
                 output_edges,
                 tolerance=tolerance,
-                guide=guide,
+                algorithm=algorithm,
+                target_edge_length=target_edge_length,
+                max_edge_length=max_edge_length,
+                max_area=max_area,
                 min_angle_degrees=min_angle_degrees,
             )
 
@@ -723,39 +743,45 @@ def _extend_triangulated_face(
     output_edges: set[EdgeIndex],
     *,
     tolerance: float,
-    guide: TriangulationGuide | Literal["auto"] | None,
+    algorithm: str,
+    target_edge_length: float | None,
+    max_edge_length: float | None,
+    max_area: float | None,
     min_angle_degrees: float | None,
 ) -> None:
-    from cady.operations.triangulation import triangulate_mesh3
+    from cady.geometry.plane3 import Plane3
+    from cady.operations.triangulate import triangulate
 
-    nodes = np.asarray([vertices[index] for index in face], dtype=np.float64)
+    points = tuple(vertices[index] for index in face)
+    plane = Plane3.fit(points)
+    deviation = plane.max_deviation(points)
+    if deviation > tolerance:
+        raise ValueError(
+            f"3D face is non-planar (max deviation {deviation:.3e} > "
+            f"tolerance {tolerance:.3e})"
+        )
+    nodes = np.asarray([plane.coordinates(point) for point in points], dtype=np.float64)
     boundary = np.asarray(
         tuple((index, (index + 1) % len(face)) for index in range(len(face))),
         dtype=np.int64,
     )
-    local_guide = (
-        _with_min_angle(None, min_angle_degrees)
-        if guide == "auto" and len(face) == 3
-        else _resolve_triangulation_guide(
-            nodes,
-            boundary,
-            None,
-            guide,
-            min_angle_degrees=min_angle_degrees,
-            tolerance=tolerance,
-        )
-    )
-    nodes_out, edges_out, local_faces = triangulate_mesh3(
+    nodes_out, edges_out, local_faces = triangulate(
         nodes,
         boundary,
+        algorithm=algorithm,
         tolerance=tolerance,
-        guide=local_guide,
+        **_triangulation_constraints(
+            target_edge_length=target_edge_length,
+            max_edge_length=max_edge_length,
+            max_area=max_area,
+            min_angle_degrees=min_angle_degrees,
+        ),
     )
     index_map = list(face)
     for index in range(len(face), len(nodes_out)):
         index_map.append(len(output_vertices))
-        x, y, z = nodes_out[index]
-        output_vertices.append((float(x), float(y), float(z)))
+        x, y = nodes_out[index]
+        output_vertices.append(plane.point(float(x), float(y)))
 
     for a, b, c in local_faces:
         output_faces.append((index_map[int(a)], index_map[int(b)], index_map[int(c)]))
@@ -772,122 +798,47 @@ def _extend_triangulated_face_group(
     output_edges: set[EdgeIndex],
     *,
     tolerance: float,
-    guide: TriangulationGuide | Literal["auto"] | None,
+    algorithm: str,
+    target_edge_length: float | None,
+    max_edge_length: float | None,
+    max_area: float | None,
     min_angle_degrees: float | None,
 ) -> None:
-    from cady.operations.triangulation import triangulate_triangle_mesh3
-
-    source_indices = tuple(
-        sorted({vertex_index for face_index in group.indices for vertex_index in faces[face_index]})
-    )
     boundary = group.boundary
     if boundary is None:
         return
-    if set(source_indices) == set(boundary):
-        _extend_triangulated_face(
-            vertices,
-            boundary,
-            output_vertices,
-            output_faces,
-            output_edges,
-            tolerance=tolerance,
-            guide=guide,
-            min_angle_degrees=min_angle_degrees,
-        )
-        return
-
-    local_by_source = {source_index: index for index, source_index in enumerate(source_indices)}
-    nodes = np.asarray([vertices[index] for index in source_indices], dtype=np.float64)
-    local_triangles: list[TriangleIndex] = []
-    for face_index in group.indices:
-        face = faces[face_index]
-        triangles = (
-            ((int(face[0]), int(face[1]), int(face[2])),)
-            if len(face) == 3
-            else _triangulated_polygon_face(vertices, face, tolerance=tolerance)
-        )
-        for triangle in triangles:
-            a, b, c = triangle
-            local_triangles.append((local_by_source[a], local_by_source[b], local_by_source[c]))
-
-    protected_edges = np.asarray(
-        tuple(
-            (local_by_source[start], local_by_source[end])
-            for start, end in zip(boundary, boundary[1:] + boundary[:1], strict=True)
-        ),
-        dtype=np.int64,
-    )
-    local_guide = (
-        None
-        if guide == "auto" and min_angle_degrees is None
-        else _resolve_triangulation_guide(
-            nodes,
-            protected_edges,
-            local_triangles,
-            guide,
-            min_angle_degrees=min_angle_degrees,
-            tolerance=tolerance,
-        )
-    )
-    nodes_out, edges_out, local_faces = triangulate_triangle_mesh3(
-        nodes,
-        np.asarray(local_triangles, dtype=np.int64),
-        protected_edges,
+    _extend_triangulated_face(
+        vertices,
+        boundary,
+        output_vertices,
+        output_faces,
+        output_edges,
         tolerance=tolerance,
-        guide=local_guide,
+        algorithm=algorithm,
+        target_edge_length=target_edge_length,
+        max_edge_length=max_edge_length,
+        max_area=max_area,
+        min_angle_degrees=min_angle_degrees,
     )
-    index_map = list(source_indices)
-    for index in range(len(source_indices), len(nodes_out)):
-        index_map.append(len(output_vertices))
-        x, y, z = nodes_out[index]
-        output_vertices.append((float(x), float(y), float(z)))
-
-    for a, b, c in local_faces:
-        output_faces.append((index_map[int(a)], index_map[int(b)], index_map[int(c)]))
-    for start, end in edges_out:
-        output_edges.add(_edge_key(index_map[int(start)], index_map[int(end)]))
 
 
-def _resolve_triangulation_guide(
-    nodes: PointArray3,
-    edges: NDArray[np.int64],
-    faces: list[TriangleIndex] | None,
-    guide: TriangulationGuide | Literal["auto"] | None,
+def _triangulation_constraints(
     *,
+    target_edge_length: float | None,
+    max_edge_length: float | None,
+    max_area: float | None,
     min_angle_degrees: float | None,
-    tolerance: float,
-) -> TriangulationGuide | None:
-    if guide != "auto":
-        return _with_min_angle(guide, min_angle_degrees)
-
-    from cady.operations.triangulation import automatic_triangulation_guide
-
-    return automatic_triangulation_guide(
-        nodes,
-        edges,
-        faces=faces,
-        tolerance=tolerance,
-        min_angle_degrees=min_angle_degrees,
-    )
-
-
-def _with_min_angle(
-    guide: TriangulationGuide | None,
-    min_angle_degrees: float | None,
-) -> TriangulationGuide | None:
-    if min_angle_degrees is None:
-        return guide
-
-    from cady.operations.triangulation import TriangulationGuide
-
-    if guide is None:
-        return TriangulationGuide(min_angle_degrees=min_angle_degrees)
-    return TriangulationGuide(
-        target_edge_length=guide.target_edge_length,
-        max_edge_length=guide.max_edge_length,
-        max_area=guide.max_area,
-        min_angle_degrees=min_angle_degrees,
-    )
+) -> dict[str, float]:
+    constraints: dict[str, float] = {}
+    if target_edge_length is not None:
+        constraints["target_edge_length"] = target_edge_length
+    if max_edge_length is not None:
+        constraints["max_edge_length"] = max_edge_length
+    if max_area is not None:
+        constraints["max_area"] = max_area
+    if min_angle_degrees is not None:
+        constraints["min_angle_degrees"] = min_angle_degrees
+    return constraints
 
 
 @dataclass(frozen=True, slots=True)
@@ -1134,7 +1085,7 @@ def _triangulated_polygon_face(
     tolerance: float,
 ) -> tuple[TriangleIndex, ...]:
     from cady.geometry.plane3 import Plane3
-    from cady.operations.triangulation import triangulate2
+    from cady.operations.triangulate import triangulate
 
     points = tuple(vertices[index] for index in face)
     plane = Plane3.fit(points)
@@ -1143,7 +1094,7 @@ def _triangulated_polygon_face(
         tuple((index, (index + 1) % len(face)) for index in range(len(face))),
         dtype=np.int64,
     )
-    _nodes, local_faces = triangulate2(projected, boundary, tolerance=tolerance)
+    _nodes, _edges, local_faces = triangulate(projected, boundary, tolerance=tolerance)
     if len(local_faces) == 0:
         return _fan_triangulated_face(face)
     return tuple(

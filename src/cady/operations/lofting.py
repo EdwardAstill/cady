@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from math import dist
 from typing import TypeAlias, cast
 
-from cady.operations.triangulation import TriangulationGuide
-
 Point3: TypeAlias = tuple[float, float, float]
 Face: TypeAlias = tuple[int, int, int]
 Edge: TypeAlias = tuple[int, int]
@@ -28,12 +26,11 @@ def loft_closed_curves3(
     end_curve: object,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
 ):
     """Loft between two closed 3D curves and return a ``Mesh3``."""
     start = _curve_points(start_curve, tolerance=tolerance)
     end = _curve_points(end_curve, tolerance=tolerance)
-    return loft_closed_loops3(start, end, tolerance=tolerance, guide=guide)
+    return loft_closed_loops3(start, end, tolerance=tolerance)
 
 
 def loft_closed_loops3(
@@ -41,14 +38,12 @@ def loft_closed_loops3(
     end: Sequence[Point3],
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
 ):
     """Loft between two closed loops and return a ``Mesh3``."""
     from cady.geometry.mesh import Mesh3
 
     if tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
-    _reject_unapplied_guide(guide)
     start_loop = _dedupe_closed3(tuple(start))
     end_loop = _dedupe_closed3(tuple(end))
     if len(start_loop) < 3 or len(end_loop) < 3:
@@ -129,18 +124,6 @@ def _curve_points(curve: object, *, tolerance: float) -> tuple[Point3, ...]:
         raise TypeError("curve must provide to_array(tolerance=...)")
     rows = cast(Iterable[Sequence[float]], to_array(tolerance=tolerance))
     return tuple((float(row[0]), float(row[1]), float(row[2])) for row in rows)
-
-
-def _reject_unapplied_guide(guide: TriangulationGuide | None) -> None:
-    if guide is None:
-        return
-    if (
-        guide.target_edge_length is not None
-        or guide.max_edge_length is not None
-        or guide.max_area is not None
-        or guide.min_angle_degrees is not None
-    ):
-        raise NotImplementedError("TriangulationGuide is not applied to lofting yet")
 
 
 def _dedupe_closed3(points: tuple[Point3, ...]) -> tuple[Point3, ...]:

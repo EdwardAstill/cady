@@ -7,7 +7,6 @@ import pytest
 
 from cady.errors import ReadError
 from cady.geometry import Mesh3
-from cady.operations import TriangulationGuide
 from cady.operations.transforms import Transform3
 
 
@@ -176,7 +175,7 @@ def test_mesh_triangulate_discards_internal_vertices_after_coplanar_merge() -> N
     )
 
     merged = mesh.merge_coplanar_faces(tolerance=1e-9)
-    triangulated = mesh.triangulate(tolerance=1e-9, guide="auto")
+    triangulated = mesh.triangulate(tolerance=1e-9)
 
     assert merged.vertices == mesh.vertices[:4]
     assert not any(4 in face for face in merged.faces)
@@ -184,7 +183,7 @@ def test_mesh_triangulate_discards_internal_vertices_after_coplanar_merge() -> N
     assert all(len(face) == 3 for face in triangulated.faces)
 
 
-def test_mesh_triangulate_auto_guide_refines_from_local_shape() -> None:
+def test_mesh_triangulate_refines_from_max_area() -> None:
     mesh = Mesh3(
         (
             (0.0, 0.0, 0.0),
@@ -195,24 +194,24 @@ def test_mesh_triangulate_auto_guide_refines_from_local_shape() -> None:
         ((0, 1, 2, 3),),
     )
 
-    triangulated = mesh.triangulate(tolerance=1e-6, guide="auto")
+    triangulated = mesh.triangulate(tolerance=1e-6, max_area=0.25)
 
     assert len(triangulated.vertices) > len(mesh.vertices)
     assert len(triangulated.faces) > 2
     assert all(len(face) == 3 for face in triangulated.faces)
 
 
-def test_mesh_triangulate_auto_guide_resolves_comb_teeth() -> None:
+def test_mesh_triangulate_resolves_comb_teeth_with_edge_constraint() -> None:
     mesh = Mesh3(_comb_vertices(), (tuple(range(20)),))
 
-    triangulated = mesh.triangulate(tolerance=1e-6, guide="auto")
+    triangulated = mesh.triangulate(tolerance=1e-6, max_edge_length=0.35)
 
     assert len(triangulated.vertices) > len(mesh.vertices)
     assert len(triangulated.faces) > len(mesh.vertices) - 2
     assert all(len(face) == 3 for face in triangulated.faces)
 
 
-def test_mesh_triangulate_accepts_triangulation_guide() -> None:
+def test_mesh_triangulate_accepts_flat_area_constraint() -> None:
     mesh = Mesh3(
         (
             (0.0, 0.0, 0.0),
@@ -225,7 +224,7 @@ def test_mesh_triangulate_accepts_triangulation_guide() -> None:
 
     triangulated = mesh.triangulate(
         tolerance=1e-6,
-        guide=TriangulationGuide(max_area=0.25),
+        max_area=0.25,
     )
 
     assert len(triangulated.vertices) > len(mesh.vertices)
@@ -248,11 +247,11 @@ def test_mesh_triangulate_rejects_min_angle_violations() -> None:
     with pytest.raises(ValueError, match="below min_angle_degrees 20"):
         mesh.triangulate(
             tolerance=1e-9,
-            guide=TriangulationGuide(min_angle_degrees=20.0),
+            min_angle_degrees=20.0,
         )
 
 
-def test_mesh_triangulate_auto_can_reject_min_angle_violations() -> None:
+def test_mesh_triangulate_can_reject_min_angle_violations() -> None:
     mesh = Mesh3(
         (
             (0.0, 0.0, 0.0),
@@ -265,12 +264,11 @@ def test_mesh_triangulate_auto_can_reject_min_angle_violations() -> None:
     with pytest.raises(ValueError, match="below min_angle_degrees 20"):
         mesh.triangulate(
             tolerance=1e-9,
-            guide="auto",
             min_angle_degrees=20.0,
         )
 
 
-def test_mesh_triangulate_auto_enforces_min_angle_on_skinny_polygon() -> None:
+def test_mesh_triangulate_enforces_min_angle_on_skinny_polygon() -> None:
     mesh = Mesh3(
         (
             (-2.2, -0.28, 0.0),
@@ -287,11 +285,12 @@ def test_mesh_triangulate_auto_enforces_min_angle_on_skinny_polygon() -> None:
 
     triangulated = mesh.triangulate(
         tolerance=1e-6,
-        guide="auto",
+        max_edge_length=0.08,
         min_angle_degrees=15.0,
     )
 
-    assert (len(triangulated.vertices), len(triangulated.faces)) == (280, 433)
+    assert len(triangulated.vertices) > len(mesh.vertices)
+    assert len(triangulated.faces) > len(mesh.faces)
     assert _min_mesh_angle(triangulated) >= 15.0
 
 

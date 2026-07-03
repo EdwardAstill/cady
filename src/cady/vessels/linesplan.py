@@ -14,7 +14,6 @@ from cady.files import dxf
 from cady.geometry import Mesh3, Polyline3, Wireframe3
 from cady.operations.meshes import classify_linesplan_curves
 from cady.operations.meshing import closed_polyline_mesh3
-from cady.operations.triangulation import TriangulationGuide
 
 _Point3: TypeAlias = tuple[float, float, float]
 _Face: TypeAlias = tuple[int, int, int]
@@ -124,12 +123,12 @@ class Linesplan:
         front_cap = closed_polyline_mesh3(
             Polyline3(front_row, closed=True),
             tolerance=tolerance,
-            guide=_cap_triangulation_guide(front_row, tolerance=tolerance),
+            max_edge_length=_cap_max_edge_length(front_row, tolerance=tolerance),
         )
         back_cap = closed_polyline_mesh3(
             Polyline3(back_row, closed=True),
             tolerance=tolerance,
-            guide=_cap_triangulation_guide(back_row, tolerance=tolerance),
+            max_edge_length=_cap_max_edge_length(back_row, tolerance=tolerance),
         )
         closed = _weld_mesh(
             Mesh3.merged((side_mesh, front_cap, back_cap)),
@@ -387,11 +386,11 @@ def _face_edges(faces: Iterable[Sequence[int]]) -> tuple[_Edge, ...]:
     return tuple(sorted(edges))
 
 
-def _cap_triangulation_guide(
+def _cap_max_edge_length(
     points: Sequence[_Point3],
     *,
     tolerance: float,
-) -> TriangulationGuide | None:
+) -> float | None:
     lengths: list[float] = []
     for start, end in zip(points, (*points[1:], points[0]), strict=True):
         length = dist(start, end)
@@ -399,7 +398,7 @@ def _cap_triangulation_guide(
             lengths.append(length)
     if not lengths:
         return None
-    return TriangulationGuide(max_edge_length=max(lengths) * 1.000001)
+    return max(lengths) * 1.000001
 
 
 def _weld_mesh(mesh: Mesh3, *, tolerance: float) -> Mesh3:

@@ -49,8 +49,8 @@ class ResolvedLinesplanMeshSettings(TypedDict):
 
 
 # DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
-#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
-DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "example_mesh.dxf"
+DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
+#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "example_mesh.dxf"
 
 
 SETTINGS: LinesplanMeshSettings = {

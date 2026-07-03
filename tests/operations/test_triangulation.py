@@ -6,88 +6,167 @@ import numpy as np
 import pytest
 
 from cady.geometry.polyline import Polyline2, Polyline3
-from cady.operations import (
-    TriangulationGuide,
-    automatic_triangulation_guide,
-    triangulate2,
-    triangulate3,
-    triangulate_curve2,
-    triangulate_curve3,
-    triangulate_mesh2,
-    triangulate_mesh3,
-)
+from cady.operations import triangulate
+from cady.operations.meshing import closed_polyline_mesh2, closed_polyline_mesh3
 
 
-def test_triangulate2_returns_nodes_and_triangle_faces() -> None:
+def test_triangulate_returns_nodes_edges_and_triangle_faces() -> None:
+    nodes, edges = _square()
+
+    out_nodes, out_edges, faces = triangulate(nodes, edges)
+
+    np.testing.assert_allclose(out_nodes, nodes)
+    assert faces.shape == (2, 3)
+    assert out_edges.shape[1] == 2
+    assert len(out_edges) > len(edges)
+
+
+def test_triangulate_supports_pizza_web_algorithm() -> None:
     nodes = np.array(
         [
             [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
+            [2.0, 0.0],
+            [2.0, 1.0],
+            [1.0, 0.35],
             [0.0, 1.0],
         ],
         dtype=np.float64,
     )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
+    edges = _loop_edges(len(nodes))
 
-    out_nodes, faces = triangulate2(nodes, edges)
+    out_nodes, out_edges, faces = triangulate(nodes, edges, algorithm="pizza_web")
 
-    np.testing.assert_allclose(out_nodes, nodes)
-    assert faces.shape == (2, 3)
-    assert {tuple(face) for face in faces} == {(3, 0, 1), (1, 2, 3)}
+    assert len(out_nodes) > len(nodes)
+    assert out_edges.shape[1] == 2
+    assert faces.shape[1] == 3
 
 
-def test_triangulate3_projects_planar_edges_and_returns_original_nodes() -> None:
+def test_triangulate_rejects_unknown_algorithm() -> None:
+    nodes, edges = _square()
+
+    with pytest.raises(ValueError, match="unsupported triangulation algorithm"):
+        triangulate(nodes, edges, algorithm="missing")
+
+
+def test_triangulate_rejects_constraints_not_supported_by_algorithm() -> None:
+    nodes, edges = _square()
+
+    with pytest.raises(ValueError, match="does not support"):
+        triangulate(nodes, edges, algorithm="pizza_web", max_area=0.25)
+
+
+def test_max_edge_length_refines_boundary_and_faces() -> None:
     nodes = np.array(
         [
-            [0.0, 0.0, 2.0],
-            [1.0, 0.0, 2.0],
-            [1.0, 1.0, 2.0],
-            [0.0, 1.0, 2.0],
+            [0.0, 0.0],
+            [2.0, 0.0],
+            [2.0, 2.0],
+            [0.0, 2.0],
         ],
         dtype=np.float64,
     )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
+    edges = _loop_edges(len(nodes))
 
-    out_nodes, faces = triangulate3(nodes, edges)
+    out_nodes, out_edges, faces = triangulate(nodes, edges, max_edge_length=0.75)
 
-    np.testing.assert_allclose(out_nodes, nodes)
-    assert faces.shape == (2, 3)
-    assert {tuple(face) for face in faces} == {(3, 0, 1), (1, 2, 3)}
+    assert len(out_nodes) > len(nodes)
+    assert len(out_edges) > len(edges)
+    assert len(faces) > 2
+    assert _max_face_edge_length(out_nodes, faces) <= 0.75 + 1e-9
+    assert _delaunay_violations(out_nodes, faces) == 0
 
 
-def test_triangulate_curve2_fills_closed_polyline() -> None:
+def test_max_area_inserts_steiner_nodes() -> None:
+    nodes = np.array(
+        [
+            [0.0, 0.0],
+            [2.0, 0.0],
+            [2.0, 2.0],
+            [0.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    edges = _loop_edges(len(nodes))
+
+    out_nodes, out_edges, faces = triangulate(nodes, edges, max_area=0.25)
+
+    np.testing.assert_allclose(out_nodes[:4], nodes)
+    np.testing.assert_allclose(out_nodes[4], [1.0, 1.0])
+    assert len(out_nodes) > len(nodes)
+    assert len(out_edges) > len(edges)
+    assert len(faces) > 2
+    assert max(_face_areas(out_nodes, faces)) <= 0.25 + 1e-9
+
+
+def test_min_angle_accepts_output_when_constraint_is_met() -> None:
+    nodes, edges = _square()
+
+    out_nodes, _out_edges, faces = triangulate(nodes, edges, min_angle_degrees=20.0)
+
+    assert _min_face_angle(out_nodes, faces) >= 20.0
+
+
+def test_min_angle_rejects_output_below_constraint() -> None:
+    nodes = np.array(
+        [
+            [0.0, 0.0],
+            [4.0, 0.0],
+            [4.0, 1.0],
+            [0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    edges = _loop_edges(len(nodes))
+
+    with pytest.raises(ValueError, match="below min_angle_degrees 20"):
+        triangulate(nodes, edges, min_angle_degrees=20.0)
+
+
+def test_invalid_constraint_values_fail_explicitly() -> None:
+    nodes, edges = _square()
+
+    with pytest.raises(ValueError, match="max_area"):
+        triangulate(nodes, edges, max_area=0.0)
+
+    with pytest.raises(ValueError, match="min_angle_degrees"):
+        triangulate(nodes, edges, min_angle_degrees=60.0)
+
+
+def test_closed_polyline_mesh2_uses_triangulate() -> None:
     polyline = Polyline2(
         ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
         closed=True,
     )
 
-    mesh = triangulate_curve2(polyline, tolerance=1e-6)
+    mesh = closed_polyline_mesh2(polyline, tolerance=1e-6)
 
     assert mesh.vertices == polyline.vertices
     assert len(mesh.faces) == 2
     assert mesh.edges
 
 
-def test_triangulate_curve3_fills_planar_closed_polyline() -> None:
+def test_closed_polyline_mesh3_projects_and_lifts_planar_loop() -> None:
     polyline = Polyline3(
         (
             (0.0, 0.0, 2.0),
-            (1.0, 0.0, 2.0),
-            (1.0, 1.0, 2.0),
-            (0.0, 1.0, 2.0),
+            (2.0, 0.0, 2.0),
+            (2.0, 2.0, 2.0),
+            (0.0, 2.0, 2.0),
         ),
         closed=True,
     )
 
-    mesh = triangulate_curve3(polyline, tolerance=1e-6)
+    mesh = closed_polyline_mesh3(polyline, tolerance=1e-6, max_area=0.25)
 
-    assert mesh.vertices == polyline.vertices
-    assert len(mesh.faces) == 2
-    assert mesh.edges
+    assert len(mesh.vertices) > len(polyline.vertices)
+    assert len(mesh.faces) > 2
+    assert {point[2] for point in mesh.vertices} == {2.0}
+    assert max(_face_areas(np.asarray([point[:2] for point in mesh.vertices]), mesh.faces)) <= (
+        0.25 + 1e-9
+    )
 
 
-def test_triangulate_curve3_rejects_non_planar_closed_curve() -> None:
+def test_closed_polyline_mesh3_rejects_non_planar_curve() -> None:
     polyline = Polyline3(
         (
             (0.0, 0.0, 0.0),
@@ -99,10 +178,10 @@ def test_triangulate_curve3_rejects_non_planar_closed_curve() -> None:
     )
 
     with pytest.raises(ValueError, match="non-planar"):
-        triangulate_curve3(polyline, tolerance=1e-3)
+        closed_polyline_mesh3(polyline, tolerance=1e-3)
 
 
-def test_triangulate_mesh2_returns_internal_edges_and_faces() -> None:
+def _square() -> tuple[np.ndarray, np.ndarray]:
     nodes = np.array(
         [
             [0.0, 0.0],
@@ -112,224 +191,11 @@ def test_triangulate_mesh2_returns_internal_edges_and_faces() -> None:
         ],
         dtype=np.float64,
     )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    out_nodes, out_edges, faces = triangulate_mesh2(nodes, edges)
-
-    np.testing.assert_allclose(out_nodes, nodes)
-    assert faces.shape == (2, 3)
-    assert out_edges.shape[1] == 2
-    assert len(out_edges) > len(edges)
+    return nodes, _loop_edges(len(nodes))
 
 
-def test_triangulate_mesh3_returns_internal_edges_and_faces() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    out_nodes, out_edges, faces = triangulate_mesh3(nodes, edges)
-
-    np.testing.assert_allclose(out_nodes, nodes)
-    assert faces.shape == (2, 3)
-    assert out_edges.shape[1] == 2
-    assert len(out_edges) > len(edges)
-
-
-def test_triangulation_guide_refines_boundary_edges() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0],
-            [2.0, 0.0],
-            [2.0, 2.0],
-            [0.0, 2.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    out_nodes, out_edges, faces = triangulate_mesh2(
-        nodes,
-        edges,
-        guide=TriangulationGuide(max_edge_length=0.75),
-    )
-
-    assert len(out_nodes) > 12
-    assert len(out_edges) > len(edges)
-    assert len(faces) >= 2
-    assert _max_face_edge_length(out_nodes, faces) <= 0.75 + 1e-9
-    assert _delaunay_violations(out_nodes, faces) == 0
-
-
-def test_automatic_triangulation_guide_uses_local_feature_size() -> None:
-    nodes = _comb_nodes3()
-    edges = _loop_edges(len(nodes))
-
-    guide = automatic_triangulation_guide(nodes, edges, tolerance=1e-6)
-
-    assert guide is not None
-    assert guide.max_edge_length is not None
-    assert guide.max_edge_length < 1.0
-
-
-def test_automatic_triangulation_guide_sizes_skinny_shape_for_min_angle() -> None:
-    nodes = np.array(
-        [
-            [-2.2, -0.28, 0.0],
-            [2.2, -0.28, 0.0],
-            [2.2, -0.18, 0.0],
-            [-1.85, -0.18, 0.0],
-            [-1.85, -0.14, 0.0],
-            [2.2, -0.14, 0.0],
-            [2.2, 0.28, 0.0],
-            [-2.2, 0.28, 0.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = _loop_edges(len(nodes))
-
-    guide = automatic_triangulation_guide(
-        nodes,
-        edges,
-        tolerance=1e-6,
-        min_angle_degrees=15.0,
-    )
-
-    assert guide is not None
-    assert guide.max_edge_length is not None
-    assert guide.max_edge_length < 0.15
-    assert guide.min_angle_degrees == 15.0
-
-
-def test_triangulate_mesh3_accepts_auto_guide() -> None:
-    nodes = _comb_nodes3()
-    edges = _loop_edges(len(nodes))
-
-    out_nodes, _out_edges, faces = triangulate_mesh3(
-        nodes,
-        edges,
-        tolerance=1e-6,
-        guide="auto",
-    )
-
-    assert len(out_nodes) > len(nodes)
-    assert len(faces) > len(nodes) - 2
-
-
-def test_triangulation_guide_max_area_inserts_steiner_nodes() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0],
-            [2.0, 0.0],
-            [2.0, 2.0],
-            [0.0, 2.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    out_nodes, out_edges, faces = triangulate_mesh2(
-        nodes,
-        edges,
-        guide=TriangulationGuide(max_area=0.25),
-    )
-
-    np.testing.assert_allclose(out_nodes[:4], nodes)
-    np.testing.assert_allclose(out_nodes[4], [1.0, 1.0])
-    assert len(out_nodes) > len(nodes)
-    assert len(out_edges) > len(edges)
-    assert len(faces) > 2
-    assert max(_face_areas(out_nodes, faces)) <= 0.25 + 1e-9
-
-
-def test_triangulation_guide_refines_planar_3d_curve_with_steiner_nodes() -> None:
-    polyline = Polyline3(
-        (
-            (0.0, 0.0, 2.0),
-            (2.0, 0.0, 2.0),
-            (2.0, 2.0, 2.0),
-            (0.0, 2.0, 2.0),
-        ),
-        closed=True,
-    )
-
-    mesh = triangulate_curve3(
-        polyline,
-        tolerance=1e-6,
-        guide=TriangulationGuide(max_area=0.25),
-    )
-
-    assert len(mesh.vertices) > len(polyline.vertices)
-    assert len(mesh.faces) > 2
-    assert mesh.vertices[4] == (1.0, 1.0, 2.0)
-    assert {point[2] for point in mesh.vertices} == {2.0}
-    assert mesh.edges == tuple((index, (index + 1) % 4) for index in range(4))
-
-
-def test_triangulation_guide_accepts_min_angle_when_output_satisfies_it() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    out_nodes, _out_edges, faces = triangulate_mesh2(
-        nodes,
-        edges,
-        guide=TriangulationGuide(min_angle_degrees=20.0),
-    )
-
-    assert _min_face_angle(out_nodes, faces) >= 20.0
-
-
-def test_triangulation_guide_rejects_output_below_min_angle() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0],
-            [4.0, 0.0],
-            [4.0, 1.0],
-            [0.0, 1.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    with pytest.raises(ValueError, match="below min_angle_degrees 20"):
-        triangulate_mesh2(
-            nodes,
-            edges,
-            guide=TriangulationGuide(min_angle_degrees=20.0),
-        )
-
-
-def test_invalid_guide_options_fail_explicitly() -> None:
-    nodes = np.array(
-        [
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0],
-        ],
-        dtype=np.float64,
-    )
-    edges = np.array([(0, 1), (1, 2), (2, 3), (3, 0)], dtype=np.int64)
-
-    with pytest.raises(ValueError, match="max_area"):
-        triangulate_mesh2(nodes, edges, guide=TriangulationGuide(max_area=0.0))
-
-    with pytest.raises(ValueError, match="min_angle_degrees"):
-        triangulate_mesh2(nodes, edges, guide=TriangulationGuide(min_angle_degrees=60.0))
+def _loop_edges(count: int) -> np.ndarray:
+    return np.asarray(tuple((index, (index + 1) % count) for index in range(count)), dtype=np.int64)
 
 
 def _max_face_edge_length(nodes: np.ndarray, faces: np.ndarray) -> float:
@@ -420,35 +286,3 @@ def _point_in_circumcircle(
 
 def _cross(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
     return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
-
-
-def _loop_edges(count: int) -> np.ndarray:
-    return np.asarray(tuple((index, (index + 1) % count) for index in range(count)), dtype=np.int64)
-
-
-def _comb_nodes3() -> np.ndarray:
-    return np.asarray(
-        (
-            (-2.0, -1.0, 0.0),
-            (2.0, -1.0, 0.0),
-            (2.0, 1.0, 0.0),
-            (1.65, 1.0, 0.0),
-            (1.65, 0.15, 0.0),
-            (1.25, 0.15, 0.0),
-            (1.25, 1.0, 0.0),
-            (0.85, 1.0, 0.0),
-            (0.85, 0.15, 0.0),
-            (0.45, 0.15, 0.0),
-            (0.45, 1.0, 0.0),
-            (0.05, 1.0, 0.0),
-            (0.05, 0.15, 0.0),
-            (-0.35, 0.15, 0.0),
-            (-0.35, 1.0, 0.0),
-            (-0.75, 1.0, 0.0),
-            (-0.75, 0.15, 0.0),
-            (-1.15, 0.15, 0.0),
-            (-1.15, 1.0, 0.0),
-            (-2.0, 1.0, 0.0),
-        ),
-        dtype=np.float64,
-    )

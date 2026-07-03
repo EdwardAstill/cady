@@ -9,13 +9,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.operations.coordinates import add3, scale3
-from cady.operations.triangulation import (
-    GuideSpec,
-    TriangulationGuide,
-    triangulate_curve2,
-    triangulate_curve3,
-    triangulate_mesh3,
-)
+from cady.operations.mesh_topology import edge_loops
+from cady.operations.triangulate import triangulate
 from cady.utils import finite, loop_edges, positive_tolerance
 
 if TYPE_CHECKING:
@@ -40,43 +35,93 @@ def closed_polyline_mesh2(
     polyline: object,
     *,
     tolerance: float,
-    guide: GuideSpec = None,
+    algorithm: str = "ear_delaunay_refinement",
+    **constraints: object,
 ) -> Mesh2:
     """Fill a closed 2D polyline."""
-    return triangulate_curve2(polyline, tolerance=tolerance, guide=guide)
+    from cady.geometry.mesh import Mesh2
+
+    if not getattr(polyline, "closed", False):
+        raise ValueError("polyline must be closed to triangulate")
+    to_array = getattr(polyline, "to_array", None)
+    if not callable(to_array):
+        raise TypeError("polyline must provide to_array(tolerance=...)")
+    nodes = _points2_array(to_array(tolerance=tolerance), name="vertices")
+    boundary = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
+    nodes_out, edges_out, faces = triangulate(
+        nodes,
+        boundary,
+        algorithm=algorithm,
+        tolerance=tolerance,
+        **constraints,
+    )
+    vertices = tuple((float(x), float(y)) for x, y in nodes_out)
+    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
+    edge_values = tuple((int(a), int(b)) for a, b in edges_out)
+    return Mesh2(vertices, face_values, edge_values)
 
 
 def closed_polyline_mesh3(
     polyline: object,
     *,
     tolerance: float,
-    guide: GuideSpec = None,
+    algorithm: str = "ear_delaunay_refinement",
+    **constraints: object,
 ) -> Mesh3:
     """Fill a closed planar 3D polyline."""
-    return triangulate_curve3(polyline, tolerance=tolerance, guide=guide)
+    from cady.geometry.mesh import Mesh3
+
+    if not getattr(polyline, "closed", False):
+        raise ValueError("polyline must be closed to triangulate")
+    to_array = getattr(polyline, "to_array", None)
+    if not callable(to_array):
+        raise TypeError("polyline must provide to_array(tolerance=...)")
+    points = _points3(to_array(tolerance=tolerance))
+    nodes_out, edges_out, faces = _triangulate_points3_loop(
+        points,
+        tolerance=tolerance,
+        algorithm=algorithm,
+        constraints=constraints,
+    )
+    vertices = tuple((float(x), float(y), float(z)) for x, y, z in nodes_out)
+    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
+    edge_values = tuple((int(a), int(b)) for a, b in edges_out)
+    return Mesh3(vertices, face_values, edge_values)
 
 
 def wireframe_mesh(
     wireframe: object,
     *,
     tolerance: float,
-    guide: GuideSpec = None,
+    algorithm: str = "ear_delaunay_refinement",
+    **constraints: object,
 ) -> Mesh3:
     """Triangulate closed planar wireframe edge loops into a ``Mesh3``."""
     from cady.geometry.mesh import Mesh3
 
     source = cast(_WireframeMeshLike, wireframe)
-    nodes, edges = source.vertices, source.edges
-    nodes_out, edges_out, faces = triangulate_mesh3(
-        nodes,
-        edges,
-        tolerance=tolerance,
-        guide=guide,
-    )
-    vertices = tuple((float(x), float(y), float(z)) for x, y, z in nodes_out)
-    edge_values = tuple((int(a), int(b)) for a, b in edges_out)
-    face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
-    return Mesh3(vertices, face_values, edge_values)
+    vertices = list(_points3(source.vertices))
+    edges = np.asarray(source.edges, dtype=np.int64)
+    faces_out: list[tuple[int, int, int]] = []
+    edges_out = {_edge_key(int(a), int(b)) for a, b in edges}
+    for loop in edge_loops(edges):
+        points = tuple(vertices[index] for index in loop)
+        nodes_loop, edges_loop, faces_loop = _triangulate_points3_loop(
+            points,
+            tolerance=tolerance,
+            algorithm=algorithm,
+            constraints=constraints,
+        )
+        index_map = list(loop)
+        for index in range(len(loop), len(nodes_loop)):
+            x, y, z = nodes_loop[index]
+            index_map.append(len(vertices))
+            vertices.append((float(x), float(y), float(z)))
+        for a, b, c in faces_loop:
+            faces_out.append((index_map[int(a)], index_map[int(b)], index_map[int(c)]))
+        for a, b in edges_loop:
+            edges_out.add(_edge_key(index_map[int(a)], index_map[int(b)]))
+    return Mesh3(tuple(vertices), tuple(faces_out), tuple(sorted(edges_out)))
 
 
 def region_mesh(
@@ -84,7 +129,6 @@ def region_mesh(
     plane: Plane3,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
 ) -> Mesh3:
     from cady.geometry.surface import Surface3
 
@@ -92,7 +136,6 @@ def region_mesh(
         region,
         Surface3.plane(plane=plane),
         tolerance=tolerance,
-        guide=guide,
     )
 
 
@@ -101,9 +144,7 @@ def surface_region_mesh(
     surface: Surface3,
     *,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
 ) -> Mesh3:
-    _reject_unapplied_guide(guide)
     loops = region_loops_from_region(region, tolerance=tolerance)
     outer, holes = _outer_and_holes(loops)
     cap_triangles = triangulate_polygon(
@@ -123,11 +164,9 @@ def extrusion_mesh(
     *,
     distance: float,
     tolerance: float,
-    guide: TriangulationGuide | None = None,
 ) -> Mesh3:
     from cady.geometry.plane3 import Plane3
 
-    _reject_unapplied_guide(guide)
     distance = finite(distance, "distance")
     if distance == 0.0:
         raise ValueError("distance must be finite and non-zero")
@@ -215,18 +254,6 @@ def triangulate_polygon(
     return _triangulate_polygon_with_holes(outer, holes, tolerance=tolerance)
 
 
-def _reject_unapplied_guide(guide: TriangulationGuide | None) -> None:
-    if guide is None:
-        return
-    if (
-        guide.target_edge_length is not None
-        or guide.max_edge_length is not None
-        or guide.max_area is not None
-        or guide.min_angle_degrees is not None
-    ):
-        raise NotImplementedError("TriangulationGuide is not applied to region meshing yet")
-
-
 def _points2_array(value: object, *, name: str) -> PointArray2:
     try:
         array = np.array(value, dtype=np.float64, copy=True)
@@ -244,6 +271,56 @@ def _points2_array(value: object, *, name: str) -> PointArray2:
 def _points2(points: object) -> tuple[Point2, ...]:
     array = _points2_array(points, name="vertices")
     return tuple((float(point[0]), float(point[1])) for point in array)
+
+
+def _points3(points: object) -> tuple[Point3, ...]:
+    try:
+        array = np.array(points, dtype=np.float64, copy=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("vertices must be numeric") from exc
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError("vertices must have shape (n, 3)")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("vertices must contain only finite values")
+    return tuple((float(point[0]), float(point[1]), float(point[2])) for point in array)
+
+
+def _triangulate_points3_loop(
+    points: tuple[Point3, ...],
+    *,
+    tolerance: float,
+    algorithm: str,
+    constraints: dict[str, object],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    from cady.geometry.plane3 import Plane3
+
+    if len(points) < 3:
+        raise ValueError("edge loops must contain at least three nodes")
+    plane = Plane3.fit(points)
+    deviation = plane.max_deviation(points)
+    if deviation > tolerance:
+        raise ValueError(
+            f"3D edge loop is non-planar (max deviation {deviation:.3e} > "
+            f"tolerance {tolerance:.3e})"
+        )
+    projected = np.asarray([plane.coordinates(point) for point in points], dtype=np.float64)
+    boundary = np.asarray(loop_edges(len(projected)), dtype=np.int64)
+    nodes2, edges, faces = triangulate(
+        projected,
+        boundary,
+        algorithm=algorithm,
+        tolerance=tolerance,
+        **constraints,
+    )
+    lifted = np.asarray(
+        [plane.point(float(point[0]), float(point[1])) for point in nodes2],
+        dtype=np.float64,
+    )
+    return lifted, edges, faces
+
+
+def _edge_key(start: int, end: int) -> tuple[int, int]:
+    return (start, end) if start < end else (end, start)
 
 
 def _labelled_loops(
@@ -367,9 +444,8 @@ def _triangulate_simple_polygon(points: tuple[Point2, ...], *, tolerance: float)
 
     vertices = np.asarray(points, dtype=np.float64)
     edges = np.asarray(loop_edges(len(points)), dtype=np.int64)
-    from cady.operations.triangulation import triangulate2
 
-    _vertices, faces = triangulate2(vertices, edges, tolerance=tolerance)
+    _vertices, _edges, faces = triangulate(vertices, edges, tolerance=tolerance)
     return [(points[int(a)], points[int(b)], points[int(c)]) for a, b, c in faces]
 
 

@@ -13,17 +13,7 @@ from cady.operations.meshes import (
     sphere_triangles,
 )
 from cady.operations.transforms import Transform2, Transform3
-from cady.operations.triangulation import (
-    TriangulationGuide,
-    automatic_triangulation_guide,
-    triangulate2,
-    triangulate3,
-    triangulate_curve2,
-    triangulate_curve3,
-    triangulate_mesh2,
-    triangulate_mesh3,
-    triangulate_triangle_mesh3,
-)
+from cady.operations.triangulate import triangulate
 
 Point2: TypeAlias = tuple[float, float]
 Point3: TypeAlias = tuple[float, float, float]
@@ -164,8 +154,6 @@ def sphere(
 __all__ = [
     "Transform2",
     "Transform3",
-    "TriangulationGuide",
-    "automatic_triangulation_guide",
     "arc2",
     "arc3",
     "box",
@@ -184,11 +172,5 @@ __all__ = [
     "sphere",
     "sphere_triangles",
     "spline3",
-    "triangulate2",
-    "triangulate3",
-    "triangulate_curve2",
-    "triangulate_curve3",
-    "triangulate_mesh2",
-    "triangulate_mesh3",
-    "triangulate_triangle_mesh3",
+    "triangulate",
 ]

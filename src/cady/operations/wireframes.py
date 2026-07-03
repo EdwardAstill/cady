@@ -265,7 +265,7 @@ def _triangulate_loops_to_triangulation(
 ) -> _WireframeTriangulation:
     from cady.errors import GeometryError
     from cady.geometry.plane3 import Plane3
-    from cady.operations.triangulation import triangulate2
+    from cady.operations.triangulate import triangulate
 
     neighbours: dict[int, set[int]] = {}
     for a, b in wireframe.edges:
@@ -323,7 +323,7 @@ def _triangulate_loops_to_triangulation(
             tuple((index, (index + 1) % len(projected)) for index in range(len(projected))),
             dtype=np.int64,
         )
-        _nodes, face_array = triangulate2(projected_array, edges, tolerance=tolerance)
+        _nodes, _edges, face_array = triangulate(projected_array, edges, tolerance=tolerance)
         for a, b, c in face_array:
             faces.append((loop[int(a)], loop[int(c)], loop[int(b)]))
 

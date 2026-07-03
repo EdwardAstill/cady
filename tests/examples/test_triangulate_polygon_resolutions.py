@@ -50,13 +50,13 @@ def test_build_scene_places_resolution_meshes_next_to_each_other() -> None:
 
     assert [item.object_name for item in scene.objects] == [
         "original boundary",
-        "auto guide",
+        "auto length",
         "max edge 0.75",
         "max edge 0.35",
     ]
     assert [mesh.name for mesh in prepared.meshes] == [
         "original boundary",
-        "auto guide",
+        "auto length",
         "max edge 0.75",
         "max edge 0.35",
     ]
@@ -95,11 +95,11 @@ def test_triangulate3d_accepts_polygon_mesh() -> None:
     polygon = module.polygon_mesh_from_polyline(module.example_polyline(), tolerance=1e-6)
 
     original = module.triangulate3d(polygon, tolerance=1e-6)
-    heuristic = module.triangulate3d(polygon, tolerance=1e-6, guide="auto")
+    heuristic = module.triangulate_polygon_heuristic(polygon, tolerance=1e-6)
     refined = module.triangulate3d(
         polygon,
         tolerance=1e-6,
-        guide=module.TriangulationGuide(max_edge_length=0.75),
+        max_edge_length=0.75,
     )
 
     assert (len(original.vertices), len(original.faces)) == (11, 9)
@@ -129,24 +129,21 @@ def test_shape_cases_cover_difficult_polygons() -> None:
     ] == [
         ("coastal concave", 11, 33, 46),
         ("narrow channel", 8, 33, 39),
-        ("comb teeth", 20, 56, 72),
+        ("comb teeth", 20, 149, 240),
         ("thin neck", 12, 32, 40),
-        ("crescent moon", 13, 46, 69),
-        ("long sliver", 4, 17, 20),
+        ("crescent moon", 13, 54, 85),
+        ("long sliver", 4, 167, 220),
         ("tapered needle", 6, 93, 131),
-        ("hairline slot", 8, 48, 55),
-        ("jagged bay", 20, 67, 101),
+        ("hairline slot", 8, 58, 67),
+        ("jagged bay", 20, 70, 104),
     ]
 
 
-def test_auto_api_resolves_comb_teeth() -> None:
+def test_auto_length_heuristic_resolves_comb_teeth() -> None:
     module = _load_example_script()
 
-    mesh = module.triangulate3d(
-        module.polygon_mesh_from_points(module.COMB_POINTS),
-        tolerance=module.TOLERANCE,
-        guide="auto",
-    )
+    polygon = module.polygon_mesh_from_points(module.COMB_POINTS)
+    mesh = module.triangulate_polygon_heuristic(polygon, tolerance=module.TOLERANCE)
 
     assert len(mesh.vertices) > len(module.COMB_POINTS)
     assert len(mesh.faces) > len(module.COMB_POINTS) - 2
@@ -177,8 +174,8 @@ def test_min_angle_cases_compare_same_skinny_polygon() -> None:
         (angle, len(polygon.vertices), len(mesh.vertices), len(mesh.faces))
         for angle, polygon, mesh in cases
     ] == [
-        (None, 8, 48, 55),
-        (5.0, 8, 53, 61),
+        (None, 8, 58, 67),
+        (5.0, 8, 58, 67),
         (10.0, 8, 149, 213),
         (15.0, 8, 280, 433),
     ]
@@ -195,8 +192,8 @@ def test_build_min_angle_scene_prepares_skinny_comparison() -> None:
     prepared = prepare_scene(scene, tolerance=1e-6)
 
     assert [item.object_name for item in scene.objects] == [
-        "auto guide triangles",
-        "auto guide input polygon",
+        "auto length triangles",
+        "auto length input polygon",
         "min angle 5 triangles",
         "min angle 5 input polygon",
         "min angle 10 triangles",
@@ -212,11 +209,11 @@ def test_build_min_angle_scene_prepares_skinny_comparison() -> None:
 def test_example_uses_triangulation_api() -> None:
     source = (ROOT / "examples" / "scripts" / "triangulate_polygon_resolutions.py").read_text()
 
-    assert "from cady.operations import TriangulationGuide" in source
+    assert "TriangulationGuide" not in source
     assert ".triangulate(" in source
     assert "min_angle_degrees=min_angle_degrees" in source
+    assert "max_edge_length=max_edge_length" in source
     assert ": object" not in source
-    assert "class TriangulationGuide" not in source
     assert "def triangulate_mesh3" not in source
     assert "def triangulate3d(" in source
 

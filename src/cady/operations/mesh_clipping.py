@@ -15,7 +15,7 @@ from cady.operations.mesh_topology import (
     prune_dangling_edges,
     stitch_segments,
 )
-from cady.operations.triangulation import triangulate2
+from cady.operations.triangulate import triangulate
 from cady.utils import loop_edges
 
 KeepSide = Literal["positive", "negative"]
@@ -464,7 +464,7 @@ def _max_plane_deviation(
 def _triangulate_loop(points: list[tuple[float, float]], tolerance: float) -> list[Face]:
     vertices = np.asarray(points, dtype=np.float64)
     edges = np.asarray(loop_edges(len(points)), dtype=np.int64)
-    _vertices, faces = triangulate2(vertices, edges, tolerance=tolerance)
+    _vertices, _edges, faces = triangulate(vertices, edges, tolerance=tolerance)
     return [(int(face[0]), int(face[1]), int(face[2])) for face in faces]
 
 

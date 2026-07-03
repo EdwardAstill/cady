@@ -6,11 +6,10 @@ Run from the repository root:
 """
 
 from collections.abc import Iterable, Sequence
-from math import acos, ceil, degrees, isfinite, sqrt
+from math import acos, ceil, degrees, isfinite, radians, sqrt, tan
 from typing import Literal, TypeAlias
 
 from cady import Camera, DisplayStyle, Mesh3, Polyline3, Scene
-from cady.operations import TriangulationGuide
 
 Point3: TypeAlias = tuple[float, float, float]
 EdgeIndex: TypeAlias = tuple[int, int]
@@ -185,11 +184,13 @@ def triangulate3d(
     mesh: Mesh3,
     *,
     tolerance: float = TOLERANCE,
-    guide: TriangulationGuide | Literal["auto"] | None = None,
+    max_edge_length: float | None = None,
     min_angle_degrees: float | None = None,
 ) -> Mesh3:
     if not isfinite(tolerance) or tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
+    if max_edge_length is not None and (not isfinite(max_edge_length) or max_edge_length <= 0.0):
+        raise ValueError("max_edge_length must be positive")
     if min_angle_degrees is not None and (
         not isfinite(min_angle_degrees) or min_angle_degrees <= 0.0
     ):
@@ -198,7 +199,7 @@ def triangulate3d(
         return Mesh3(mesh.vertices, (), mesh.edges)
     return mesh.triangulate(
         tolerance=tolerance,
-        guide=guide,
+        max_edge_length=max_edge_length,
         min_angle_degrees=min_angle_degrees,
     )
 
@@ -214,17 +215,16 @@ def triangulate_polygon(
     ):
         raise ValueError("max_edge_length must be positive")
 
-    guide = (
-        "auto"
+    polygon = polygon_mesh_from_polyline(polyline, tolerance=tolerance)
+    resolved_max_edge_length = (
+        _auto_max_edge_length(polygon, tolerance=tolerance)
         if max_edge_length == "auto"
-        else None
-        if max_edge_length is None
-        else TriangulationGuide(max_edge_length=max_edge_length)
+        else max_edge_length
     )
     return triangulate3d(
-        polygon_mesh_from_polyline(polyline, tolerance=tolerance),
+        polygon,
         tolerance=tolerance,
-        guide=guide,
+        max_edge_length=resolved_max_edge_length,
     )
 
 
@@ -233,7 +233,65 @@ def triangulate_polygon_heuristic(
     *,
     tolerance: float = TOLERANCE,
 ) -> Mesh3:
-    return triangulate3d(polygon, tolerance=tolerance, guide="auto")
+    return triangulate3d(
+        polygon,
+        tolerance=tolerance,
+        max_edge_length=_auto_max_edge_length(polygon, tolerance=tolerance),
+    )
+
+
+def _auto_max_edge_length(
+    polygon: Mesh3,
+    *,
+    tolerance: float,
+    min_angle_degrees: float | None = None,
+) -> float | None:
+    lengths = sorted(
+        _edge_length(polygon.vertices[start], polygon.vertices[end])
+        for start, end in polygon.edges
+        if _edge_length(polygon.vertices[start], polygon.vertices[end]) > tolerance
+    )
+    if not lengths:
+        return None
+
+    lower, upper = polygon.bounds()
+    span = sqrt(
+        (upper[0] - lower[0]) ** 2
+        + (upper[1] - lower[1]) ** 2
+        + (upper[2] - lower[2]) ** 2
+    )
+    if span <= tolerance:
+        return None
+
+    boundary_feature = lengths[min(len(lengths) - 1, int(0.40 * (len(lengths) - 1)))]
+    span_feature = span / 5.0
+    max_edge_length = max(tolerance * 8.0, min(boundary_feature, span_feature))
+    if min_angle_degrees is not None:
+        max_edge_length = min(
+            max_edge_length,
+            _min_angle_edge_length(lengths[0], min_angle_degrees, tolerance=tolerance),
+        )
+    return max_edge_length
+
+
+def _edge_length(start: Point3, end: Point3) -> float:
+    return sqrt(
+        (end[0] - start[0]) ** 2
+        + (end[1] - start[1]) ** 2
+        + (end[2] - start[2]) ** 2
+    )
+
+
+def _min_angle_edge_length(
+    shortest_feature: float,
+    min_angle_degrees: float,
+    *,
+    tolerance: float,
+) -> float:
+    tangent = tan(radians(min_angle_degrees))
+    if tangent <= 0.0:
+        return max(shortest_feature, tolerance * 8.0)
+    return max(shortest_feature / tangent, tolerance * 8.0)
 
 
 def triangulate_resolutions(
@@ -264,7 +322,11 @@ def triangulate_shape_cases(
         (
             name,
             polygon,
-            triangulate3d(polygon, tolerance=tolerance, guide="auto"),
+            triangulate3d(
+                polygon,
+                tolerance=tolerance,
+                max_edge_length=_auto_max_edge_length(polygon, tolerance=tolerance),
+            ),
         )
         for name, points in cases
         for polygon in (polygon_mesh_from_points(points),)
@@ -285,7 +347,11 @@ def triangulate_min_angle_cases(
             triangulate3d(
                 polygon,
                 tolerance=tolerance,
-                guide="auto",
+                max_edge_length=_auto_max_edge_length(
+                    polygon,
+                    tolerance=tolerance,
+                    min_angle_degrees=angle,
+                ),
                 min_angle_degrees=angle,
             ),
         )
@@ -502,13 +568,13 @@ def _case_name(max_edge_length: ResolutionSpec) -> str:
     if max_edge_length is None:
         return "original boundary"
     if max_edge_length == "auto":
-        return "auto guide"
+        return "auto length"
     return f"max edge {max_edge_length:g}"
 
 
 def _min_angle_case_name(min_angle_degrees: MinAngleSpec) -> str:
     if min_angle_degrees is None:
-        return "auto guide"
+        return "auto length"
     return f"min angle {min_angle_degrees:g}"
 
 
