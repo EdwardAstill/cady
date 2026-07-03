@@ -6,13 +6,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, dist
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, TypedDict
 
 from loft_polylines import get_node_array, mesh_node_array
 from pizza_triangulate import pizza_triangulate_mesh
-from process_polylines import (
-    DXF_SNAP_TOLERANCE as REFERENCE_DXF_SNAP_TOLERANCE,
-)
 from process_polylines import (
     prepare_station_lines,
     process_station_lines,
@@ -34,20 +31,35 @@ Edge: TypeAlias = tuple[int, int]
 PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
-#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
-DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
-#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
 
-REFERENCE_X_SPAN = 179200.09375
-REFERENCE_MESH_GEOMETRY_TOLERANCE = 1e-3
-REFERENCE_MESH_SNAP_TOLERANCE = 500.0
-REFERENCE_NODE_SPACING = 2000.0
-MIN_MESH_GEOMETRY_TOLERANCE = 1e-6
-MESH_GEOMETRY_TOLERANCE: float | None = None
-MESH_SNAP_TOLERANCE: float | None = None
-NODE_SPACING: float | None = None
-DXF_SNAP_TOLERANCE: float | None = None
-SHORT_PROJECTION_RATIO = 0.3
+class LinesplanMeshSettings(TypedDict):
+    dxf_snap_tolerance: float | None
+    mesh_geometry_tolerance: float | None
+    mesh_snap_tolerance: float | None
+    node_spacing: float | None
+    short_projection_ratio: float | None
+
+
+class ResolvedLinesplanMeshSettings(TypedDict):
+    dxf_snap_tolerance: float
+    mesh_geometry_tolerance: float
+    mesh_snap_tolerance: float
+    node_spacing: float
+    short_projection_ratio: float
+
+
+# DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
+#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
+DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "example_mesh.dxf"
+
+
+SETTINGS: LinesplanMeshSettings = {
+    "dxf_snap_tolerance": None,
+    "mesh_geometry_tolerance": None,
+    "mesh_snap_tolerance": None,
+    "node_spacing": None,
+    "short_projection_ratio": None,
+}
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
 MIRROR_PLANE_NORMAL: Point3 = (0.0, 1.0, 0.0)
 
@@ -76,14 +88,6 @@ class BoundaryNode:
 
 
 @dataclass(frozen=True, slots=True)
-class LinesplanMeshSettings:
-    dxf_snap_tolerance: float
-    mesh_geometry_tolerance: float
-    mesh_snap_tolerance: float
-    node_spacing: float
-
-
-@dataclass(frozen=True, slots=True)
 class KeelBoundaryPair:
     red: Point3
     green: Point3
@@ -92,7 +96,7 @@ class KeelBoundaryPair:
 @dataclass(frozen=True, slots=True)
 class LinesplanMeshBuild:
     input_path: Path
-    settings: LinesplanMeshSettings
+    settings: ResolvedLinesplanMeshSettings
     station_polylines: tuple[Polyline3, ...]
     prepared_station_polylines: tuple[Polyline3, ...]
     polyline_groups: tuple[PolylineGroup, PolylineGroup]
@@ -108,9 +112,8 @@ class LinesplanMeshBuild:
 def loft_polyline_groups(
     polyline_groups: Iterable[PolylineGroup],
     *,
-    node_spacing: float | None = NODE_SPACING,
+    node_spacing: float = 2000.0,
 ) -> tuple[LoftedMeshPatch, ...]:
-    node_spacing = _node_spacing(node_spacing)
     patches: list[LoftedMeshPatch] = []
     for group_index, polyline_group in enumerate(polyline_groups):
         if polyline_group:
@@ -130,10 +133,9 @@ def mark_mesh_boundary_nodes(
     patch: LoftedMeshPatch,
     green_points: Iterable[Point3],
     *,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    mesh_geometry_tolerance: float = 1e-3,
 ) -> LoftedMeshPatch:
     green_points = tuple(green_points)
-    mesh_geometry_tolerance = _mesh_geometry_tolerance(mesh_geometry_tolerance)
     end_column = len(patch.nodes[0]) - 1
     yellow_nodes: tuple[BoundaryNode, ...] = ()
     if patch.group_index == 0:
@@ -163,11 +165,10 @@ def mark_mesh_boundary_nodes(
 def boundary_extension_meshes(
     nodes: Iterable[BoundaryNode],
     *,
-    node_spacing: float | None = NODE_SPACING,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    node_spacing: float = 2000.0,
+    mesh_geometry_tolerance: float = 1e-3,
+    short_projection_ratio: float = 0.3,
 ) -> tuple[Mesh3, ...]:
-    node_spacing = _node_spacing(node_spacing)
-    mesh_geometry_tolerance = _mesh_geometry_tolerance(mesh_geometry_tolerance)
     meshes: list[Mesh3] = []
     chain: list[BoundaryNode] = []
     for node in sorted(nodes, key=lambda item: item.row_index):
@@ -177,6 +178,7 @@ def boundary_extension_meshes(
                     (boundary_node.point for boundary_node in chain),
                     node_spacing=node_spacing,
                     mesh_geometry_tolerance=mesh_geometry_tolerance,
+                    short_projection_ratio=short_projection_ratio,
                 )
             )
             chain = []
@@ -188,6 +190,7 @@ def boundary_extension_meshes(
                 (boundary_node.point for boundary_node in chain),
                 node_spacing=node_spacing,
                 mesh_geometry_tolerance=mesh_geometry_tolerance,
+                short_projection_ratio=short_projection_ratio,
             )
         )
     return tuple(mesh for mesh in meshes if mesh.vertices)
@@ -196,19 +199,18 @@ def boundary_extension_meshes(
 def boundary_extension_mesh(
     points: Iterable[Point3],
     *,
-    node_spacing: float | None = NODE_SPACING,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    node_spacing: float = 2000.0,
+    mesh_geometry_tolerance: float = 1e-3,
+    short_projection_ratio: float = 0.3,
 ) -> Mesh3:
     points = tuple(points)
     if len(points) < 2:
         return Mesh3((), ())
-    node_spacing = _node_spacing(node_spacing)
-    mesh_geometry_tolerance = _mesh_geometry_tolerance(mesh_geometry_tolerance)
     if node_spacing <= 0.0:
         raise ValueError("node_spacing must be positive")
 
     longest_projection = max(abs(point[1]) for point in points)
-    short_projection_limit = longest_projection * SHORT_PROJECTION_RATIO
+    short_projection_limit = longest_projection * short_projection_ratio
     vertices: list[Point3] = []
     columns: list[tuple[int, ...]] = []
     for point in points:
@@ -380,26 +382,23 @@ def mirror_meshes(meshes: Iterable[Mesh3]) -> tuple[Mesh3, ...]:
 def combine_meshes(
     meshes: Iterable[Mesh3],
     *,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    mesh_geometry_tolerance: float = 1e-3,
 ) -> Mesh3:
-    return weld_mesh(
-        Mesh3.merged(meshes),
-        tolerance=_mesh_geometry_tolerance(mesh_geometry_tolerance),
-    )
+    return weld_mesh(Mesh3.merged(meshes), tolerance=mesh_geometry_tolerance)
 
 
 def close_mesh(
     mesh: Mesh3,
     *,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    mesh_geometry_tolerance: float = 1e-3,
 ) -> Mesh3:
-    return mesh.close_mesh(tolerance=_mesh_geometry_tolerance(mesh_geometry_tolerance))
+    return mesh.close_mesh(tolerance=mesh_geometry_tolerance)
 
 
 def try_close_mesh(
     mesh: Mesh3,
     *,
-    mesh_geometry_tolerance: float | None = MESH_GEOMETRY_TOLERANCE,
+    mesh_geometry_tolerance: float = 1e-3,
 ) -> tuple[Mesh3 | None, Exception | None]:
     try:
         return close_mesh(mesh, mesh_geometry_tolerance=mesh_geometry_tolerance), None
@@ -474,62 +473,47 @@ def _clean_face(indices: Iterable[int]) -> Face:
     return tuple(face)
 
 
-def linesplan_mesh_settings(station_lines: Iterable[Polyline3]) -> LinesplanMeshSettings:
-    scale = _station_x_scale(station_lines)
-    return LinesplanMeshSettings(
-        dxf_snap_tolerance=_scaled_setting(
-            DXF_SNAP_TOLERANCE,
-            REFERENCE_DXF_SNAP_TOLERANCE,
-            scale,
+def linesplan_mesh_settings(
+    station_lines: Iterable[Polyline3],
+    settings: LinesplanMeshSettings = SETTINGS,
+) -> ResolvedLinesplanMeshSettings:
+    domain_length = _station_domain_length(station_lines)
+    return {
+        "dxf_snap_tolerance": _setting_value(
+            settings["dxf_snap_tolerance"],
+            domain_length * 0.0056,
         ),
-        mesh_geometry_tolerance=_scaled_setting(
-            MESH_GEOMETRY_TOLERANCE,
-            REFERENCE_MESH_GEOMETRY_TOLERANCE,
-            scale,
-            minimum=MIN_MESH_GEOMETRY_TOLERANCE,
+        "mesh_geometry_tolerance": _setting_value(
+            settings["mesh_geometry_tolerance"],
+            max(1e-6, domain_length * 5.6e-9),
         ),
-        mesh_snap_tolerance=_scaled_setting(
-            MESH_SNAP_TOLERANCE,
-            REFERENCE_MESH_SNAP_TOLERANCE,
-            scale,
+        "mesh_snap_tolerance": _setting_value(
+            settings["mesh_snap_tolerance"],
+            domain_length * 0.0028,
         ),
-        node_spacing=_scaled_setting(NODE_SPACING, REFERENCE_NODE_SPACING, scale),
-    )
+        "node_spacing": _setting_value(
+            settings["node_spacing"],
+            domain_length * 0.0112,
+        ),
+        "short_projection_ratio": _setting_value(
+            settings["short_projection_ratio"],
+            0.3,
+        ),
+    }
 
 
-def _station_x_scale(station_lines: Iterable[Polyline3]) -> float:
+def _setting_value(value: float | None, default: float) -> float:
+    return default if value is None else value
+
+
+def _station_domain_length(station_lines: Iterable[Polyline3]) -> float:
     xs = tuple(point[0] for polyline in station_lines for point in polyline.points())
     if not xs:
-        return 1.0
+        raise ValueError("station_lines must have a positive x span")
     x_span = max(xs) - min(xs)
     if x_span <= 0.0:
-        return 1.0
-    return x_span / REFERENCE_X_SPAN
-
-
-def _scaled_setting(
-    configured: float | None,
-    reference: float,
-    scale: float,
-    *,
-    minimum: float | None = None,
-) -> float:
-    value = reference * scale if configured is None else configured
-    if minimum is not None:
-        return max(minimum, value)
-    return value
-
-
-def _mesh_geometry_tolerance(value: float | None) -> float:
-    if value is None:
-        return REFERENCE_MESH_GEOMETRY_TOLERANCE
-    return value
-
-
-def _node_spacing(value: float | None) -> float:
-    if value is None:
-        return REFERENCE_NODE_SPACING
-    return value
+        raise ValueError("station_lines must have a positive x span")
+    return x_span
 
 
 def build_patch_scene(meshes: tuple[Mesh3, ...]) -> Scene:
@@ -569,10 +553,10 @@ def build_split_polyline_scene(polyline_groups: tuple[PolylineGroup, PolylineGro
 def build_linesplan_mesh(path: str | Path = DXF_FILE) -> LinesplanMeshBuild:
     input_path = Path(path)
     station_lines = station_polylines(input_path)
-    settings = linesplan_mesh_settings(station_lines)
+    settings = linesplan_mesh_settings(station_lines, SETTINGS)
     processed_station_polylines = process_station_lines(
         station_lines,
-        settings.dxf_snap_tolerance,
+        settings["dxf_snap_tolerance"],
     )
     prepared_station_polylines = prepare_station_lines(processed_station_polylines)
     polyline_groups = split_station_lines(prepared_station_polylines)
@@ -581,11 +565,11 @@ def build_linesplan_mesh(path: str | Path = DXF_FILE) -> LinesplanMeshBuild:
         mark_mesh_boundary_nodes(
             patch,
             station_green_points,
-            mesh_geometry_tolerance=settings.mesh_geometry_tolerance,
+            mesh_geometry_tolerance=settings["mesh_geometry_tolerance"],
         )
         for patch in loft_polyline_groups(
             polyline_groups,
-            node_spacing=settings.node_spacing,
+            node_spacing=settings["node_spacing"],
         )
     )
     boundary_extension_meshes_ = tuple(
@@ -594,8 +578,9 @@ def build_linesplan_mesh(path: str | Path = DXF_FILE) -> LinesplanMeshBuild:
         for nodes in (patch.yellow_nodes, patch.green_nodes)
         for mesh in boundary_extension_meshes(
             nodes,
-            node_spacing=settings.node_spacing,
-            mesh_geometry_tolerance=settings.mesh_geometry_tolerance,
+            node_spacing=settings["node_spacing"],
+            mesh_geometry_tolerance=settings["mesh_geometry_tolerance"],
+            short_projection_ratio=settings["short_projection_ratio"],
         )
     )
     half_meshes = merge_boundary_extensions(lofted_mesh_patches, boundary_extension_meshes_)
@@ -606,17 +591,17 @@ def build_linesplan_mesh(path: str | Path = DXF_FILE) -> LinesplanMeshBuild:
     keel_cap_mesh = keel_end_cap_mesh(keel_end_rows_)
     combined_mesh = combine_meshes(
         (*mesh_patches, keel_cap_mesh),
-        mesh_geometry_tolerance=settings.mesh_geometry_tolerance,
+        mesh_geometry_tolerance=settings["mesh_geometry_tolerance"],
     )
     closed_mesh, close_error = try_close_mesh(
         combined_mesh,
-        mesh_geometry_tolerance=settings.mesh_geometry_tolerance,
+        mesh_geometry_tolerance=settings["mesh_geometry_tolerance"],
     )
     final_mesh = closed_mesh if closed_mesh is not None else combined_mesh
     triangulated_mesh = pizza_triangulate_mesh(final_mesh)
     snapped_mesh = snap_close_nodes(
         triangulated_mesh,
-        tolerance=settings.mesh_snap_tolerance,
+        tolerance=settings["mesh_snap_tolerance"],
     )
     return LinesplanMeshBuild(
         input_path=input_path,

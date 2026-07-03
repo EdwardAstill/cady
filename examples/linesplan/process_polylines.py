@@ -15,7 +15,6 @@ PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 ProcessedPolylineGroups: TypeAlias = tuple[PolylineGroup, PolylineGroup]
 
 STATION_GEOMETRY_TOLERANCE = 1e-3
-DXF_SNAP_TOLERANCE = 1000.0
 MIN_STATION_FRAGMENT_LENGTH = 1.0
 KEEL_DISCONTINUITY_ANGLE_DEGREES = 60.0
 TOP_POSITIVE_Y_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
@@ -24,8 +23,11 @@ END_POINT_STYLE = DisplayStyle(color=(0.1, 0.82, 0.24), point_size=10.0)
 SOURCE_STATION_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 
 
-def process_polylines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
-    station_lines = process_station_lines(polylines, DXF_SNAP_TOLERANCE)
+def process_polylines(
+    polylines: Iterable[Polyline3],
+    snap_tolerance: float,
+) -> ProcessedPolylineGroups:
+    station_lines = process_station_lines(polylines, snap_tolerance)
     station_lines = prepare_station_lines(station_lines)
     return split_station_lines(station_lines)
 
@@ -333,7 +335,7 @@ if __name__ == "__main__":
     from wireframe import STATION_POLYLINES
 
     processed_station_polylines = prepare_station_lines(
-        process_station_lines(STATION_POLYLINES, DXF_SNAP_TOLERANCE)
+        process_station_lines(STATION_POLYLINES, 1000.0)
     )
     view_original_station_lines(STATION_POLYLINES)
     view_processed_station_lines(

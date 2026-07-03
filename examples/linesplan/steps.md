@@ -5,17 +5,17 @@ the station groups into half-hull patches, projects boundary chains to the
 centreline, mirrors the half hull, caps and closes it, triangulates every face,
 then snaps close nodes in the final triangle mesh.
 
-The pipeline resolves four tolerance-style settings from the station-line
-`x` span. If a setting is left as `None`, it is scaled from the 9 m reference
-linesplan values:
+The pipeline resolves the `SETTINGS` dictionary from the station-line `x` span,
+treating that span as the approximate vessel/domain length. Any value left as
+`None` is derived from that length:
 
 - `STATION_GEOMETRY_TOLERANCE = 1e-3` is the fine DXF station cleanup tolerance.
-- `DXF_SNAP_TOLERANCE` joins source DXF station fragments during
+- `dxf_snap_tolerance` joins source DXF station fragments during
   station-line cleanup.
-- `MESH_GEOMETRY_TOLERANCE` is the fine mesh welding and closure tolerance.
-- `MESH_SNAP_TOLERANCE` merges close final mesh vertices after
+- `mesh_geometry_tolerance` is the fine mesh welding and closure tolerance.
+- `mesh_snap_tolerance` merges close final mesh vertices after
   triangulation.
-- `NODE_SPACING` controls loft and boundary projection sampling density.
+- `node_spacing` controls loft and boundary projection sampling density.
 
 ## Pipeline steps
 
@@ -33,7 +33,7 @@ Produces `LinesplanMeshBuild.station_polylines`.
 - Drops fragments shorter than `MIN_STATION_FRAGMENT_LENGTH`.
 - Deduplicates neighbouring points at `STATION_GEOMETRY_TOLERANCE = 1e-3`.
 - Joins station fragments when endpoints, reversed endpoints, or
-  endpoint-to-segment snap points match within the resolved `DXF_SNAP_TOLERANCE`.
+  endpoint-to-segment snap points match within the resolved DXF snap tolerance.
 - Filters duplicate rows and sorts the connected station rows by median `x`.
 - Trims each station after its highest positive-`y` top point and orients it so
   the higher-`z` end is first.
@@ -48,7 +48,7 @@ the station end.
 
 ### 3. Loft station groups - `loft_polylines.py`
 
-`main.py` calls `loft_polyline_groups(...)` with the resolved `NODE_SPACING`.
+`main.py` calls `loft_polyline_groups(...)` with the resolved `node_spacing`.
 
 For each group, `get_node_array(...)`:
 
@@ -80,16 +80,16 @@ mesh.
 For each boundary point, `_projection_segment_count(...)` decides how many
 segments the projected column should have:
 
-- Short projections below `SHORT_PROJECTION_RATIO = 0.3` of the longest
+- Short projections below the resolved `short_projection_ratio` of the longest
   projection in the chain use one direct boundary-to-centreline segment.
-- Longer projections get intermediate nodes spaced by `NODE_SPACING`.
+- Longer projections get intermediate nodes spaced by `node_spacing`.
 
 Neighbouring projected columns can have different node counts. `_append_projection_faces(...)`
 walks both columns by relative height and emits quads when the next step lines
 up, otherwise triangles. The result is a mixed triangle/quad extension strip
 instead of a forced rectangular grid.
 
-Extension meshes are welded at `MESH_GEOMETRY_TOLERANCE` and merged into the
+Extension meshes are welded at `mesh_geometry_tolerance` and merged into the
 first half-hull patch.
 
 Produces boundary extension meshes that are merged into the half-hull meshes.
@@ -113,13 +113,13 @@ Produces `KEEL_CAP_MESH`.
 `combine_meshes(...)` merges all hull patches and the keel cap, then
 `weld_mesh(...)`:
 
-- Snaps vertices within `MESH_GEOMETRY_TOLERANCE` of `y = 0` exactly onto the
+- Snaps vertices within `mesh_geometry_tolerance` of `y = 0` exactly onto the
   centreline.
 - Deduplicates vertices by tolerance-grid key.
 - Removes degenerate faces and collapsed display edges.
 
 `try_close_mesh(...)` then calls
-`mesh.close_mesh(tolerance=MESH_GEOMETRY_TOLERANCE)` to fill remaining boundary
+`mesh.close_mesh(tolerance=mesh_geometry_tolerance)` to fill remaining boundary
 loops. If closure fails, the pipeline keeps the combined mesh for later steps.
 
 Produces `LinesplanMeshBuild.combined_mesh` and, when closure succeeds,
@@ -146,7 +146,7 @@ Produces `LinesplanMeshBuild.triangulated_mesh`.
 ### 10. Snap close final nodes - `snap_close_nodes.py`
 
 `snap_close_nodes(build.triangulated_mesh, tolerance=...)` runs after
-triangulation with the resolved `MESH_SNAP_TOLERANCE`.
+triangulation with the resolved `mesh_snap_tolerance`.
 
 The snapper uses a tolerance-sized spatial grid to find the nearest existing
 vertex within tolerance, remaps close vertices onto that shared vertex, removes
