@@ -14,8 +14,8 @@ Point3: TypeAlias = tuple[float, float, float]
 PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 ProcessedPolylineGroups: TypeAlias = tuple[PolylineGroup, PolylineGroup]
 
-TOLERANCE = 1e-3
-SNAP_TOLERANCE = 1000.0
+STATION_GEOMETRY_TOLERANCE = 1e-3
+DXF_SNAP_TOLERANCE = 1000.0
 MIN_STATION_FRAGMENT_LENGTH = 1.0
 KEEL_DISCONTINUITY_ANGLE_DEGREES = 60.0
 TOP_POSITIVE_Y_STYLE = DisplayStyle(color=(1.0, 0.95, 0.05), point_size=10.0)
@@ -25,7 +25,7 @@ SOURCE_STATION_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wiref
 
 
 def process_polylines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGroups:
-    station_lines = process_station_lines(polylines, SNAP_TOLERANCE)
+    station_lines = process_station_lines(polylines, DXF_SNAP_TOLERANCE)
     station_lines = prepare_station_lines(station_lines)
     return split_station_lines(station_lines)
 
@@ -39,7 +39,10 @@ def split_station_lines(polylines: Iterable[Polyline3]) -> ProcessedPolylineGrou
     discontinuity_top: list[Polyline3] = []
 
     for polyline in polylines:
-        points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+        points = _dedupe(
+            _clean_point(point)
+            for point in polyline.to_array(tolerance=STATION_GEOMETRY_TOLERANCE)
+        )
         discontinuity_index = _top_discontinuity_index(points)
         if discontinuity_index is None:
             positive_y_top.append(Polyline3(points))
@@ -61,7 +64,10 @@ def process_station_lines(
 ) -> tuple[Polyline3, ...]:
     rows: list[tuple[Point3, ...]] = []
     for polyline in polylines:
-        row = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+        row = _dedupe(
+            _clean_point(point)
+            for point in polyline.to_array(tolerance=STATION_GEOMETRY_TOLERANCE)
+        )
         if _polyline_length(row) > MIN_STATION_FRAGMENT_LENGTH:
             rows.append(row)
 
@@ -77,7 +83,10 @@ def process_station_lines(
                 if len(row) == len(candidate):
                     same = max(dist(a, b) for a, b in zip(row, candidate, strict=True))
                     flipped = max(dist(a, b) for a, b in zip(row, reversed(candidate), strict=True))
-                    if same <= TOLERANCE or flipped <= TOLERANCE:
+                    if (
+                        same <= STATION_GEOMETRY_TOLERANCE
+                        or flipped <= STATION_GEOMETRY_TOLERANCE
+                    ):
                         match_index = index
                         match_row = row
                         break
@@ -170,9 +179,12 @@ def station_top_positive_y_points(polylines: Iterable[Polyline3]) -> tuple[Point
     points: list[Point3] = []
     for polyline in polylines:
         polyline_points = tuple(
-            _clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE)
+            _clean_point(point)
+            for point in polyline.to_array(tolerance=STATION_GEOMETRY_TOLERANCE)
         )
-        positive_y_points = tuple(point for point in polyline_points if point[1] > TOLERANCE)
+        positive_y_points = tuple(
+            point for point in polyline_points if point[1] > STATION_GEOMETRY_TOLERANCE
+        )
         if positive_y_points:
             points.append(max(positive_y_points, key=lambda point: point[2]))
     return tuple(points)
@@ -185,7 +197,7 @@ def station_top_discontinuity_points(polylines: Iterable[Polyline3]) -> tuple[Po
             _clean_point(point)
             for point in polyline.discontinuities(
                 min_angle_degrees=KEEL_DISCONTINUITY_ANGLE_DEGREES,
-                min_segment_length=TOLERANCE,
+                min_segment_length=STATION_GEOMETRY_TOLERANCE,
             )
         )
         if discontinuities:
@@ -246,7 +258,7 @@ def view_original_station_lines(polylines: Iterable[Polyline3]) -> None:
 def _dedupe(points: Iterable[Point3]) -> tuple[Point3, ...]:
     kept: list[Point3] = []
     for point in points:
-        if not kept or dist(point, kept[-1]) > TOLERANCE:
+        if not kept or dist(point, kept[-1]) > STATION_GEOMETRY_TOLERANCE:
             kept.append(point)
     return tuple(kept)
 
@@ -256,7 +268,10 @@ def _polyline_length(points: tuple[Point3, ...]) -> float:
 
 
 def _prepare_station_line(polyline: Polyline3) -> Polyline3:
-    points = _dedupe(_clean_point(point) for point in polyline.to_array(tolerance=TOLERANCE))
+    points = _dedupe(
+        _clean_point(point)
+        for point in polyline.to_array(tolerance=STATION_GEOMETRY_TOLERANCE)
+    )
     points = _trim_after_top_positive_y(points)
     prepared = Polyline3(points)
     if prepared.end[2] > prepared.start[2]:
@@ -267,7 +282,7 @@ def _prepare_station_line(polyline: Polyline3) -> Polyline3:
 def _top_discontinuity_index(points: tuple[Point3, ...]) -> int | None:
     discontinuities = Polyline3(points).discontinuities(
         min_angle_degrees=KEEL_DISCONTINUITY_ANGLE_DEGREES,
-        min_segment_length=TOLERANCE,
+        min_segment_length=STATION_GEOMETRY_TOLERANCE,
     )
     if not discontinuities:
         return None
@@ -279,7 +294,7 @@ def _top_discontinuity_index(points: tuple[Point3, ...]) -> int | None:
             ((index, dist(candidate, point)) for index, candidate in enumerate(points)),
             key=lambda item: item[1],
         )
-        if distance <= TOLERANCE:
+        if distance <= STATION_GEOMETRY_TOLERANCE:
             discontinuity_indices.append(index)
 
     if not discontinuity_indices:
@@ -296,7 +311,9 @@ def _trim_after_top_positive_y(points: tuple[Point3, ...]) -> tuple[Point3, ...]
 
 def _top_positive_y_index(points: tuple[Point3, ...]) -> int | None:
     positive_y_points = (
-        (index, point) for index, point in enumerate(points) if point[1] > TOLERANCE
+        (index, point)
+        for index, point in enumerate(points)
+        if point[1] > STATION_GEOMETRY_TOLERANCE
     )
     top = max(positive_y_points, key=lambda item: item[1][2], default=None)
     if top is None:
@@ -307,7 +324,7 @@ def _top_positive_y_index(points: tuple[Point3, ...]) -> int | None:
 def _clean_point(point: object) -> Point3:
     coordinates = cast(Sequence[float], point)
     x, y, z = (float(coordinates[0]), float(coordinates[1]), float(coordinates[2]))
-    if abs(y) <= TOLERANCE:
+    if abs(y) <= STATION_GEOMETRY_TOLERANCE:
         y = 0.0
     return (x, y, z)
 
@@ -316,7 +333,7 @@ if __name__ == "__main__":
     from wireframe import STATION_POLYLINES
 
     processed_station_polylines = prepare_station_lines(
-        process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
+        process_station_lines(STATION_POLYLINES, DXF_SNAP_TOLERANCE)
     )
     view_original_station_lines(STATION_POLYLINES)
     view_processed_station_lines(

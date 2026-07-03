@@ -5,6 +5,16 @@ lofts the station groups into half-hull patches, projects boundary chains to the
 centreline, mirrors the half hull, caps and closes it, triangulates every face,
 then snaps close nodes in the final triangle mesh.
 
+The pipeline uses four tolerance-style settings with separate roles:
+
+- `STATION_GEOMETRY_TOLERANCE = 1e-3` is the fine DXF station cleanup tolerance.
+- `DXF_SNAP_TOLERANCE = 1000.0` joins source DXF station fragments during
+  station-line cleanup.
+- `MESH_GEOMETRY_TOLERANCE = 1e-3` is the fine mesh welding and closure
+  tolerance.
+- `MESH_SNAP_TOLERANCE = 500` merges close final mesh vertices after
+  triangulation.
+
 ## Pipeline steps
 
 ### 1. Read DXF - `wireframe.py`
@@ -14,25 +24,26 @@ then snaps close nodes in the final triangle mesh.
 `classify_linesplan_curves(...)`, and returns the station sections as immutable
 `Polyline3` values.
 
-Produces `STATION_POLYLINES`.
+Produces `LinesplanMeshBuild.station_polylines`.
 
 ### 2. Process station polylines - `process_polylines.py`
 
 - Snaps points close to the centreline onto `y = 0`.
 - Drops fragments shorter than `MIN_STATION_FRAGMENT_LENGTH`.
-- Deduplicates neighbouring points at `TOLERANCE = 1e-3`.
+- Deduplicates neighbouring points at `STATION_GEOMETRY_TOLERANCE = 1e-3`.
 - Joins station fragments when endpoints, reversed endpoints, or
-  endpoint-to-segment snap points match within `SNAP_TOLERANCE = 1000.0`.
+  endpoint-to-segment snap points match within `DXF_SNAP_TOLERANCE = 1000.0`.
 - Filters duplicate rows and sorts the connected station rows by median `x`.
 - Trims each station after its highest positive-`y` top point and orients it so
   the higher-`z` end is first.
 - Splits rows at the highest discontinuity above
   `KEEL_DISCONTINUITY_ANGLE_DEGREES = 60.0`.
 
-The split result is `POLYLINE_GROUPS = (YELLOW_TOP_POLYLINES, RED_TOP_POLYLINES)`.
-Rows without a qualifying discontinuity stay in the yellow group. Rows with a
-qualifying discontinuity contribute a yellow section up to the break and a red
-section from the break to the station end.
+The split result is `LinesplanMeshBuild.polyline_groups`, with yellow top
+polylines first and red top polylines second. Rows without a qualifying
+discontinuity stay in the yellow group. Rows with a qualifying discontinuity
+contribute a yellow section up to the break and a red section from the break to
+the station end.
 
 ### 3. Loft station groups - `loft_polylines.py`
 
@@ -48,7 +59,7 @@ For each group, `get_node_array(...)`:
 `mesh_node_array(...)` then stitches neighbouring rows into quad-strip
 `Mesh3` patches and keeps row and column display edges.
 
-Produces `LOFTED_MESH_PATCHES`.
+Produces `LinesplanMeshBuild.lofted_mesh_patches`.
 
 ### 4. Mark boundary nodes - `main.py`
 
@@ -58,7 +69,7 @@ Each `LoftedMeshPatch` is annotated with boundary nodes:
 - Green nodes are the final sampled node in rows whose source polyline end
   matches a prepared station end point.
 
-Produces `YELLOW_MESH_NODES` and `GREEN_MESH_NODES`.
+Stores yellow and green boundary nodes on each `LoftedMeshPatch`.
 
 ### 5. Project boundary chains to the centreline - `main.py`
 
@@ -78,17 +89,17 @@ walks both columns by relative height and emits quads when the next step lines
 up, otherwise triangles. The result is a mixed triangle/quad extension strip
 instead of a forced rectangular grid.
 
-Extension meshes are welded at `TOLERANCE` and merged into the first half-hull
-patch.
+Extension meshes are welded at `MESH_GEOMETRY_TOLERANCE` and merged into the
+first half-hull patch.
 
-Produces `BOUNDARY_EXTENSION_MESHES` and `HALF_MESHES`.
+Produces boundary extension meshes that are merged into the half-hull meshes.
 
 ### 6. Mirror the half hull - `main.py`
 
 Every half-hull mesh is mirrored across the centreline plane `y = 0` with
 `Mesh3.mirror(...)`.
 
-Produces `MESH_PATCHES = (*HALF_MESHES, *MIRRORED_MESHES)`.
+Produces `LinesplanMeshBuild.mesh_patches`.
 
 ### 7. Cap the keel ends - `main.py`
 
@@ -102,19 +113,22 @@ Produces `KEEL_CAP_MESH`.
 `combine_meshes(...)` merges all hull patches and the keel cap, then
 `weld_mesh(...)`:
 
-- Snaps vertices within `TOLERANCE` of `y = 0` exactly onto the centreline.
+- Snaps vertices within `MESH_GEOMETRY_TOLERANCE` of `y = 0` exactly onto the
+  centreline.
 - Deduplicates vertices by tolerance-grid key.
 - Removes degenerate faces and collapsed display edges.
 
-`try_close_mesh(...)` then calls `mesh.close_mesh(tolerance=TOLERANCE)` to fill
-remaining boundary loops. If closure fails, the pipeline keeps the combined mesh
-for later steps.
+`try_close_mesh(...)` then calls
+`mesh.close_mesh(tolerance=MESH_GEOMETRY_TOLERANCE)` to fill remaining boundary
+loops. If closure fails, the pipeline keeps the combined mesh for later steps.
 
-Produces `COMBINED_MESH`, `CLOSED_MESH`, and `FINAL_MESH`.
+Produces `LinesplanMeshBuild.combined_mesh` and, when closure succeeds,
+`LinesplanMeshBuild.closed_mesh`.
 
 ### 9. Triangulate faces - `pizza_triangulate.py`
 
-`pizza_triangulate_mesh(...)` converts `FINAL_MESH` to an all-triangle mesh:
+`pizza_triangulate_mesh(...)` converts the closed mesh, or the combined mesh if
+closure failed, to an all-triangle mesh:
 
 - Triangles pass through unchanged.
 - Quads split along the shorter diagonal.
@@ -127,30 +141,32 @@ Produces `COMBINED_MESH`, `CLOSED_MESH`, and `FINAL_MESH`.
 Display edges are recomputed from the new triangle faces, so diagonal splits and
 inserted ring/centroid edges are visible.
 
-Produces `TRIANGULATED_MESH`.
+Produces `LinesplanMeshBuild.triangulated_mesh`.
 
 ### 10. Snap close final nodes - `snap_close_nodes.py`
 
-`snap_close_nodes(TRIANGULATED_MESH, tolerance=SNAP_CLOSE_TOLERANCE)` runs after
-triangulation with `SNAP_CLOSE_TOLERANCE = 500`.
+`snap_close_nodes(build.triangulated_mesh, tolerance=MESH_SNAP_TOLERANCE)` runs
+after triangulation with `MESH_SNAP_TOLERANCE = 500`.
 
 The snapper uses a tolerance-sized spatial grid to find the nearest existing
 vertex within tolerance, remaps close vertices onto that shared vertex, removes
 collapsed faces, drops duplicate faces, and cleans collapsed display edges.
 
-Produces `SNAPPED_MESH`, the mesh shown by `main.py` and used by `--final-only`.
+Produces `LinesplanMeshBuild.snapped_mesh`, the mesh shown by `main.py` when
+`main(..., final_only=True)` is used.
 
 ## Run and check
 
 Run from the repository root:
 
 ```bash
-PYTHONPATH=src .venv/bin/python examples/linesplan/main.py --no-view
+PYTHONPATH=src:examples/linesplan .venv/bin/python -c "from main import DXF_FILE, main; main(DXF_FILE, show_view=False)"
 ```
 
 Current summary output:
 
 ```text
+input: /home/eastill/projects/cady/examples/inputs/linesplan_9m.dxf
 polyline groups: yellow=65, red=4
 mesh patches: 4
 combined mesh: 2918 vertices, 2962 faces
@@ -159,8 +175,8 @@ triangulated mesh: 2980 vertices, 5956 faces
 snapped mesh: 2960 vertices, 5916 faces, 8874 edges
 ```
 
-Use `--patches` to view only the open and mirrored patches, or `--final-only` to
-view only the snapped triangulated mesh.
+Call `main(DXF_FILE, patches=True)` to view only the open and mirrored patches,
+or `main(DXF_FILE, final_only=True)` to view only the snapped triangulated mesh.
 
 ## File map
 

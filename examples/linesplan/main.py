@@ -11,7 +11,7 @@ from typing import TypeAlias
 from loft_polylines import get_node_array, mesh_node_array
 from pizza_triangulate import pizza_triangulate_mesh
 from process_polylines import (
-    SNAP_TOLERANCE,
+    DXF_SNAP_TOLERANCE,
     prepare_station_lines,
     process_station_lines,
     split_station_lines,
@@ -22,7 +22,7 @@ from process_polylines import (
     view_processed_station_lines,
 )
 from snap_close_nodes import snap_close_nodes
-from wireframe import LINESPLAN_DXF, station_polylines
+from wireframe import station_polylines
 
 from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene
 
@@ -32,8 +32,12 @@ Edge: TypeAlias = tuple[int, int]
 PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
-TOLERANCE = 1e-3
-SNAP_CLOSE_TOLERANCE = 500
+DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
+#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
+#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
+
+MESH_GEOMETRY_TOLERANCE = 1e-3
+MESH_SNAP_TOLERANCE = 500
 NODE_SPACING = 2000.0
 SHORT_PROJECTION_RATIO = 0.3
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
@@ -203,7 +207,7 @@ def boundary_extension_mesh(
 
     return weld_mesh(
         Mesh3(tuple(vertices), tuple(faces), tuple(sorted(edges))),
-        tolerance=TOLERANCE,
+        tolerance=MESH_GEOMETRY_TOLERANCE,
     )
 
 
@@ -341,11 +345,11 @@ def mirror_meshes(meshes: Iterable[Mesh3]) -> tuple[Mesh3, ...]:
 
 
 def combine_meshes(meshes: Iterable[Mesh3]) -> Mesh3:
-    return weld_mesh(Mesh3.merged(meshes), tolerance=TOLERANCE)
+    return weld_mesh(Mesh3.merged(meshes), tolerance=MESH_GEOMETRY_TOLERANCE)
 
 
 def close_mesh(mesh: Mesh3) -> Mesh3:
-    return mesh.close_mesh(tolerance=TOLERANCE)
+    return mesh.close_mesh(tolerance=MESH_GEOMETRY_TOLERANCE)
 
 
 def try_close_mesh(mesh: Mesh3) -> tuple[Mesh3 | None, Exception | None]:
@@ -396,7 +400,7 @@ def weld_mesh(mesh: Mesh3, *, tolerance: float) -> Mesh3:
 
 
 def _matches_any_point(point: Point3, targets: Iterable[Point3]) -> bool:
-    return any(dist(point, target) <= TOLERANCE for target in targets)
+    return any(dist(point, target) <= MESH_GEOMETRY_TOLERANCE for target in targets)
 
 
 def _edge_key(start: int, end: int) -> Edge:
@@ -451,10 +455,10 @@ def build_split_polyline_scene(polyline_groups: tuple[PolylineGroup, PolylineGro
     return scene
 
 
-def build_linesplan_mesh(path: str | Path = LINESPLAN_DXF) -> LinesplanMeshBuild:
+def build_linesplan_mesh(path: str | Path = DXF_FILE) -> LinesplanMeshBuild:
     input_path = Path(path)
     station_lines = station_polylines(input_path)
-    processed_station_polylines = process_station_lines(station_lines, SNAP_TOLERANCE)
+    processed_station_polylines = process_station_lines(station_lines, DXF_SNAP_TOLERANCE)
     prepared_station_polylines = prepare_station_lines(processed_station_polylines)
     polyline_groups = split_station_lines(prepared_station_polylines)
     station_green_points = station_end_points(prepared_station_polylines)
@@ -478,7 +482,7 @@ def build_linesplan_mesh(path: str | Path = LINESPLAN_DXF) -> LinesplanMeshBuild
     closed_mesh, close_error = try_close_mesh(combined_mesh)
     final_mesh = closed_mesh if closed_mesh is not None else combined_mesh
     triangulated_mesh = pizza_triangulate_mesh(final_mesh)
-    snapped_mesh = snap_close_nodes(triangulated_mesh, tolerance=SNAP_CLOSE_TOLERANCE)
+    snapped_mesh = snap_close_nodes(triangulated_mesh, tolerance=MESH_SNAP_TOLERANCE)
     return LinesplanMeshBuild(
         input_path=input_path,
         station_polylines=station_lines,
@@ -507,7 +511,7 @@ def view_intermediate_objects(build: LinesplanMeshBuild) -> None:
 
 
 def main(
-    dxf_file_path: str | Path = LINESPLAN_DXF,
+    dxf_file_path: str | Path = DXF_FILE,
     *,
     show_view: bool = True,
     patches: bool = False,
