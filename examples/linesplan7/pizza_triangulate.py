@@ -1,9 +1,10 @@
 """Pizza triangulation: convert non-triangular mesh faces to triangles.
 
 Quad faces (4 vertices) are split diagonally into 2 triangles.
-N-gon faces (5+ vertices) use a reduced inner polygon and a pizza/pie fill
-through its centre. The inner polygon has fewer edges than the outer polygon
-so boundary detail does not all collapse into one skinny fan.
+N-gon faces (5+ vertices) try a pizza/pie centre fill first. If that misses
+the minimum angle target, they use up to three reduced inner polygon rings.
+If the ring strategy still misses the target, the polygon is split across the
+best internal chord and each child polygon is triangulated the same way.
 """
 
 from __future__ import annotations
@@ -22,14 +23,20 @@ Face: TypeAlias = tuple[int, ...]
 Triangle: TypeAlias = list[int]
 
 PIZZA_MIN_ANGLE_DEGREES = 15.0
-INNER_POLYGON_SCALE_CANDIDATES = (0.18, 0.24, 0.3, 0.36, 0.42, 0.5)
+PIZZA_MAX_INNER_RINGS = 3
+PIZZA_MAX_SPLIT_DEPTH = 8
+INNER_RING_START_SCALE = 0.12
+INNER_RING_SCALE_STEP = 0.04
+INNER_RING_MAX_SCALE = 0.58
+MIN_SPLIT_AREA_RATIO = 0.08
 
 
 def pizza_triangulate_mesh(mesh: Mesh3) -> Mesh3:
     """Return a new Mesh3 with all faces triangulated using the pizza strategy.
 
     Quad faces are split along their shorter diagonal.
-    N-gon faces get a reduced inner polygon and a centre pizza fill.
+    N-gon faces get up to three reduced inner polygon rings and a centre fill.
+    If that still misses the angle target, the face is split recursively.
     Existing triangle faces pass through unchanged.
     Display edges are recomputed from the triangulated faces so every
     triangle edge is visible.
@@ -59,7 +66,7 @@ def pizza_triangulate(
     Returns
     -------
     new_vertices : np.ndarray of shape (n + added, 3)
-        Original vertices plus centroid vertices inserted for n-gons.
+        Original vertices plus inserted ring and centroid vertices.
     new_faces : np.ndarray of shape (t, 3)
         All-triangle face index array.
     """
@@ -87,7 +94,7 @@ def pizza_triangulate(
             new_face_list.extend(_split_quad(V, ids))
 
         else:
-            new_face_list.extend(_fan_from_reduced_inner_polygon(V, ids, new_vertices))
+            new_face_list.extend(_triangulate_ngon(V, ids, new_vertices))
 
     if not new_face_list:
         return (
@@ -143,77 +150,165 @@ def _face_edges(faces: np.ndarray) -> set[tuple[int, int]]:
     return edges
 
 
-def _fan_from_reduced_inner_polygon(
-    V: np.ndarray,
+def _triangulate_ngon(
+    _V: np.ndarray,
+    ids: list[int],
+    new_vertices: list[list[float]],
+    split_depth: int = 0,
+) -> list[Triangle]:
+    """Use centre fill, then rings, then split if the angle target still fails."""
+    trial_vertices = [list(vertex) for vertex in new_vertices]
+    final_faces = _fan_ids_to_centroid(ids, trial_vertices)
+    final_angle = _min_triangle_angle(
+        np.asarray(trial_vertices, dtype=np.float64),
+        final_faces,
+    )
+    if final_angle + 1e-9 >= PIZZA_MIN_ANGLE_DEGREES:
+        new_vertices[:] = trial_vertices
+        return final_faces
+
+    if len(ids) <= 4:
+        return _fan_ids_to_centroid(ids, new_vertices)
+
+    ring_vertices = [list(vertex) for vertex in new_vertices]
+    ring_faces = _try_inner_rings(ids, ring_vertices)
+    ring_angle = _min_triangle_angle(np.asarray(ring_vertices, dtype=np.float64), ring_faces)
+    if ring_angle + 1e-9 >= PIZZA_MIN_ANGLE_DEGREES:
+        new_vertices[:] = ring_vertices
+        return ring_faces
+
+    if split_depth < PIZZA_MAX_SPLIT_DEPTH:
+        split = _best_chord_split(np.asarray(new_vertices, dtype=np.float64), ids)
+        if split is not None:
+            first, second = _split_polygon_with_midpoint(ids, *split, new_vertices)
+            return [
+                *(_triangulate_child_polygon(first, new_vertices, split_depth + 1)),
+                *(_triangulate_child_polygon(second, new_vertices, split_depth + 1)),
+            ]
+
+    new_vertices[:] = ring_vertices
+    return ring_faces
+
+
+def _triangulate_child_polygon(
+    ids: list[int],
+    new_vertices: list[list[float]],
+    split_depth: int,
+) -> list[Triangle]:
+    if len(ids) < 3:
+        return []
+    if len(ids) == 3:
+        return [ids]
+    if len(ids) == 4:
+        return _split_quad(np.asarray(new_vertices, dtype=np.float64), ids)
+    return _triangulate_ngon(
+        np.asarray(new_vertices, dtype=np.float64),
+        ids,
+        new_vertices,
+        split_depth,
+    )
+
+
+def _try_inner_rings(
     ids: list[int],
     new_vertices: list[list[float]],
 ) -> list[Triangle]:
-    """Add a reduced inner polygon and pizza-fill its centre."""
-    pts = V[np.asarray(ids, dtype=np.int64)]
-    centre = np.mean(pts, axis=0)
-    candidates = _inner_polygon_candidates(V, ids, centre)
+    """Add up to three rings and return the best full triangulation found."""
+    best_vertices = [list(vertex) for vertex in new_vertices]
+    best_faces = _fan_ids_to_centroid(ids, best_vertices)
+    best_angle = _min_triangle_angle(np.asarray(best_vertices, dtype=np.float64), best_faces)
 
-    best_faces: list[Triangle] | None = None
-    best_vertices: list[list[float]] = []
-    best_angle = -1.0
+    trial_vertices = [list(vertex) for vertex in new_vertices]
+    current_ids = list(ids)
+    ring_faces: list[Triangle] = []
 
-    for inner_points in candidates:
-        trial_vertices = [list(vertex) for vertex in new_vertices]
-        faces = _faces_from_inner_polygon(ids, inner_points, centre, trial_vertices)
-        angle = _min_triangle_angle(np.asarray(trial_vertices, dtype=np.float64), faces)
-        if angle > best_angle:
-            best_angle = angle
-            best_faces = faces
-            best_vertices = trial_vertices
-        if angle + 1e-9 >= PIZZA_MIN_ANGLE_DEGREES:
+    for _ in range(PIZZA_MAX_INNER_RINGS):
+        candidate = _next_inner_ring(np.asarray(trial_vertices, dtype=np.float64), current_ids)
+        if candidate is None:
             break
 
-    if best_faces is None:
-        return _fan_from_centroid(V, ids, new_vertices)
+        inner_points, faces = candidate
+        inner_start = len(trial_vertices)
+        for point in inner_points:
+            trial_vertices.append(point.tolist())
+        current_ids = list(range(inner_start, inner_start + len(inner_points)))
+        ring_faces.extend(faces)
+
+        final_vertices = [list(vertex) for vertex in trial_vertices]
+        final_faces = [list(face) for face in ring_faces]
+        final_faces.extend(_fan_ids_to_centroid(current_ids, final_vertices))
+        final_angle = _min_triangle_angle(
+            np.asarray(final_vertices, dtype=np.float64),
+            final_faces,
+        )
+
+        if final_angle > best_angle:
+            best_angle = final_angle
+            best_vertices = final_vertices
+            best_faces = final_faces
+        if final_angle + 1e-9 >= PIZZA_MIN_ANGLE_DEGREES:
+            new_vertices[:] = final_vertices
+            return final_faces
 
     new_vertices[:] = best_vertices
     return best_faces
 
 
-def _inner_polygon_candidates(
+def _next_inner_ring(
     V: np.ndarray,
     ids: list[int],
-    centre: np.ndarray,
+) -> tuple[tuple[np.ndarray, ...], list[Triangle]] | None:
+    inner_count = _inner_polygon_vertex_count(len(ids))
+    if inner_count >= len(ids):
+        return None
+
+    best_points: tuple[np.ndarray, ...] | None = None
+    best_faces: list[Triangle] = []
+    best_angle = -1.0
+
+    for inner_points in _scaled_inner_rings(V, ids, inner_count):
+        trial_vertices = [list(vertex) for vertex in V.tolist()]
+        faces = _band_faces_to_inner_polygon(ids, inner_points, trial_vertices)
+        angle = _min_triangle_angle(np.asarray(trial_vertices, dtype=np.float64), faces)
+        if angle > best_angle:
+            best_angle = angle
+            best_points = inner_points
+            best_faces = faces
+        if angle + 1e-9 >= PIZZA_MIN_ANGLE_DEGREES:
+            return inner_points, faces
+
+    if best_points is None:
+        return None
+    return best_points, best_faces
+
+
+def _scaled_inner_rings(
+    V: np.ndarray,
+    ids: list[int],
+    inner_count: int,
 ) -> tuple[tuple[np.ndarray, ...], ...]:
-    n = len(ids)
-    preferred = _inner_polygon_vertex_count(n)
-    counts = tuple(
-        dict.fromkeys(
-            (
-                preferred,
-                max(3, preferred - 1),
-                min(n - 1, preferred + 1),
-                max(3, n // 3),
-                max(3, n // 2),
-            )
-        )
+    centre = np.mean(V[np.asarray(ids, dtype=np.int64)], axis=0)
+    groups = _outer_index_groups(len(ids), inner_count)
+    directions = tuple(_group_direction(V, ids, group, centre) for group in groups)
+    boundary_distances = tuple(
+        _ray_boundary_distance(V, ids, centre, direction) for direction in directions
     )
-    candidates: list[tuple[np.ndarray, ...]] = []
-    for count in counts:
-        if count >= n:
-            continue
-        groups = _outer_index_groups(n, count)
-        directions = tuple(_group_direction(V, ids, group, centre) for group in groups)
-        boundary_distances = tuple(
-            _ray_boundary_distance(V, ids, centre, direction) for direction in directions
-        )
-        for scale in INNER_POLYGON_SCALE_CANDIDATES:
-            candidates.append(
-                tuple(
-                    centre + direction * boundary_distance * scale
-                    for direction, boundary_distance in zip(
-                        directions,
-                        boundary_distances,
-                        strict=True,
-                    )
+
+    rings: list[tuple[np.ndarray, ...]] = []
+    scale = INNER_RING_START_SCALE
+    while scale <= INNER_RING_MAX_SCALE + 1e-12:
+        rings.append(
+            tuple(
+                centre + direction * boundary_distance * scale
+                for direction, boundary_distance in zip(
+                    directions,
+                    boundary_distances,
+                    strict=True,
                 )
             )
-    return tuple(candidates)
+        )
+        scale += INNER_RING_SCALE_STEP
+    return tuple(rings)
 
 
 def _inner_polygon_vertex_count(outer_count: int) -> int:
@@ -284,17 +379,14 @@ def _ray_segment_distance(
     return distance
 
 
-def _faces_from_inner_polygon(
+def _band_faces_to_inner_polygon(
     ids: list[int],
     inner_points: tuple[np.ndarray, ...],
-    centre: np.ndarray,
     new_vertices: list[list[float]],
 ) -> list[Triangle]:
     inner_start = len(new_vertices)
     for point in inner_points:
         new_vertices.append(point.tolist())
-    centre_index = len(new_vertices)
-    new_vertices.append(centre.tolist())
 
     outer_count = len(ids)
     inner_count = len(inner_points)
@@ -317,9 +409,204 @@ def _faces_from_inner_polygon(
         else:
             faces.extend(_split_quad(np.asarray(new_vertices, dtype=np.float64), [a, b, c, d]))
 
-    for index in range(inner_count):
-        faces.append([inner_start + index, inner_start + (index + 1) % inner_count, centre_index])
     return faces
+
+
+def _best_chord_split(V: np.ndarray, ids: list[int]) -> tuple[int, int] | None:
+    if len(ids) < 6:
+        return None
+
+    points = _project_polygon_points(V, ids)
+    best_split: tuple[int, int] | None = None
+    best_score = -1.0
+
+    for start in range(len(ids)):
+        for end in range(start + 2, len(ids)):
+            if start == 0 and end == len(ids) - 1:
+                continue
+
+            if not _is_valid_chord(points, start, end):
+                continue
+
+            first = ids[start : end + 1]
+            second = [*ids[end:], *ids[: start + 1]]
+            score = _split_compactness_score(V, first, second)
+            if score is None:
+                continue
+            if score > best_score:
+                best_score = score
+                best_split = (start, end)
+
+    return best_split
+
+
+def _split_polygon_with_midpoint(
+    ids: list[int],
+    start: int,
+    end: int,
+    new_vertices: list[list[float]],
+) -> tuple[list[int], list[int]]:
+    first_id = ids[start]
+    second_id = ids[end]
+    midpoint = [
+        (new_vertices[first_id][axis] + new_vertices[second_id][axis]) * 0.5
+        for axis in range(3)
+    ]
+    midpoint_id = len(new_vertices)
+    new_vertices.append(midpoint)
+
+    return (
+        [*ids[start : end + 1], midpoint_id],
+        [*ids[end:], *ids[: start + 1], midpoint_id],
+    )
+
+
+def _project_polygon_points(V: np.ndarray, ids: list[int]) -> tuple[tuple[float, float], ...]:
+    pts = V[np.asarray(ids, dtype=np.int64)]
+    normal = np.zeros(3, dtype=np.float64)
+    for index, point in enumerate(pts):
+        next_point = pts[(index + 1) % len(pts)]
+        normal[0] += (point[1] - next_point[1]) * (point[2] + next_point[2])
+        normal[1] += (point[2] - next_point[2]) * (point[0] + next_point[0])
+        normal[2] += (point[0] - next_point[0]) * (point[1] + next_point[1])
+
+    drop_axis = int(np.argmax(np.abs(normal)))
+    axes = tuple(axis for axis in range(3) if axis != drop_axis)
+    return tuple((float(point[axes[0]]), float(point[axes[1]])) for point in pts)
+
+
+def _is_valid_chord(
+    points: tuple[tuple[float, float], ...],
+    start: int,
+    end: int,
+) -> bool:
+    a = points[start]
+    b = points[end]
+    for index in range(len(points)):
+        next_index = (index + 1) % len(points)
+        if index in (start, end) or next_index in (start, end):
+            continue
+        if _segments_intersect(a, b, points[index], points[next_index]):
+            return False
+
+    midpoint = ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+    return _point_in_polygon(midpoint, points)
+
+
+def _segments_intersect(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+    d: tuple[float, float],
+) -> bool:
+    o1 = _orientation(a, b, c)
+    o2 = _orientation(a, b, d)
+    o3 = _orientation(c, d, a)
+    o4 = _orientation(c, d, b)
+
+    if o1 * o2 < 0.0 and o3 * o4 < 0.0:
+        return True
+    if abs(o1) <= 1e-9 and _point_on_segment(c, a, b):
+        return True
+    if abs(o2) <= 1e-9 and _point_on_segment(d, a, b):
+        return True
+    if abs(o3) <= 1e-9 and _point_on_segment(a, c, d):
+        return True
+    return abs(o4) <= 1e-9 and _point_on_segment(b, c, d)
+
+
+def _orientation(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _point_on_segment(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> bool:
+    return (
+        min(start[0], end[0]) - 1e-9 <= point[0] <= max(start[0], end[0]) + 1e-9
+        and min(start[1], end[1]) - 1e-9 <= point[1] <= max(start[1], end[1]) + 1e-9
+    )
+
+
+def _point_in_polygon(
+    point: tuple[float, float],
+    polygon: tuple[tuple[float, float], ...],
+) -> bool:
+    inside = False
+    x, y = point
+    previous = polygon[-1]
+    for current in polygon:
+        if _point_on_segment(point, previous, current):
+            return True
+        crosses = (current[1] > y) != (previous[1] > y)
+        if crosses:
+            x_at_y = (previous[0] - current[0]) * (y - current[1]) / (
+                previous[1] - current[1]
+            ) + current[0]
+            if x < x_at_y:
+                inside = not inside
+        previous = current
+    return inside
+
+
+def _split_compactness_score(
+    V: np.ndarray,
+    first: list[int],
+    second: list[int],
+) -> float | None:
+    first_area = _polygon_area(V, first)
+    second_area = _polygon_area(V, second)
+    larger_area = max(first_area, second_area)
+    if larger_area <= 1e-12:
+        return None
+    if min(first_area, second_area) / larger_area < MIN_SPLIT_AREA_RATIO:
+        return None
+
+    first_quality = _polygon_compactness(V, first)
+    second_quality = _polygon_compactness(V, second)
+    worst_quality = min(first_quality, second_quality)
+    average_quality = (first_quality + second_quality) * 0.5
+    return 0.8 * worst_quality + 0.2 * average_quality
+
+
+def _polygon_compactness(V: np.ndarray, ids: list[int]) -> float:
+    area = _polygon_area(V, ids)
+    perimeter = _polygon_perimeter(V, ids)
+    if perimeter <= 1e-12:
+        return 0.0
+    return 4.0 * pi * area / (perimeter * perimeter)
+
+
+def _polygon_area(V: np.ndarray, ids: list[int]) -> float:
+    pts = V[np.asarray(ids, dtype=np.int64)]
+    area_vector = np.zeros(3, dtype=np.float64)
+    for index, point in enumerate(pts):
+        area_vector += np.cross(point, pts[(index + 1) % len(pts)])
+    return 0.5 * float(np.linalg.norm(area_vector))
+
+
+def _polygon_perimeter(V: np.ndarray, ids: list[int]) -> float:
+    return sum(
+        float(np.linalg.norm(V[ids[index]] - V[ids[(index + 1) % len(ids)]]))
+        for index in range(len(ids))
+    )
+
+
+def _fan_ids_to_centroid(
+    ids: list[int],
+    new_vertices: list[list[float]],
+) -> list[Triangle]:
+    if len(ids) < 3:
+        return []
+    if len(ids) == 3:
+        return [list(ids)]
+    return _fan_from_centroid(np.asarray(new_vertices, dtype=np.float64), ids, new_vertices)
 
 
 def _fan_from_centroid(

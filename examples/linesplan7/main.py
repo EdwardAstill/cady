@@ -21,6 +21,7 @@ from process_polylines import (
     view_original_station_lines,
     view_processed_station_lines,
 )
+from snap_close_nodes import snap_close_nodes
 from wireframe import STATION_POLYLINES
 
 from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene
@@ -32,6 +33,7 @@ PolylineGroup: TypeAlias = tuple[Polyline3, ...]
 NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
 TOLERANCE = 1e-3
+SNAP_CLOSE_TOLERANCE = 500
 NODE_SPACING = 2000.0
 SHORT_PROJECTION_RATIO = 0.3
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
@@ -476,6 +478,7 @@ COMBINED_MESH = combine_meshes((*MESH_PATCHES, KEEL_CAP_MESH))
 CLOSED_MESH, CLOSE_ERROR = try_close_mesh(COMBINED_MESH)
 FINAL_MESH = CLOSED_MESH if CLOSED_MESH is not None else COMBINED_MESH
 TRIANGULATED_MESH = pizza_triangulate_mesh(FINAL_MESH)
+SNAPPED_MESH = snap_close_nodes(TRIANGULATED_MESH, tolerance=SNAP_CLOSE_TOLERANCE)
 
 
 def main() -> None:
@@ -512,6 +515,10 @@ def main() -> None:
         f"triangulated mesh: {len(TRIANGULATED_MESH.vertices)} vertices, "
         f"{len(TRIANGULATED_MESH.faces)} faces"
     )
+    print(
+        f"snapped mesh: {len(SNAPPED_MESH.vertices)} vertices, "
+        f"{len(SNAPPED_MESH.faces)} faces, {len(SNAPPED_MESH.edges)} edges"
+    )
 
     if args.no_view:
         return
@@ -519,10 +526,10 @@ def main() -> None:
     if args.patches:
         build_patch_scene(MESH_PATCHES).view(title="linesplan mesh patches")
     elif args.final_only:
-        TRIANGULATED_MESH.view(title="triangulated linesplan mesh")
+        SNAPPED_MESH.view(title="snapped triangulated linesplan mesh")
     else:
         view_intermediate_objects()
-        TRIANGULATED_MESH.view(title="triangulated linesplan mesh")
+        SNAPPED_MESH.view(title="snapped triangulated linesplan mesh")
 
 
 if __name__ == "__main__":

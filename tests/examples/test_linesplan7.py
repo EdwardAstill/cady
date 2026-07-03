@@ -7,6 +7,8 @@ from types import ModuleType
 
 import pytest
 
+from cady import Mesh3
+
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_DIR = ROOT / "examples" / "linesplan7"
 
@@ -91,12 +93,70 @@ def test_pizza_triangulate_mesh_uses_reduced_inner_polygon_without_parameters() 
     triangulated = module.pizza_triangulate_mesh(polygon)
     outer_count = len(polygon.vertices)
     added_count = len(triangulated.vertices) - outer_count
-    inner_count = added_count - 1
+    first_inner_ring_count = module._inner_polygon_vertex_count(outer_count)
 
     assert all(len(face) == 3 for face in triangulated.faces)
-    assert 3 <= inner_count < outer_count
+    assert added_count >= first_inner_ring_count + 1
     assert len(triangulated.faces) > outer_count
     assert module._mesh_min_angle_degrees(triangulated) >= module.PIZZA_MIN_ANGLE_DEGREES
+
+
+def test_pizza_triangulate_skips_ring_when_center_fill_meets_min_angle() -> None:
+    module = _load_linesplan7_pizza_triangulate()
+
+    polygon = module.polygon_mesh_from_points(
+        (
+            (1.0, 0.0, 0.0),
+            (0.5, 0.8660254, 0.0),
+            (-0.5, 0.8660254, 0.0),
+            (-1.0, 0.0, 0.0),
+            (-0.5, -0.8660254, 0.0),
+            (0.5, -0.8660254, 0.0),
+        )
+    )
+
+    triangulated = module.pizza_triangulate_mesh(polygon)
+
+    assert len(triangulated.vertices) == len(polygon.vertices) + 1
+    assert len(triangulated.faces) == len(polygon.vertices)
+    assert module._mesh_min_angle_degrees(triangulated) >= module.PIZZA_MIN_ANGLE_DEGREES
+
+
+def test_pizza_triangulate_splits_polygon_after_ring_attempts_miss_angle() -> None:
+    module = _load_linesplan7_pizza_triangulate()
+
+    polygon = module.polygon_mesh_from_points(
+        (
+            (0.0, 0.0, 0.0),
+            (0.2, 0.5, 0.0),
+            (1.5, 1.0, 0.0),
+            (4.0, 1.2, 0.0),
+            (8.0, 1.2, 0.0),
+            (11.0, 1.0, 0.0),
+            (12.5, 0.5, 0.0),
+            (13.0, 0.0, 0.0),
+            (10.0, 0.0, 0.0),
+            (7.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+        )
+    )
+
+    triangulated = module.pizza_triangulate_mesh(polygon)
+    outer_count = len(polygon.vertices)
+    split = module._best_chord_split(
+        module.np.asarray(polygon.vertices, dtype=module.np.float64),
+        list(range(outer_count)),
+    )
+    assert split is not None
+    start, end = split
+    expected_midpoint = tuple(
+        (polygon.vertices[start][axis] + polygon.vertices[end][axis]) * 0.5
+        for axis in range(3)
+    )
+
+    assert all(len(face) == 3 for face in triangulated.faces)
+    assert triangulated.vertices[outer_count] == pytest.approx(expected_midpoint)
 
 
 def test_pizza_triangulate_examples_are_runnable() -> None:
@@ -113,6 +173,52 @@ def test_pizza_triangulate_examples_are_runnable() -> None:
     )
 
 
+def test_snap_close_nodes_merges_close_vertices_and_deduplicates_edges() -> None:
+    module = _load_linesplan7_snap_close_nodes()
+
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (0.0004, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 2, 3), (1, 2, 3)),
+        ((0, 2), (1, 2), (2, 1), (0, 3), (1, 3), (2, 3)),
+    )
+
+    snapped = module.snap_close_nodes(mesh, tolerance=1e-3)
+
+    assert snapped.vertices == (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    assert snapped.faces == ((0, 1, 2),)
+    assert snapped.edges == ((0, 1), (0, 2), (1, 2))
+
+
+def test_snap_close_nodes_keeps_vertices_outside_tolerance() -> None:
+    module = _load_linesplan7_snap_close_nodes()
+
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (0.0011, 0.0, 0.0), (1.0, 0.0, 0.0)),
+        (),
+        ((0, 1), (1, 2)),
+    )
+
+    snapped = module.snap_close_nodes(mesh, tolerance=1e-3)
+
+    assert snapped == mesh
+
+
+def test_snap_close_nodes_rejects_non_positive_tolerance() -> None:
+    module = _load_linesplan7_snap_close_nodes()
+
+    with pytest.raises(ValueError, match="tolerance"):
+        module.snap_close_nodes(Mesh3((), ()), tolerance=0.0)
+
+
 def _load_linesplan7_main() -> ModuleType:
     path = EXAMPLE_DIR / "main.py"
     return _load_module(path, "linesplan7_main_test")
@@ -121,6 +227,11 @@ def _load_linesplan7_main() -> ModuleType:
 def _load_linesplan7_pizza_triangulate() -> ModuleType:
     path = EXAMPLE_DIR / "pizza_triangulate.py"
     return _load_module(path, "linesplan7_pizza_triangulate_test")
+
+
+def _load_linesplan7_snap_close_nodes() -> ModuleType:
+    path = EXAMPLE_DIR / "snap_close_nodes.py"
+    return _load_module(path, "linesplan7_snap_close_nodes_test")
 
 
 def _load_module(path: Path, name: str) -> ModuleType:
