@@ -1,28 +1,29 @@
 # Linesplan mesh pipeline
 
-Reads the 9 m DXF linesplan, extracts station curves, cleans and splits them,
-lofts the station groups into half-hull patches, projects boundary chains to the
+Reads a DXF linesplan, extracts station curves, cleans and splits them, lofts
+the station groups into half-hull patches, projects boundary chains to the
 centreline, mirrors the half hull, caps and closes it, triangulates every face,
 then snaps close nodes in the final triangle mesh.
 
-The pipeline uses four tolerance-style settings with separate roles:
+The pipeline resolves four tolerance-style settings from the station-line
+`x` span. If a setting is left as `None`, it is scaled from the 9 m reference
+linesplan values:
 
 - `STATION_GEOMETRY_TOLERANCE = 1e-3` is the fine DXF station cleanup tolerance.
-- `DXF_SNAP_TOLERANCE = 1000.0` joins source DXF station fragments during
+- `DXF_SNAP_TOLERANCE` joins source DXF station fragments during
   station-line cleanup.
-- `MESH_GEOMETRY_TOLERANCE = 1e-3` is the fine mesh welding and closure
-  tolerance.
-- `MESH_SNAP_TOLERANCE = 500` merges close final mesh vertices after
+- `MESH_GEOMETRY_TOLERANCE` is the fine mesh welding and closure tolerance.
+- `MESH_SNAP_TOLERANCE` merges close final mesh vertices after
   triangulation.
+- `NODE_SPACING` controls loft and boundary projection sampling density.
 
 ## Pipeline steps
 
 ### 1. Read DXF - `wireframe.py`
 
-`station_polylines(...)` reads `examples/inputs/linesplan_9m.dxf` with
-`cady.files.dxf.read_curves(...)`, classifies the linesplan network with
-`classify_linesplan_curves(...)`, and returns the station sections as immutable
-`Polyline3` values.
+`station_polylines(...)` reads the selected DXF with `cady.files.dxf.read_curves(...)`,
+classifies the linesplan network with `classify_linesplan_curves(...)`, and returns
+the station sections as immutable `Polyline3` values.
 
 Produces `LinesplanMeshBuild.station_polylines`.
 
@@ -32,7 +33,7 @@ Produces `LinesplanMeshBuild.station_polylines`.
 - Drops fragments shorter than `MIN_STATION_FRAGMENT_LENGTH`.
 - Deduplicates neighbouring points at `STATION_GEOMETRY_TOLERANCE = 1e-3`.
 - Joins station fragments when endpoints, reversed endpoints, or
-  endpoint-to-segment snap points match within `DXF_SNAP_TOLERANCE = 1000.0`.
+  endpoint-to-segment snap points match within the resolved `DXF_SNAP_TOLERANCE`.
 - Filters duplicate rows and sorts the connected station rows by median `x`.
 - Trims each station after its highest positive-`y` top point and orients it so
   the higher-`z` end is first.
@@ -47,8 +48,7 @@ the station end.
 
 ### 3. Loft station groups - `loft_polylines.py`
 
-`main.py` calls `loft_polyline_groups(..., node_spacing=NODE_SPACING)` with
-`NODE_SPACING = 2000.0`.
+`main.py` calls `loft_polyline_groups(...)` with the resolved `NODE_SPACING`.
 
 For each group, `get_node_array(...)`:
 
@@ -145,8 +145,8 @@ Produces `LinesplanMeshBuild.triangulated_mesh`.
 
 ### 10. Snap close final nodes - `snap_close_nodes.py`
 
-`snap_close_nodes(build.triangulated_mesh, tolerance=MESH_SNAP_TOLERANCE)` runs
-after triangulation with `MESH_SNAP_TOLERANCE = 500`.
+`snap_close_nodes(build.triangulated_mesh, tolerance=...)` runs after
+triangulation with the resolved `MESH_SNAP_TOLERANCE`.
 
 The snapper uses a tolerance-sized spatial grid to find the nearest existing
 vertex within tolerance, remaps close vertices onto that shared vertex, removes
@@ -166,13 +166,13 @@ PYTHONPATH=src:examples/linesplan .venv/bin/python -c "from main import DXF_FILE
 Current summary output:
 
 ```text
-input: /home/eastill/projects/cady/examples/inputs/linesplan_9m.dxf
-polyline groups: yellow=65, red=4
-mesh patches: 4
-combined mesh: 2918 vertices, 2962 faces
-closed mesh: 2918 vertices, 2968 faces
-triangulated mesh: 2980 vertices, 5956 faces
-snapped mesh: 2960 vertices, 5916 faces, 8874 edges
+input: /home/eastill/projects/cady/examples/inputs/3d_lp.dxf
+polyline groups: yellow=23, red=0
+mesh patches: 2
+combined mesh: 1228 vertices, 1334 faces
+closed mesh: 1228 vertices, 1336 faces
+triangulated mesh: 1273 vertices, 2542 faces
+snapped mesh: 1263 vertices, 2521 faces, 3782 edges
 ```
 
 Call `main(DXF_FILE, patches=True)` to view only the open and mirrored patches,
