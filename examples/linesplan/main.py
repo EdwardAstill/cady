@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, dist
+from pathlib import Path
 from typing import TypeAlias
 
 from loft_polylines import get_node_array, mesh_node_array
@@ -22,7 +22,7 @@ from process_polylines import (
     view_processed_station_lines,
 )
 from snap_close_nodes import snap_close_nodes
-from wireframe import STATION_POLYLINES
+from wireframe import LINESPLAN_DXF, station_polylines
 
 from cady import DisplayStyle, Mesh3, PointCloud3, Polyline3, Scene
 
@@ -67,6 +67,21 @@ class BoundaryNode:
 class KeelBoundaryPair:
     red: Point3
     green: Point3
+
+
+@dataclass(frozen=True, slots=True)
+class LinesplanMeshBuild:
+    input_path: Path
+    station_polylines: tuple[Polyline3, ...]
+    prepared_station_polylines: tuple[Polyline3, ...]
+    polyline_groups: tuple[PolylineGroup, PolylineGroup]
+    lofted_mesh_patches: tuple[LoftedMeshPatch, ...]
+    mesh_patches: tuple[Mesh3, ...]
+    combined_mesh: Mesh3
+    closed_mesh: Mesh3 | None
+    close_error: Exception | None
+    triangulated_mesh: Mesh3
+    snapped_mesh: Mesh3
 
 
 def loft_polyline_groups(
@@ -436,100 +451,105 @@ def build_split_polyline_scene(polyline_groups: tuple[PolylineGroup, PolylineGro
     return scene
 
 
-def view_intermediate_objects() -> None:
-    view_original_station_lines(STATION_POLYLINES)
+def build_linesplan_mesh(path: str | Path = LINESPLAN_DXF) -> LinesplanMeshBuild:
+    input_path = Path(path)
+    station_lines = station_polylines(input_path)
+    processed_station_polylines = process_station_lines(station_lines, SNAP_TOLERANCE)
+    prepared_station_polylines = prepare_station_lines(processed_station_polylines)
+    polyline_groups = split_station_lines(prepared_station_polylines)
+    station_green_points = station_end_points(prepared_station_polylines)
+    lofted_mesh_patches = tuple(
+        mark_mesh_boundary_nodes(patch, station_green_points)
+        for patch in loft_polyline_groups(polyline_groups, node_spacing=NODE_SPACING)
+    )
+    boundary_extension_meshes_ = tuple(
+        mesh
+        for patch in lofted_mesh_patches
+        for nodes in (patch.yellow_nodes, patch.green_nodes)
+        for mesh in boundary_extension_meshes(nodes)
+    )
+    half_meshes = merge_boundary_extensions(lofted_mesh_patches, boundary_extension_meshes_)
+    mirrored_meshes = mirror_meshes(half_meshes)
+    mesh_patches = (*half_meshes, *mirrored_meshes)
+    keel_boundary_rows_ = keel_boundary_rows(lofted_mesh_patches)
+    keel_end_rows_ = keel_end_rows(keel_boundary_rows_)
+    keel_cap_mesh = keel_end_cap_mesh(keel_end_rows_)
+    combined_mesh = combine_meshes((*mesh_patches, keel_cap_mesh))
+    closed_mesh, close_error = try_close_mesh(combined_mesh)
+    final_mesh = closed_mesh if closed_mesh is not None else combined_mesh
+    triangulated_mesh = pizza_triangulate_mesh(final_mesh)
+    snapped_mesh = snap_close_nodes(triangulated_mesh, tolerance=SNAP_CLOSE_TOLERANCE)
+    return LinesplanMeshBuild(
+        input_path=input_path,
+        station_polylines=station_lines,
+        prepared_station_polylines=prepared_station_polylines,
+        polyline_groups=polyline_groups,
+        lofted_mesh_patches=lofted_mesh_patches,
+        mesh_patches=mesh_patches,
+        combined_mesh=combined_mesh,
+        closed_mesh=closed_mesh,
+        close_error=close_error,
+        triangulated_mesh=triangulated_mesh,
+        snapped_mesh=snapped_mesh,
+    )
+
+
+def view_intermediate_objects(build: LinesplanMeshBuild) -> None:
+    view_original_station_lines(build.station_polylines)
     view_processed_station_lines(
-        PREPARED_STATION_POLYLINES,
-        station_top_positive_y_points(PREPARED_STATION_POLYLINES),
-        station_top_discontinuity_points(PREPARED_STATION_POLYLINES),
-        station_end_points(PREPARED_STATION_POLYLINES),
+        build.prepared_station_polylines,
+        station_top_positive_y_points(build.prepared_station_polylines),
+        station_top_discontinuity_points(build.prepared_station_polylines),
+        station_end_points(build.prepared_station_polylines),
     )
-    build_split_polyline_scene(POLYLINE_GROUPS).view(title="split station polylines")
-    build_patch_scene(MESH_PATCHES).view(title="linesplan mesh patches")
+    build_split_polyline_scene(build.polyline_groups).view(title="split station polylines")
+    build_patch_scene(build.mesh_patches).view(title="linesplan mesh patches")
 
 
-PROCESSED_STATION_POLYLINES = process_station_lines(STATION_POLYLINES, SNAP_TOLERANCE)
-PREPARED_STATION_POLYLINES = prepare_station_lines(PROCESSED_STATION_POLYLINES)
-POLYLINE_GROUPS = split_station_lines(PREPARED_STATION_POLYLINES)
-YELLOW_TOP_POLYLINES = POLYLINE_GROUPS[0]
-RED_TOP_POLYLINES = POLYLINE_GROUPS[1]
-STATION_GREEN_POINTS = station_end_points(PREPARED_STATION_POLYLINES)
-LOFTED_MESH_PATCHES = tuple(
-    mark_mesh_boundary_nodes(patch, STATION_GREEN_POINTS)
-    for patch in loft_polyline_groups(POLYLINE_GROUPS, node_spacing=NODE_SPACING)
-)
-YELLOW_MESH_NODES = tuple(node for patch in LOFTED_MESH_PATCHES for node in patch.yellow_nodes)
-GREEN_MESH_NODES = tuple(node for patch in LOFTED_MESH_PATCHES for node in patch.green_nodes)
-BOUNDARY_EXTENSION_MESHES = tuple(
-    mesh
-    for patch in LOFTED_MESH_PATCHES
-    for nodes in (patch.yellow_nodes, patch.green_nodes)
-    for mesh in boundary_extension_meshes(nodes)
-)
-HALF_MESHES = merge_boundary_extensions(LOFTED_MESH_PATCHES, BOUNDARY_EXTENSION_MESHES)
-MIRRORED_MESHES = mirror_meshes(HALF_MESHES)
-MESH_PATCHES = (*HALF_MESHES, *MIRRORED_MESHES)
-KEEL_BOUNDARY_PAIRS = keel_boundary_pairs(LOFTED_MESH_PATCHES)
-KEEL_END_PAIRS = keel_end_pairs(KEEL_BOUNDARY_PAIRS)
-KEEL_BOUNDARY_ROWS = keel_boundary_rows(LOFTED_MESH_PATCHES)
-KEEL_END_ROWS = keel_end_rows(KEEL_BOUNDARY_ROWS)
-KEEL_CAP_MESH = keel_end_cap_mesh(KEEL_END_ROWS)
-COMBINED_MESH = combine_meshes((*MESH_PATCHES, KEEL_CAP_MESH))
-CLOSED_MESH, CLOSE_ERROR = try_close_mesh(COMBINED_MESH)
-FINAL_MESH = CLOSED_MESH if CLOSED_MESH is not None else COMBINED_MESH
-TRIANGULATED_MESH = pizza_triangulate_mesh(FINAL_MESH)
-SNAPPED_MESH = snap_close_nodes(TRIANGULATED_MESH, tolerance=SNAP_CLOSE_TOLERANCE)
+def main(
+    dxf_file_path: str | Path = LINESPLAN_DXF,
+    *,
+    show_view: bool = True,
+    patches: bool = False,
+    final_only: bool = False,
+) -> LinesplanMeshBuild:
+    build = build_linesplan_mesh(dxf_file_path)
+    yellow_top_polylines, red_top_polylines = build.polyline_groups
 
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Clean, split, loft, mirror, combine, and close linesplan stations.",
-    )
-    parser.add_argument(
-        "--no-view",
-        action="store_true",
-        help="Print mesh summaries without opening a viewer.",
-    )
-    parser.add_argument(
-        "--patches",
-        action="store_true",
-        help="View only the open mesh patches.",
-    )
-    parser.add_argument(
-        "--final-only",
-        action="store_true",
-        help="View only the final triangulated mesh.",
-    )
-    args = parser.parse_args()
-
-    print(f"polyline groups: yellow={len(YELLOW_TOP_POLYLINES)}, red={len(RED_TOP_POLYLINES)}")
-    print(f"mesh patches: {len(MESH_PATCHES)}")
+    print(f"input: {build.input_path}")
+    print(f"polyline groups: yellow={len(yellow_top_polylines)}, red={len(red_top_polylines)}")
+    print(f"mesh patches: {len(build.mesh_patches)}")
     print(
-        f"combined mesh: {len(COMBINED_MESH.vertices)} vertices, {len(COMBINED_MESH.faces)} faces"
+        f"combined mesh: {len(build.combined_mesh.vertices)} vertices, "
+        f"{len(build.combined_mesh.faces)} faces"
     )
-    if CLOSED_MESH is None:
-        print(f"closed mesh: failed - {CLOSE_ERROR}")
+    if build.closed_mesh is None:
+        print(f"closed mesh: failed - {build.close_error}")
     else:
-        print(f"closed mesh: {len(CLOSED_MESH.vertices)} vertices, {len(CLOSED_MESH.faces)} faces")
+        print(
+            f"closed mesh: {len(build.closed_mesh.vertices)} vertices, "
+            f"{len(build.closed_mesh.faces)} faces"
+        )
     print(
-        f"triangulated mesh: {len(TRIANGULATED_MESH.vertices)} vertices, "
-        f"{len(TRIANGULATED_MESH.faces)} faces"
+        f"triangulated mesh: {len(build.triangulated_mesh.vertices)} vertices, "
+        f"{len(build.triangulated_mesh.faces)} faces"
     )
     print(
-        f"snapped mesh: {len(SNAPPED_MESH.vertices)} vertices, "
-        f"{len(SNAPPED_MESH.faces)} faces, {len(SNAPPED_MESH.edges)} edges"
+        f"snapped mesh: {len(build.snapped_mesh.vertices)} vertices, "
+        f"{len(build.snapped_mesh.faces)} faces, {len(build.snapped_mesh.edges)} edges"
     )
 
-    if args.no_view:
-        return
+    if not show_view:
+        return build
 
-    if args.patches:
-        build_patch_scene(MESH_PATCHES).view(title="linesplan mesh patches")
-    elif args.final_only:
-        SNAPPED_MESH.view(title="snapped triangulated linesplan mesh")
+    if patches:
+        build_patch_scene(build.mesh_patches).view(title="linesplan mesh patches")
+    elif final_only:
+        build.snapped_mesh.view(title="snapped triangulated linesplan mesh")
     else:
-        view_intermediate_objects()
-        SNAPPED_MESH.view(title="snapped triangulated linesplan mesh")
+        view_intermediate_objects(build)
+        build.snapped_mesh.view(title="snapped triangulated linesplan mesh")
+    return build
 
 
 if __name__ == "__main__":
