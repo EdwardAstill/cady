@@ -8,14 +8,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, cast
 
-from cady import Camera, DirectionalLight, DisplayStyle, Polyline3, Scene, Wireframe3
-from cady.errors import ReadError
+from cady import Camera, DirectionalLight, DisplayStyle, Scene, Wireframe3
 from cady.files import dxf
-from cady.operations.meshes import classify_linesplan_curves
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
@@ -25,26 +21,6 @@ WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
 LIGHT = DirectionalLight(direction=(0.0, -1.0, -1.0), intensity=1.2)
 
 Point3 = tuple[float, float, float]
-
-
-class _PointTupleLike(Protocol):
-    def tuple(self) -> Point3: ...
-
-
-def station_polylines(
-    path: str | Path = LINESPLAN_DXF,
-    *,
-    tolerance: float = 1e-3,
-) -> tuple[Polyline3, ...]:
-    """Return classified DXF station lines as immutable Polyline3 values."""
-    network = classify_linesplan_curves(dxf.read_curves(path), tolerance=tolerance)
-    polylines = tuple(Polyline3(curve.vertices) for curve in network.sections)
-    if not polylines:
-        raise ReadError("DXF contained no station line geometry")
-    return polylines
-
-
-STATION_POLYLINES = station_polylines()
 
 
 def main() -> None:
@@ -122,10 +98,9 @@ def _bounds_centre(lower: Point3, upper: Point3) -> Point3:
 
 
 def _point_tuple(value: object) -> Point3:
-    if hasattr(value, "tuple"):
-        return cast(_PointTupleLike, value).tuple()
-    point = cast(Sequence[float], value)
-    return (float(point[0]), float(point[1]), float(point[2]))
+    point = value.tuple() if hasattr(value, "tuple") else value
+    x, y, z = point
+    return (float(x), float(y), float(z))
 
 
 def _format_point(point: Point3) -> str:
