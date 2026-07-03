@@ -87,9 +87,7 @@ matches a prepared station end point within `1e-3`.
 
 Turn contiguous yellow and green boundary-node chains into sampled strip meshes.
 Each strip is divided from the loft boundary down to `y = 0`, then lofted into
-quad bands before it is attached to the half hull. Projection columns shorter
-than 10% of the longest projection in that strip are left as a single direct
-projection edge.
+quad bands before it is attached to the half hull.
 
 ## 4.2 Attach The Extension Strips To The Half Hull
 

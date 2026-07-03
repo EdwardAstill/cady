@@ -33,7 +33,6 @@ NodeArray: TypeAlias = tuple[tuple[Point3, ...], ...]
 
 TOLERANCE = 1e-3
 NODE_SPACING = 2000.0
-SHORT_PROJECTION_RATIO = 0.3
 MIRROR_PLANE_ORIGIN: Point3 = (0.0, 0.0, 0.0)
 MIRROR_PLANE_NORMAL: Point3 = (0.0, 1.0, 0.0)
 
@@ -153,111 +152,23 @@ def boundary_extension_mesh(
     if node_spacing <= 0.0:
         raise ValueError("node_spacing must be positive")
 
-    longest_projection = max(abs(point[1]) for point in points)
-    short_projection_limit = longest_projection * SHORT_PROJECTION_RATIO
-    vertices: list[Point3] = []
-    columns: list[tuple[int, ...]] = []
-    for point in points:
-        segment_count = _projection_segment_count(
-            point,
-            node_spacing=node_spacing,
-            short_projection_limit=short_projection_limit,
-        )
-        column: list[int] = []
-        for segment_index in range(segment_count + 1):
-            ratio = segment_index / segment_count
-            column.append(len(vertices))
-            vertices.append(
+    projection_distance = max(abs(point[1]) for point in points)
+    segment_count = max(1, ceil(projection_distance / node_spacing))
+    rows: list[tuple[Point3, ...]] = []
+    for segment_index in range(segment_count + 1):
+        ratio = segment_index / segment_count
+        rows.append(
+            tuple(
                 (
                     point[0],
                     0.0 if segment_index == segment_count else point[1] * (1.0 - ratio),
                     point[2],
                 )
+                for point in points
             )
-        columns.append(tuple(column))
-
-    faces: list[Face] = []
-    edges: set[Edge] = set()
-    for column in columns:
-        for edge in zip(column, column[1:], strict=False):
-            edges.add(_edge_key(*edge))
-    for left_column, right_column in zip(columns, columns[1:], strict=False):
-        _append_projection_faces(left_column, right_column, faces, edges)
-
-    return weld_mesh(
-        Mesh3(tuple(vertices), tuple(faces), tuple(sorted(edges))),
-        tolerance=TOLERANCE,
-    )
-
-
-def _projection_segment_count(
-    point: Point3,
-    *,
-    node_spacing: float,
-    short_projection_limit: float,
-) -> int:
-    projection_distance = abs(point[1])
-    if projection_distance < short_projection_limit:
-        return 1
-    return max(1, ceil(projection_distance / node_spacing))
-
-
-def _append_projection_faces(
-    left_column: tuple[int, ...],
-    right_column: tuple[int, ...],
-    faces: list[Face],
-    edges: set[Edge],
-) -> None:
-    left_segments = len(left_column) - 1
-    right_segments = len(right_column) - 1
-    left_index = 0
-    right_index = 0
-
-    while left_index < left_segments or right_index < right_segments:
-        next_left = (
-            (left_index + 1) / left_segments
-            if left_index < left_segments
-            else float("inf")
         )
-        next_right = (
-            (right_index + 1) / right_segments
-            if right_index < right_segments
-            else float("inf")
-        )
-        if abs(next_left - next_right) <= 1e-12:
-            face = _clean_face(
-                (
-                    left_column[left_index],
-                    left_column[left_index + 1],
-                    right_column[right_index + 1],
-                    right_column[right_index],
-                )
-            )
-            left_index += 1
-            right_index += 1
-        elif next_left < next_right:
-            face = _clean_face(
-                (
-                    left_column[left_index],
-                    left_column[left_index + 1],
-                    right_column[right_index],
-                )
-            )
-            left_index += 1
-        else:
-            face = _clean_face(
-                (
-                    left_column[left_index],
-                    right_column[right_index + 1],
-                    right_column[right_index],
-                )
-            )
-            right_index += 1
 
-        if len(face) >= 3:
-            faces.append(face)
-            for edge in zip(face, face[1:] + face[:1], strict=True):
-                edges.add(_edge_key(*edge))
+    return weld_mesh(mesh_node_array(tuple(rows)), tolerance=TOLERANCE)
 
 
 def merge_boundary_extensions(

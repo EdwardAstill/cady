@@ -51,10 +51,7 @@ Returns annotated `LoftedMeshPatch` records.
 For each chain of consecutive boundary nodes, samples intermediate rows from
 the boundary chain down to y=0 (the centerline plane), then lofts those rows
 into quad-strip extension meshes. Vertices with y ≈ 0 are welded onto the
-centerline instead of leaving collapsed duplicate rows. Projection columns
-shorter than 10% of the longest projection in that strip keep only their
-boundary and centerline endpoints, so short projections do not gain extra
-display nodes.
+centerline instead of leaving collapsed duplicate rows.
 
 Produces `BOUNDARY_EXTENSION_MESHES`, merged into `HALF_MESHES`.
 
