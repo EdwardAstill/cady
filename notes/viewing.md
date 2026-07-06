@@ -296,8 +296,8 @@ This layer is useful because it keeps two responsibilities apart:
 OpenGL state.
 
 `viewer.py` is the public viewer entry point. It keeps helpers such as
-`view_scene(...)`, `view_mesh(...)`, `view_lines(...)`, and the quick
-`open_target_view(...)` path used by target `.view(...)` methods.
+`view_scene(...)`, `view_lines(...)`, and the quick `open_target_view(...)`
+path used by target `.view(...)` methods.
 
 `view/vispy/` contains the VisPy backend internals:
 

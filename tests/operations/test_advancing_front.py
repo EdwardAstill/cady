@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cady.operations.advancing_front import advancing_front_surface
+from cady.operations.surface_reconstruction import advancing_front_surface
 
 
 def test_advancing_front_returns_mesh_arrays() -> None:

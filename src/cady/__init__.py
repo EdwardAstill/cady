@@ -50,21 +50,6 @@ from cady.geometry import (
     Surface3,
     Wireframe3,
 )
-from cady.operations import (
-    arc2,
-    arc3,
-    box,
-    circle2,
-    cylinder,
-    line2,
-    line3,
-    polyline2,
-    polyline3,
-    region_circle,
-    region_rectangle,
-    sphere,
-    spline3,
-)
 from cady.product import Assembly, AssemblyInstance, Material, Part, PartInstance
 from cady.view import (
     AmbientLight,
@@ -141,17 +126,4 @@ __all__ = [
     "ViewError",
     "Wireframe3",
     "WriteError",
-    "arc2",
-    "arc3",
-    "box",
-    "circle2",
-    "cylinder",
-    "line2",
-    "line3",
-    "polyline2",
-    "polyline3",
-    "region_circle",
-    "region_rectangle",
-    "spline3",
-    "sphere",
 ]

@@ -8,11 +8,10 @@ from cady.geometry import (
     Polyline2,
     Region2,
 )
-from cady.operations import region_circle, region_rectangle
 
 
 def test_region_rectangle_returns_closed_polyline_with_expected_bounds() -> None:
-    region = region_rectangle(4, 2, origin=(1, 2))
+    region = Region2.rectangle(4, 2, origin=(1, 2))
 
     assert region.bounds() == ((1, 2), (5, 4))
     assert region.boundary == ((1, 2), (5, 4))
@@ -23,7 +22,7 @@ def test_region_rectangle_returns_closed_polyline_with_expected_bounds() -> None
 
 
 def test_region_circle_wraps_circle_boundary() -> None:
-    region = region_circle(2, centre=(3, 4))
+    region = Region2.circle(2, centre=(3, 4))
 
     assert isinstance(region.outer, Circle2)
     assert region.bounds() == ((1, 2), (5, 6))
@@ -48,8 +47,8 @@ def test_region2_carries_holes_as_closed_polyline_loops() -> None:
 
 def test_region_constructors_reject_invalid_dimensions() -> None:
     with pytest.raises(ValueError, match="width must be positive"):
-        region_rectangle(0, 1)
+        Region2.rectangle(0, 1)
     with pytest.raises(ValueError, match="height must be positive"):
-        region_rectangle(1, -1)
+        Region2.rectangle(1, -1)
     with pytest.raises(ValueError, match="radius must be positive"):
-        region_circle(0)
+        Region2.circle(0)

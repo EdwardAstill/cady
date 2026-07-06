@@ -122,10 +122,6 @@ class BlockDefinition:
         object.__setattr__(self, "layers", tuple(self.layers))
         object.__setattr__(self, "entities", tuple(self.entities))
 
-    def add(self, geometry: object, *, layer: str = "0") -> BlockDefinition:
-        """Wrap geometry in a drawing entity and append it to the block."""
-        return self.add_entity(DrawingEntity(geometry, layer))
-
     def add_entity(self, entity: DrawingPrimitive) -> BlockDefinition:
         """Return a new block definition with the entity appended."""
         return BlockDefinition(
@@ -134,28 +130,6 @@ class BlockDefinition:
             self.layers,
             (*self.entities, entity),
         )
-
-    def add_text(
-        self,
-        text: str,
-        *,
-        at: Point2,
-        height: float,
-        layer: str = "0",
-        rotation: float = 0.0,
-    ) -> BlockDefinition:
-        return self.add_entity(Text2(text, at, height, layer, rotation))
-
-    def hatch(
-        self,
-        boundary: object,
-        *,
-        layer: str = "0",
-        pattern: str = "ANSI31",
-        angle: float = 45.0,
-        scale: float = 1.0,
-    ) -> BlockDefinition:
-        return self.add_entity(Hatch2(boundary, layer, pattern, angle, scale))
 
     def bounds(self) -> Bounds2:
         from cady.drawing._geometry import merge_bounds

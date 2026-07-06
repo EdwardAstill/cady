@@ -29,12 +29,16 @@ def test_linear_dimension_requires_orthogonal_points() -> None:
 def test_dimension_entities_auto_create_layer_and_require_registered_style() -> None:
     drawing = Drawing2().with_dim_style(DimStyle("DETAIL"))
 
-    drawing = drawing.linear_dimension((0, 0), (1, 0), offset=0.2, dim_style="DETAIL")
+    drawing = drawing.add_dimension(
+        LinearDimension2((0, 0), (1, 0), offset=0.2, dim_style="DETAIL")
+    )
 
     assert drawing.layers[0].name == "DIMENSIONS"
     assert drawing.entities[0].dim_style == "DETAIL"
     with pytest.raises(ValueError, match="unknown dimstyle"):
-        drawing.aligned_dimension((0, 0), (1, 1), offset=0.1, dim_style="MISSING")
+        drawing.add_dimension(
+            AlignedDimension2((0, 0), (1, 1), offset=0.1, dim_style="MISSING")
+        )
 
 
 def test_dimstyle_validation() -> None:

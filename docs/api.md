@@ -77,19 +77,19 @@
 |------|-------------|
 | `Document` | Optional project registry. |
 
-## Factory functions
+## Constructors
 
-| Function | Returns | Signature |
+| Constructor | Returns | Signature |
 |----------|---------|-----------|
-| `line2d(start, end)` | `Line2D` | Two points. |
-| `arc2d(centre, radius, start_angle, end_angle)` | `Arc2D` | Angles in radians. |
-| `circle2d(centre, radius)` | `Circle2D` | Centre point and radius. |
-| `polyline2d(points, *, closed=False)` | `Polyline2D` | Sequence of points. |
-| `region_rectangle(width, height, *, origin=(0,0))` | `Region2D` | Width and height. |
-| `region_circle(radius, *, centre=(0,0))` | `Region2D` | Radius. |
-| `box(*, width, depth, height, plane=None)` | `Body3D` | Dimensions in 3D. |
-| `cylinder(*, radius, height, plane=None)` | `Body3D` | Radius and height. |
-| `sphere(*, radius, centre=(0,0,0))` | `Body3D` | Radius. |
+| `Line2(start, end)` | `Line2` | Two points. |
+| `Arc2(centre, radius, start_angle, end_angle)` | `Arc2` | Angles in radians. |
+| `Circle2(centre, radius)` | `Circle2` | Centre point and radius. |
+| `Polyline2(points, *, closed=False)` | `Polyline2` | Sequence of points. |
+| `Region2.rectangle(width, height, *, origin=(0,0))` | `Region2` | Width and height. |
+| `Region2.circle(radius, *, centre=(0,0))` | `Region2` | Radius. |
+| `Body3.box(*, width, depth, height, plane=None)` | `Body3` | Dimensions in 3D. |
+| `Body3.cylinder(*, radius, height, plane=None)` | `Body3` | Radius and height. |
+| `Body3.sphere(*, radius, centre=(0,0,0))` | `Body3` | Radius. |
 
 ## Errors
 

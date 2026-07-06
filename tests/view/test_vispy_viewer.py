@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from cady import (
+    Body3,
     Camera,
     DirectionalLight,
     DisplayStyle,
@@ -15,7 +16,6 @@ from cady import (
     PointCloud3,
     ScaleBarOverlay,
     Scene,
-    box,
 )
 from cady.view.scene import prepare_scene
 from cady.view.scene import transform_from_pose as _transform_from_pose
@@ -68,9 +68,9 @@ class _FakeGloo:
 
 
 def test_vispy_viewer_module_imports_without_opening_window() -> None:
-    from cady.view import prepare_scene, view_mesh, view_scene
+    from cady.view import prepare_scene, view_scene
 
-    assert all((prepare_scene, view_mesh, view_scene))
+    assert all((prepare_scene, view_scene))
 
 
 def test_require_vispy_raises_when_missing() -> None:
@@ -133,7 +133,7 @@ def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
             DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.5),
         ),
     ).add(
-        box(1.0, 0.5, 0.25),
+        Body3.box(width=1.0, depth=0.5, height=0.25),
         style=DisplayStyle(color=(0.2, 0.4, 0.8)),
     )
 
@@ -150,13 +150,19 @@ def test_prepare_scene_uses_new_scene_camera_light_and_style() -> None:
 
 def test_prepare_scene_carries_scene_overlays() -> None:
     overlay = ScaleBarOverlay(min_pixels=24.0, max_pixels=96.0)
-    prepared = prepare_scene(Scene("overlay", overlays=(overlay,)).add(box(1.0, 1.0, 1.0)))
+    prepared = prepare_scene(
+        Scene("overlay", overlays=(overlay,)).add(
+            Body3.box(width=1.0, depth=1.0, height=1.0)
+        )
+    )
 
     assert prepared.overlays == (overlay,)
     assert _scale_bar_overlay(prepared) is overlay
 
     hidden = prepare_scene(
-        Scene("hidden", overlays=(ScaleBarOverlay(visible=False),)).add(box(1.0, 1.0, 1.0))
+        Scene("hidden", overlays=(ScaleBarOverlay(visible=False),)).add(
+            Body3.box(width=1.0, depth=1.0, height=1.0)
+        )
     )
 
     assert _scale_bar_overlay(hidden) is None
@@ -245,7 +251,9 @@ def test_prepare_scene_triangulates_polygon_mesh_faces_for_viewer() -> None:
 
 
 def test_prepare_scene_accepts_document_targets() -> None:
-    document = Document("job").add_part(Part("box").with_body(box(1.0, 0.5, 0.25)))
+    document = Document("job").add_part(
+        Part("box").with_body(Body3.box(width=1.0, depth=0.5, height=0.25))
+    )
     scene = Scene("document").add(document)
 
     prepared = prepare_scene(scene, tolerance=1e-3)

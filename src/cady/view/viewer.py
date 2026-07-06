@@ -67,26 +67,6 @@ def view_scene(scene: Scene, *, tolerance: float = 1e-3, title: str | None = Non
     return None
 
 
-def view_mesh(mesh: object, *, tolerance: float = 1e-3, title: str | None = None) -> object:
-    """Open an interactive window for one mesh-like target."""
-    resolved_title = title or "cady 3D mesh"
-    scene = Scene.from_target(mesh, name=resolved_title)
-    return view_scene(scene, tolerance=tolerance, title=resolved_title)
-
-
-def view_meshes(
-    meshes: Sequence[object],
-    *,
-    tolerance: float = 1e-3,
-    title: str = "cady 3D meshes",
-) -> object:
-    """Open an interactive window for multiple mesh-like targets."""
-    scene = Scene(name=title)
-    for index, mesh in enumerate(meshes):
-        scene = scene.add(mesh, name=f"mesh_{index + 1}")
-    return view_scene(scene, tolerance=tolerance, title=title)
-
-
 def view_lines(
     lines: Sequence[LineVertices],
     *,
@@ -339,7 +319,5 @@ __all__ = [
     "open_target_view",
     "prepare_scene",
     "view_lines",
-    "view_mesh",
-    "view_meshes",
     "view_scene",
 ]

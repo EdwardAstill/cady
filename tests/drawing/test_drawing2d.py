@@ -5,7 +5,15 @@ from types import MappingProxyType
 
 import pytest
 
-from cady.drawing import BlockDefinition, Drawing2, DrawingEntity, Hatch2, Layer, Text2
+from cady.drawing import (
+    BlockDefinition,
+    Drawing2,
+    DrawingEntity,
+    Hatch2,
+    Layer,
+    LinearDimension2,
+    Text2,
+)
 
 
 @dataclass(frozen=True)
@@ -53,12 +61,12 @@ def test_add_layer_rejects_conflicting_duplicate() -> None:
 
 def test_text_hatch_block_and_insert_entities() -> None:
     profile = Curve((0, 0), (4, 3), closed=True)
-    block = BlockDefinition("MARK").add_text("A", at=(1, 2), height=0.5)
+    block = BlockDefinition("MARK").add_entity(Text2("A", at=(1, 2), height=0.5))
 
     drawing = (
         Drawing2("sheet")
-        .add_text("TITLE", at=(10, 20), height=2.5, layer="TEXT")
-        .hatch(profile, layer="HATCH")
+        .add_entity(Text2("TITLE", at=(10, 20), height=2.5, layer="TEXT"))
+        .add_entity(Hatch2(profile, layer="HATCH"))
         .add_block(block)
         .insert("MARK", at=(5, 6), layer="SYMBOLS")
     )
@@ -76,25 +84,27 @@ def test_insert_requires_known_block() -> None:
 
 def test_hatch_requires_closed_boundary() -> None:
     with pytest.raises(ValueError, match="closed"):
-        Drawing2().hatch(Curve((0, 0), (1, 0), closed=False))
+        Drawing2().add_entity(Hatch2(Curve((0, 0), (1, 0), closed=False)))
 
 
 def test_bounds_include_geometry_text_hatch_inserted_block_and_dimensions() -> None:
-    block = BlockDefinition("B").add(Curve((0, 0), (2, 3)))
+    block = BlockDefinition("B").add_entity(DrawingEntity(Curve((0, 0), (2, 3))))
     drawing = (
         Drawing2("bounded")
         .add(Curve((1, 2), (3, 4)), layer="GEOM")
-        .add_text("N", at=(-2, 6), height=0.2)
-        .hatch(Curve((5, -1), (6, 1)))
+        .add_entity(Text2("N", at=(-2, 6), height=0.2))
+        .add_entity(Hatch2(Curve((5, -1), (6, 1))))
         .add_block(block)
         .insert("B", at=(10, 10), scale=2)
-        .linear_dimension((0, 0), (2, 0), offset=-4)
+        .add_dimension(LinearDimension2((0, 0), (2, 0), offset=-4))
     )
 
     assert drawing.bounds() == ((-2.0, -4.0), (14.0, 16.0))
 
 
 def test_to_arrays_returns_geometry_and_hatch_arrays() -> None:
-    drawing = Drawing2().add(Curve((0, 0), (1, 1))).hatch(Curve((2, 2), (3, 3)))
+    drawing = Drawing2().add(Curve((0, 0), (1, 1))).add_entity(
+        Hatch2(Curve((2, 2), (3, 3)))
+    )
 
     assert drawing.to_arrays(tolerance=0.25) == (("array", 0.25), ("array", 0.25))

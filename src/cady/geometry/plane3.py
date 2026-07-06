@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from cady.operations.coordinates import add3, cross3, dot3, normalised3, scale3, sub3
+from cady.operations.primitives import add3, cross3, dot3, normalised3, scale3, sub3
 from cady.operations.transforms import Transform3
 
 Point2: TypeAlias = tuple[float, float]

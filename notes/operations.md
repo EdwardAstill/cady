@@ -21,13 +21,15 @@ resolution.
 
 Sources:
 
-- `src/cady/operations/coordinates.py`
+- `src/cady/operations/primitives.py`
 - `src/cady/operations/transforms.py`
 - `src/cady/operations/triangulation.py`
-- `src/cady/operations/mesh_topology.py`
-- `src/cady/operations/mesh_clipping.py`
-- `src/cady/operations/meshing.py`
-- `src/cady/operations/meshes.py`
+- `src/cady/operations/mesh/topology.py`
+- `src/cady/operations/mesh/clipping.py`
+- `src/cady/operations/mesh/construction.py`
+- `src/cady/operations/mesh/primitives.py`
+- `src/cady/operations/linesplan_meshing.py`
+- `src/cady/operations/surface_reconstruction/`
 - `src/cady/operations/lofting.py`
 - `src/cady/operations/__init__.py`
 
@@ -35,13 +37,13 @@ Sources:
 
 | Module | Role |
 |---|---|
-| `coordinates` | Pure tuple vector arithmetic in 2D and 3D. |
+| `primitives` | Pure tuple vector arithmetic in 2D and 3D. |
 | `transforms` | Immutable homogeneous affine transform containers for point arrays. |
 | `triangulation` | Boundary-guided triangulation of closed 2D loops and planar 3D loops. |
-| `mesh_topology` | Boundary edge discovery, loop stitching, dangling-edge pruning, and compaction. |
-| `mesh_clipping` | Existing-mesh coercion, plane clipping, explicit planar caps, and planar boundary closure. |
-| `meshing` | CAD-facing mesh construction for closed polylines, wireframes, regions, surface regions, and extrusions. |
-| `meshes` | Primitive triangle builders, primitive `Mesh3` constructors, tolerance validation, and linesplan helpers. |
+| `mesh.topology` | Boundary edge discovery, loop stitching, dangling-edge pruning, and compaction. |
+| `mesh.clipping` | Existing-mesh coercion, plane clipping, explicit planar caps, and planar boundary closure. |
+| `mesh.construction` | CAD-facing mesh construction for closed polylines, wireframes, regions, surface regions, and extrusions. |
+| `mesh.primitives` | Primitive triangle builders, primitive `Mesh3` constructors, and tolerance validation. |
 | `lofting` | Closed-loop and section-polyline loft helpers. |
 | `__init__` | Public re-exports plus lightweight semantic constructors. |
 
@@ -62,7 +64,7 @@ distance and intersection belong in `cady.measurement`, not `cady.operations`.
 
 ## Coordinate Operations
 
-`coordinates.py` is the lowest-level tuple arithmetic layer. It avoids NumPy and
+`primitives.py` is the lowest-level tuple arithmetic layer. It avoids NumPy and
 returns plain immutable tuples.
 
 For 2D points or vectors:
@@ -266,7 +268,7 @@ uses the same loop triangulation.
 
 ## Mesh Topology
 
-`mesh_topology.py` contains topology helpers that operate on indexed faces and
+`mesh/topology.py` contains topology helpers that operate on indexed faces and
 edges.
 
 | Function | Meaning |
@@ -283,7 +285,7 @@ product, files, or viewer code.
 
 ## Mesh Clipping And Closure
 
-`mesh_clipping.py` owns operations on existing triangle mesh arrays.
+`mesh/clipping.py` owns operations on existing triangle mesh arrays.
 
 `coerce_mesh(mesh_or_vertices, faces, edges=None)` returns validated
 `(vertices, faces, edges)` arrays:
@@ -359,7 +361,7 @@ $$
 
 ## CAD-Facing Meshing
 
-`meshing.py` turns semantic boundaries into semantic mesh values.
+`mesh/construction.py` turns semantic boundaries into semantic mesh values.
 
 | Function | Meaning |
 |---|---|
@@ -402,7 +404,7 @@ and hole boundary segment. It rejects zero extrusion distance.
 
 ## Primitive Mesh Helpers
 
-`meshes.py` contains primitive triangle builders and semantic `Mesh3`
+`mesh/primitives.py` contains primitive triangle builders and semantic `Mesh3`
 constructors.
 
 `segments_for_circle(radius, tolerance)` estimates a circle segment count from
@@ -492,7 +494,7 @@ within tolerance.
 ## Linesplan Operations
 
 Linesplan helpers normalize, classify, check, and mesh imported wire curves.
-They currently live in `meshes.py`.
+They currently live in `linesplan_meshing.py`.
 
 Records:
 
@@ -552,24 +554,9 @@ solver.
 - `close_boundary`, `close_planar_cap`, `cut_mesh_by_plane`
 - `sphere_triangles`
 
-It also exposes lightweight factory wrappers. These wrappers late-import
-semantic classes and return authoring-layer objects.
-
-| Function | Returns |
-|---|---|
-| `line2(start, end)` | `Line2` |
-| `arc2(centre, radius, start_rad, end_rad)` | `Arc2` |
-| `line3(start, end)` | `Line3` |
-| `arc3(centre, radius, start_rad, end_rad, x_axis=..., y_axis=...)` | `Arc3` |
-| `spline3(control_points)` | `Spline3` |
-| `polyline2(vertices, closed=False)` | `Polyline2` |
-| `polyline3(items, closed=False)` | `Polyline3` |
-| `circle2(centre, radius)` | `Circle2` |
-| `region_rectangle(width, height, origin=...)` | `Region2.rectangle(...)` |
-| `region_circle(radius, centre=...)` | `Region2.circle(...)` |
-| `box(width, depth, height, plane=None)` | `Body3.box(...)` |
-| `cylinder(radius, height, plane=None)` | `Body3.cylinder(...)` |
-| `sphere(radius, centre=...)` | `Body3.sphere(...)` |
+Geometry authoring values are constructed directly through their classes and
+classmethods. `cady.operations` no longer exposes lightweight constructor
+wrappers.
 
 These are convenience entry points, not numeric algorithms. Their main design
 role is to keep top-level imports light while preserving a compact public API.
@@ -595,7 +582,6 @@ Current algorithmic limits:
 - hole support in region meshing is implemented by visible bridge splicing
 - cap triangulation rejects nested loops
 - `close_boundary` only closes planar holes
-- `close_holes` is not implemented on `Mesh3`
 - `revolution_triangles` only supports the positive Z axis
 - `mesh_from_triangles` does not merge shared vertices
 - `TriangulationGuide.max_area` and `min_angle_degrees` are not implemented

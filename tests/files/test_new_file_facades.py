@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cady import Document, Drawing2, Line2, Part, box
+from cady import Body3, Document, Drawing2, Line2, Part
 from cady.errors import ReadError
 from cady.files import dxf, step, stl
 from cady.geometry import Mesh3
@@ -206,7 +206,9 @@ def test_stl_write_triangulates_polygon_mesh_faces(tmp_path: Path) -> None:
 
 
 def test_stl_write_document_with_meshable_parts(tmp_path: Path) -> None:
-    document = Document("job").add_part(Part("box").with_body(box(1, 1, 1)))
+    document = Document("job").add_part(
+        Part("box").with_body(Body3.box(width=1, depth=1, height=1))
+    )
     path = tmp_path / "job.stl"
 
     stl.write(document, path, ascii=True, tolerance=1e-3)
@@ -215,7 +217,7 @@ def test_stl_write_document_with_meshable_parts(tmp_path: Path) -> None:
 
 
 def test_step_render_body() -> None:
-    text = step.render(box(1, 1, 1), tolerance=1e-3)
+    text = step.render(Body3.box(width=1, depth=1, height=1), tolerance=1e-3)
 
     assert "ISO-10303-21" in text
     assert "POLY_LOOP" in text
@@ -233,7 +235,9 @@ def test_step_render_keeps_polygon_mesh_faces_as_poly_loops() -> None:
 
 
 def test_step_render_document_with_meshable_parts() -> None:
-    document = Document("job").add_part(Part("box").with_body(box(1, 1, 1)))
+    document = Document("job").add_part(
+        Part("box").with_body(Body3.box(width=1, depth=1, height=1))
+    )
 
     text = step.render(document, tolerance=1e-3)
 

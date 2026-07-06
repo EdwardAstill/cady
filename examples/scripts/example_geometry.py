@@ -7,16 +7,16 @@ from cady import (
     Assembly,
     Body3,
     Camera,
+    Circle2,
     DirectionalLight,
     DisplayStyle,
     Document,
     Drawing2,
+    Line2,
     Part,
     Region2,
     Scene,
-    circle2,
-    line2,
-    region_rectangle,
+    Text2,
 )
 from cady.view import SceneObject
 
@@ -37,8 +37,8 @@ class PlateExample:
 
 
 def plate_region() -> Region2:
-    outline = region_rectangle(PLATE_WIDTH, PLATE_HEIGHT)
-    hole = circle2(HOLE_CENTRE, HOLE_RADIUS)
+    outline = Region2.rectangle(PLATE_WIDTH, PLATE_HEIGHT)
+    hole = Circle2(HOLE_CENTRE, HOLE_RADIUS)
     return Region2(outline.outer, holes=(hole,))
 
 
@@ -60,9 +60,9 @@ def plate_drawing(*, name: str = "front", title: str = "PLATE") -> Drawing2:
         .add_layer("TEXT", color=2)
         .add(region.outer, layer="PLATE")
         .add(hole, layer="PLATE")
-        .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
-        .add(line2((0.38, 0.3), (0.62, 0.3)), layer="CENTER")
-        .add_text(title, at=(0.02, 0.02), height=0.03, layer="TEXT")
+        .add(Line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
+        .add(Line2((0.38, 0.3), (0.62, 0.3)), layer="CENTER")
+        .add_entity(Text2(title, at=(0.02, 0.02), height=0.03, layer="TEXT"))
     )
 
 
@@ -70,10 +70,10 @@ def production_drawing() -> Drawing2:
     return (
         plate_drawing(name="production_plate", title="PRODUCTION PLATE")
         .add_layer("SYMBOL", color=2)
-        .add(circle2((0.5, 0.3), 0.025), layer="SYMBOL")
-        .add(circle2((0.82, 0.3), 0.025), layer="SYMBOL")
-        .add(line2((0.0, -0.08), (1.0, -0.08)), layer="PLATE")
-        .add(line2((1.08, 0.0), (1.08, 0.6)), layer="PLATE")
+        .add(Circle2((0.5, 0.3), 0.025), layer="SYMBOL")
+        .add(Circle2((0.82, 0.3), 0.025), layer="SYMBOL")
+        .add(Line2((0.0, -0.08), (1.0, -0.08)), layer="PLATE")
+        .add(Line2((1.08, 0.0), (1.08, 0.6)), layer="PLATE")
     )
 
 
@@ -98,8 +98,8 @@ def production_assembly() -> Assembly:
     pin = Part("pin").with_body(Body3.box(width=0.1, depth=0.1, height=0.08))
     return (
         Assembly("production_plate")
-        .add(plate_part(), name="plate")
-        .add(pin, name="pin", pose=(0.45, 0.25, PLATE_THICKNESS))
+        .add_part(plate_part(), name="plate")
+        .add_part(pin, name="pin", pose=(0.45, 0.25, PLATE_THICKNESS))
     )
 
 

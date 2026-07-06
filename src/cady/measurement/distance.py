@@ -8,9 +8,9 @@ from math import isfinite, sqrt
 from numbers import Real
 from typing import TypeAlias, TypeGuard
 
-from cady.operations.coordinates import distance2 as _distance2
-from cady.operations.coordinates import distance3 as _distance3
-from cady.operations.coordinates import dot3, scale3, sub3
+from cady.operations.primitives import distance2 as _distance2
+from cady.operations.primitives import distance3 as _distance3
+from cady.operations.primitives import dot3, scale3, sub3
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]

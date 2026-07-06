@@ -7,7 +7,7 @@ kept behind the viewer launch path.
 ## Main Flow
 
 1. User code builds a `Scene` directly, calls `Scene.from_target(...)`, or uses
-   a focused viewer helper such as `view_mesh(...)`.
+   a target `.view(...)` method.
 2. `scene.prepare_scene(...)` converts semantic targets into `RenderScene`
    arrays: `SceneMesh` for mesh and point data, `SceneLine` for polyline data,
    plus camera and lighting values.
@@ -23,9 +23,8 @@ kept behind the viewer launch path.
 - `__init__.py`
   - Public facade for backend-independent values such as `Scene`, `Camera`,
     `DisplayStyle`, lights, overlays, and `prepare_scene`.
-  - Lazily exposes GUI helpers (`view_scene`, `view_mesh`, `view_meshes`,
-    `view_lines`) through `__getattr__` so importing the package does not
-    require VisPy.
+  - Lazily exposes GUI helpers (`view_scene`, `view_lines`) through
+    `__getattr__` so importing the package does not require VisPy.
 
 - `camera.py`
   - Defines `Camera` and its `Projection` modes.
@@ -68,8 +67,6 @@ kept behind the viewer launch path.
 - `viewer.py`
   - Public launch helpers for interactive viewing.
   - `view_scene(...)` opens a prepared `Scene`.
-  - `view_mesh(...)` and `view_meshes(...)` build scenes around one or more
-    meshable targets.
   - `view_lines(...)` renders explicit polylines without meshing.
   - `open_target_view(...)` is the fitted-camera path used by target `.view(...)`
     methods. It resolves bounds, optional centering, default style, and default

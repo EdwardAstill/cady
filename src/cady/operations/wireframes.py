@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, TypeAlias
 import numpy as np
 
 from cady.operations.lofting import LoftMesh, loft_section_polylines
-from cady.operations.mesh_topology import prune_dangling_edges
+from cady.operations.mesh.topology import prune_dangling_edges
 
 if TYPE_CHECKING:
     from cady.geometry.mesh import Mesh3

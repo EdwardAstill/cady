@@ -5,7 +5,7 @@ import pytest
 
 from cady.errors import GeometryError
 from cady.geometry import Mesh3
-from cady.operations.mesh_topology import decimate_mesh_data
+from cady.operations.mesh.topology import decimate_mesh_data
 from cady.operations.transforms import Transform3
 
 

@@ -182,7 +182,7 @@ class Mesh3:
         tolerance: float = 1e-6,
     ) -> Mesh3:
         """Reconstruct a triangle mesh from array-like 3D points."""
-        from cady.operations.advancing_front import advancing_front_surface
+        from cady.operations.surface_reconstruction import advancing_front_surface
 
         vertices, faces, edges = advancing_front_surface(
             _point_array_from_points(points, tolerance=tolerance),
@@ -201,26 +201,6 @@ class Mesh3:
         """Return triangular faces for render/export/numeric boundaries."""
         _validate_tolerance(tolerance)
         return _triangulated_faces(self.vertices, self.faces, tolerance=tolerance)
-
-    def triangulated(
-        self,
-        *,
-        tolerance: float = 1e-9,
-        algorithm: str = "ear_delaunay_refinement",
-        target_edge_length: float | None = None,
-        max_edge_length: float | None = None,
-        max_area: float | None = None,
-        min_angle_degrees: float | None = None,
-    ) -> Mesh3:
-        """Return an equivalent mesh whose faces are all triangles."""
-        return self.triangulate(
-            tolerance=tolerance,
-            algorithm=algorithm,
-            target_edge_length=target_edge_length,
-            max_edge_length=max_edge_length,
-            max_area=max_area,
-            min_angle_degrees=min_angle_degrees,
-        )
 
     def merge_coplanar_faces(self, *, tolerance: float = 1e-9) -> Mesh3:
         """Merge connected coplanar face groups into larger polygon faces."""
@@ -274,7 +254,7 @@ class Mesh3:
 
     def decimate(self, target_faces: int, *, tolerance: float = 1e-9) -> Mesh3:
         """Return a simplified triangle mesh with at most ``target_faces`` faces."""
-        from cady.operations.mesh_topology import decimate_mesh_data
+        from cady.operations.mesh.topology import decimate_mesh_data
 
         target_count = _validate_target_faces(target_faces)
         _validate_tolerance(tolerance)
@@ -310,7 +290,7 @@ class Mesh3:
         tolerance: float = 1e-9,
     ) -> Mesh3:
         """Return a feature-preserving isotropic triangle remesh."""
-        from cady.operations.mesh_topology import remesh_mesh_data
+        from cady.operations.mesh.topology import remesh_mesh_data
 
         _validate_tolerance(tolerance)
         remeshed_vertices, remeshed_faces, remeshed_edges = remesh_mesh_data(
@@ -418,7 +398,7 @@ class Mesh3:
         originals stay connected, creating thin gaps that ``close_mesh``
         can fill.
         """
-        from cady.operations.mesh_clipping import close_planar_cap
+        from cady.operations.mesh.clipping import close_planar_cap
 
         _validate_tolerance(tolerance)
         if snap_tolerance is not None and snap_tolerance <= 0.0:
@@ -449,7 +429,7 @@ class Mesh3:
         edges. Dangling degree-1 edge branches are pruned before wall faces are
         generated.
         """
-        from cady.operations.mesh_clipping import close_to_plane as _close_to_plane_ops
+        from cady.operations.mesh.clipping import close_to_plane as _close_to_plane_ops
 
         _validate_tolerance(tolerance)
         if max_distance <= 0.0:
@@ -495,20 +475,6 @@ class Mesh3:
 
         faces = (*self.faces, *cap_faces)
         return Mesh3(self.vertices, faces, _face_edges(faces))
-
-    def close_holes(
-        self,
-        *,
-        tolerance: float = 1e-3,
-        max_hole_edges: int | None = None,
-    ) -> Mesh3:
-        """Fill non-planar holes via advancing-front triangulation.
-
-        Not yet implemented.
-        """
-        raise NotImplementedError(
-            "close_holes is not implemented; use close_mesh for planar hole filling"
-        )
 
     def to_wireframe(self) -> Wireframe3:
         """Extract all edges from faces as a Wireframe3."""

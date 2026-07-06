@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cady.geometry import Mesh3
-from cady.operations.meshes import (
+from cady.operations.linesplan_meshing import (
     LinesplanCurve,
     classify_linesplan_curves,
     mesh_linesplan_network,

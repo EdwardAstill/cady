@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady import Assembly, Body3, DisplayStyle, Mesh3, Part, box
+from cady import Assembly, Body3, DisplayStyle, Mesh3, Part
 
 
 def test_mesh_view_builds_centred_wire_scene_and_returns_none(
@@ -68,7 +68,7 @@ def test_body_view_accepts_scene_arguments(monkeypatch: pytest.MonkeyPatch) -> N
 def test_part_and_assembly_have_view_methods(monkeypatch: pytest.MonkeyPatch) -> None:
     view = pytest.importorskip("cady.view")
     opened: list[object] = []
-    part = Part("box").with_body(box(1.0, 1.0, 1.0))
+    part = Part("box").with_body(Body3.box(width=1.0, depth=1.0, height=1.0))
     assembly = Assembly("assy").add_part(part)
 
     def fake_view_scene(

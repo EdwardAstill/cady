@@ -1,4 +1,4 @@
-"""CAD-facing mesh construction helpers."""
+"""CAD-facing conversions from semantic geometry to mesh values."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.operations.coordinates import add3, scale3
-from cady.operations.mesh_topology import edge_loops
+from cady.operations.mesh.topology import edge_loops
+from cady.operations.primitives import add3, scale3
 from cady.operations.triangulate import triangulate
 from cady.utils import finite, loop_edges, positive_tolerance
 

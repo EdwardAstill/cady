@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from math import ceil, sqrt
 from typing import TYPE_CHECKING, TypeAlias, cast
 
-from cady.operations.coordinates import cross3, length3, scale3, sub3
+from cady.operations.primitives import cross3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]

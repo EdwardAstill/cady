@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from cady.geometry.plane3 import Plane3
-from cady.operations.coordinates import cross3, normalised2, normalised3, sub3
+from cady.operations.primitives import cross3, normalised2, normalised3, sub3
 
 SurfaceKind = Literal["plane", "parametric"]
 ScalarFunction = Callable[[float, float], float]

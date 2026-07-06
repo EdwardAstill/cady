@@ -105,16 +105,6 @@ class Scene:
         """Create a scene containing a single target."""
         return cls(name=name).add(target)
 
-    @classmethod
-    def from_part(cls, part: object, *, name: str = "scene") -> Scene:
-        """Create a single-part scene."""
-        return cls.from_target(part, name=name)
-
-    @classmethod
-    def from_assembly(cls, assembly: object, *, name: str = "scene") -> Scene:
-        """Create a single-assembly scene."""
-        return cls.from_target(assembly, name=name)
-
     def add(
         self,
         target: object,

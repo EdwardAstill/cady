@@ -9,7 +9,7 @@ from typing import TypeAlias
 from cady.errors import WriteError
 from cady.files.utils import mesh_from_target
 from cady.geometry import Mesh3
-from cady.operations.coordinates import cross3, normalised3, sub3
+from cady.operations.primitives import cross3, normalised3, sub3
 
 Point3: TypeAlias = tuple[float, float, float]
 Triangle3 = tuple[Point3, Point3, Point3]
@@ -19,7 +19,7 @@ def _f(value: float) -> str:
     return f"{value:.8g}"
 
 
-def write_ascii_stl(triangles: list[Triangle3], path: Path) -> None:
+def _write_ascii_stl(triangles: list[Triangle3], path: Path) -> None:
     """Write triangles to an ASCII STL file."""
     if not triangles:
         raise WriteError("cannot write empty STL mesh")
@@ -45,7 +45,7 @@ def normal_for_triangle(tri: Triangle3) -> Point3:
         return (0.0, 0.0, 0.0)
 
 
-def write_binary_stl(triangles: list[Triangle3], path: Path) -> None:
+def _write_binary_stl(triangles: list[Triangle3], path: Path) -> None:
     """Write triangles to a binary STL file."""
     if not triangles:
         raise WriteError("cannot write empty STL mesh")
@@ -83,9 +83,9 @@ def write(
     triangles = list(_triangles(mesh, tolerance=tolerance))
     output = Path(path)
     if ascii:
-        write_ascii_stl(triangles, output)
+        _write_ascii_stl(triangles, output)
     else:
-        write_binary_stl(triangles, output)
+        _write_binary_stl(triangles, output)
     return target
 
 
@@ -100,4 +100,4 @@ def _triangles(mesh: Mesh3, *, tolerance: float) -> tuple[Triangle3, ...]:
     )
 
 
-__all__ = ["write", "write_ascii_stl", "write_binary_stl"]
+__all__ = ["write"]

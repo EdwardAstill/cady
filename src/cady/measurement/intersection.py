@@ -11,7 +11,7 @@ from cady.measurement.distance import (
     line_points,
     plane_origin_normal,
 )
-from cady.operations.coordinates import cross3, dot3, scale3, sub3
+from cady.operations.primitives import cross3, dot3, scale3, sub3
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]

@@ -19,15 +19,11 @@ from cady.view.style import DisplayStyle
 if TYPE_CHECKING:
     from cady.view.viewer import (
         view_lines,
-        view_mesh,
-        view_meshes,
         view_scene,
     )
 _VIEWER_EXPORTS = frozenset(
     {
         "view_lines",
-        "view_mesh",
-        "view_meshes",
         "view_scene",
     }
 )
@@ -64,7 +60,5 @@ __all__ = [
     "ViewError",
     "prepare_scene",
     "view_lines",
-    "view_mesh",
-    "view_meshes",
     "view_scene",
 ]

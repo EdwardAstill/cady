@@ -232,7 +232,7 @@ class Polyline2:
         if not self.closed:
             raise GeometryError("Polyline2 must be closed to create a mesh")
         tolerance = positive_tolerance(tolerance)
-        from cady.operations.meshing import closed_polyline_mesh2
+        from cady.operations.mesh.construction import closed_polyline_mesh2
 
         return closed_polyline_mesh2(self, tolerance=tolerance)
 
@@ -462,7 +462,7 @@ class Polyline3:
             raise GeometryError("Polyline3 must be closed to create a mesh")
         tolerance = positive_tolerance(tolerance)
 
-        from cady.operations.meshing import closed_polyline_mesh3
+        from cady.operations.mesh.construction import closed_polyline_mesh3
 
         try:
             return closed_polyline_mesh3(self, tolerance=tolerance)

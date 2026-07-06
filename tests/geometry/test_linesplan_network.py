@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cady.geometry import Wireframe3
-from cady.operations.meshes import classify_linesplan_curves
+from cady.operations.linesplan_meshing import classify_linesplan_curves
 
 
 @dataclass(frozen=True, slots=True)

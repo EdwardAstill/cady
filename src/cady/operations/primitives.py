@@ -1,4 +1,4 @@
-"""Tuple coordinate arithmetic helpers."""
+"""Low-level tuple coordinate primitives."""
 
 from __future__ import annotations
 

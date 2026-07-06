@@ -257,21 +257,6 @@ def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
         _ = mesh.boundary_loops
 
 
-# ── close_holes stub ──────────────────────────────────────────────────────
-
-
-def test_close_holes_raises_not_implemented() -> None:
-    mesh = _cube_minus_top()
-    with pytest.raises(NotImplementedError, match="close_holes"):
-        mesh.close_holes(tolerance=1e-3)
-
-
-def test_close_holes_accepts_max_hole_edges() -> None:
-    mesh = _cube_minus_top()
-    with pytest.raises(NotImplementedError, match="close_holes"):
-        mesh.close_holes(tolerance=1e-3, max_hole_edges=100)
-
-
 # ── ops-level close_planar_cap ────────────────────────────────────────────
 
 

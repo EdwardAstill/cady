@@ -351,11 +351,13 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2:
                 layer=layer,
             )
         elif entity_type in {"TEXT", "MTEXT"}:
-            drawing = drawing.add_text(
-                _string(chunk, 1, ""),
-                at=(_float(chunk, 10), _float(chunk, 20)),
-                height=_float(chunk, 40, 0.1),
-                layer=layer,
+            drawing = drawing.add_entity(
+                Text2(
+                    _string(chunk, 1, ""),
+                    at=(_float(chunk, 10), _float(chunk, 20)),
+                    height=_float(chunk, 40, 0.1),
+                    layer=layer,
+                )
             )
     return drawing
 

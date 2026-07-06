@@ -52,11 +52,11 @@ Build a plate region, put the 2D curves into a drawing, extrude the region
 into a part, and write DXF/STL files:
 
 ```python
-from cady import Body3, Drawing2, Part, Region2, circle2, line2, region_rectangle
+from cady import Body3, Circle2, Drawing2, Line2, Part, Region2, Text2
 from cady.files import dxf, stl
 
-outline = region_rectangle(1.0, 0.6)
-hole = circle2((0.5, 0.3), 0.12)
+outline = Region2.rectangle(1.0, 0.6)
+hole = Circle2((0.5, 0.3), 0.12)
 region = Region2(outline.outer, holes=(hole,))
 
 drawing = (
@@ -65,8 +65,8 @@ drawing = (
     .add_layer("CENTER", color=3, linetype="CENTER")
     .add(region.outer, layer="PLATE")
     .add(hole, layer="PLATE")
-    .add(line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
-    .add_text("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE")
+    .add(Line2((0.5, 0.05), (0.5, 0.55)), layer="CENTER")
+    .add_entity(Text2("PLATE", at=(0.02, 0.02), height=0.03, layer="PLATE"))
 )
 
 body = Body3.from_region(region).extrude(0.04)

@@ -7,7 +7,7 @@ import pytest
 
 from cady.geometry.polyline import Polyline2, Polyline3
 from cady.operations import triangulate
-from cady.operations.meshing import closed_polyline_mesh2, closed_polyline_mesh3
+from cady.operations.mesh.construction import closed_polyline_mesh2, closed_polyline_mesh3
 
 
 def test_triangulate_returns_nodes_edges_and_triangle_faces() -> None:

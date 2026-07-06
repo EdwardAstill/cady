@@ -23,6 +23,9 @@ not the older `Line2D`/`Body3D`/`Drawing2D` style.
 - Keep module imports light. Optional GUI dependencies must be imported only
   inside functions or lazily imported viewer modules that actually launch or
   prepare those paths.
+- Do not add compatibility aliases, duplicate public entry points, or parallel
+  operation/API paths. Each operation or API process should have one canonical
+  way to do it; remove or migrate old paths instead of preserving shims.
 - Do not reintroduce removed packages or aliases: `build`, `domain`,
   `exporters`, `factories`, `geom`, `geometry2`, `geometry3`, `importers`,
   `model`, `numeric`, `ops`, `plotting`, `read`, `scene`, `visualisation`, or
@@ -94,8 +97,9 @@ Evaluation layer:
   them. For type-checking clarity and safety, define small type aliases near the
   top of that file when they make the code easier to read.
 - `operations.transforms` owns `Transform2` and `Transform3`.
-- `operations.coordinates`, `transforms`, `meshes`, `meshing`,
-  `mesh_clipping`, `mesh_topology`, `triangulation`, `advancing_front`,
+- `operations.primitives`, `transforms`, `operations.mesh.construction`,
+  `operations.mesh.primitives`, `operations.mesh.clipping`,
+  `operations.mesh.topology`, `triangulation`, `surface_reconstruction`,
   `lofting`, and `wireframes` own numeric algorithms.
 - `measurement` owns object-level distance, intersection, area, and volume-style
   queries. It may import `geometry` objects.
@@ -161,9 +165,8 @@ Top-level `cady` re-exports currently include:
 
 Subpackage exports are broader than top-level exports:
 
-- `cady.operations` also exports `Transform2`, `Transform3`, transform helpers,
-  mesh clipping helpers, triangulation helpers, `TriangulationGuide`,
-  `sphere_triangles`, and lightweight semantic constructors.
+- `cady.operations` also exports `Transform2`, `Transform3`, mesh clipping
+  helpers, triangulation helpers, and `sphere_triangles`.
 - `cady.measurement` exports object-level query helpers such as `distance(...)`
   and `intersection(...)`, plus their small result dataclasses.
 - `cady.drawing` also exports `DrawingItem`, `Dimension2`, and
@@ -173,15 +176,14 @@ Subpackage exports are broader than top-level exports:
   top-level `cady`.
 - `cady.view` exposes backend-independent preparation types and helpers:
   `RenderScene`, `SceneLine`, `SceneMesh`, and `prepare_scene`. It lazily
-  exposes viewer-opening helpers: `view_scene`, `view_target`, `view_mesh`,
-  `view_meshes`, and `view_lines`.
+  exposes viewer-opening helpers: `view_scene` and `view_lines`.
 - `cady.document` also exports `DocumentItem`, `DocumentKind`, and
   `document_from_mapping`.
 
 When adding a public value, update the local package `__init__.py`, then
 `src/cady/__init__.py` if it belongs at top level, then tests. Do not add
-backwards-compatible aliases for removed names unless the tests and project
-direction change first.
+backwards-compatible aliases for removed names or secondary spellings for new
+names.
 
 ## Geometry Notes
 
@@ -214,25 +216,32 @@ direction change first.
 
 Use `cady.operations` for array and primitive algorithms:
 
+- Keep one canonical operation path for each workflow. Do not keep compatibility
+  re-export modules, old helper names, or alternate APIs once a clearer module
+  or function name exists.
 - Do not recreate a central `operations/arrays.py` module. Keep NumPy-backed
   helper logic close to the operation that needs it, and use file-local type
   aliases at the top of the file when that improves type checking and safety.
 - Keep validation minimal. Validate public construction inputs and explicit
   conversion boundaries, but avoid broad helper layers that make the code harder
   to read or complicate straightforward geometry logic.
-- `coordinates.py` contains low-level tuple/vector math.
-- `meshes.py` contains mesh construction, primitive meshing, clipping, capping,
-  boundary closure, topology, region-loop extraction, mesh-local projection
-  helpers, mesh-local sampling helpers, and loft/wireframe helpers.
-- `meshing.py` owns conversion-oriented meshing helpers for closed polylines,
-  surface regions, and wireframe-to-mesh workflows.
-- `mesh_clipping.py` owns plane cuts and planar/boundary closure helpers.
-- `mesh_topology.py` owns mesh simplification and topology operations such as
+- `primitives.py` contains low-level tuple/vector math.
+- `mesh/construction.py` owns conversion-oriented meshing helpers for closed
+  polylines, surface regions, region extrusions, and wireframe-to-mesh
+  workflows.
+- `mesh/primitives.py` contains primitive triangle builders and semantic
+  `Mesh3` constructors for simple primitive bodies.
+- `linesplan_meshing.py` owns linesplan curve classification and simple station
+  network meshing.
+- `mesh/clipping.py` owns plane cuts and planar/boundary closure helpers.
+- `mesh/topology.py` owns mesh simplification and topology operations such as
   decimation.
 - `transforms.py` contains `Transform2` and `Transform3`.
 - `triangulation.py` contains polygon triangulation and deduplication helpers.
-- `advancing_front.py`, `lofting.py`, and `wireframes.py` own focused surface
-  reconstruction, lofting, and wireframe algorithms.
+- `surface_reconstruction/` owns point-cloud-to-surface reconstruction
+  algorithms such as advancing front.
+- `lofting.py` and `wireframes.py` own focused lofting and wireframe
+  algorithms.
 
 Operations code may import `numpy` and standard library modules. Keep it free of
 application-level package imports so it remains reusable and testable.
@@ -289,10 +298,9 @@ dependency would violate convention tests.
 ## View Layer
 
 `cady.view` is backend-independent until viewer-opening helpers are requested.
-Its `__getattr__` lazily exposes Vispy-facing helpers such as `view_scene`,
-`view_target`, `view_mesh`, `view_meshes`, and `view_lines`. The
-backend-independent `RenderScene`, `SceneLine`, `SceneMesh`, and
-`prepare_scene` values live in `scene.py`.
+Its `__getattr__` lazily exposes Vispy-facing helpers such as `view_scene` and
+`view_lines`. The backend-independent `RenderScene`, `SceneLine`, `SceneMesh`,
+and `prepare_scene` values live in `scene.py`.
 
 Do not import PyQt, Vispy, or OpenGL modules from core geometry/product/drawing
 code. User-facing `.view(...)` methods should late-import
@@ -314,7 +322,8 @@ code. User-facing `.view(...)` methods should late-import
 
 1. Add the feature record in `geometry/body3.py` only if it belongs to `Body3`
    history.
-2. Add evaluation in `operations/meshes.py` or a focused operations helper.
+2. Add evaluation in `operations/mesh/primitives.py` or a focused operations
+   helper.
 3. Wire `_feature_to_mesh` and transform behavior.
 4. Add tests for successful meshing and unsupported paths.
 

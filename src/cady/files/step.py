@@ -11,7 +11,7 @@ surfaces (PLANE, CYLINDRICAL_SURFACE, CONICAL_SURFACE).
 Usage::
 
 
-    faces = read_step("part.stp")
+    faces = read_faces("part.stp")
     for f in faces:
         print(f.surface_type, f.normal, f.centroid)
 """
@@ -29,7 +29,7 @@ from typing import Any, Protocol, cast
 from cady.errors import WriteError
 from cady.files.utils import mesh_from_target
 from cady.geometry import Mesh3
-from cady.operations.coordinates import (
+from cady.operations.primitives import (
     add3,
     dot3,
     is_parallel3,
@@ -60,7 +60,7 @@ class _P21Module(Protocol):
         """Read an ISO 10303-21 file."""
 
 
-def read_step(path: str | Path) -> list[StepFace]:
+def _read_step(path: str | Path) -> list[StepFace]:
     """Read a STEP file and return all faces with resolved geometry.
 
     Args:
@@ -612,14 +612,14 @@ class IdAllocator:
 
 """Reconstruct extruded structural members from STEP face lists.
 
-Given the raw face list from :func:`cady.files.step.read_step`, this module
+Given the raw face list from :func:`cady.files.step.read_faces`, this module
 detects end-cap pairs, groups side faces, classifies cross-sections, and
 reconstructs extruded members with their centreline axes.
 
 Usage::
 
 
-    faces = read_step("frame.stp")
+    faces = read_faces("frame.stp")
     members = extract_members_from_faces(faces)
     for m in members:
         print(m.name, m.section.section_type)
@@ -980,18 +980,6 @@ def _cylinder_group_endpoints(
     )
 
 
-__all__ = [
-    "ExtrudedMember",
-    "ExtrudedSection",
-    "classify_section_from_faces",
-    "extract_members_from_faces",
-    "find_end_caps",
-    "group_cylinders_into_members",
-]
-
-read_step_faces = read_step
-
-
 def render(target: object, *, tolerance: float = 1e-3) -> str:
     """Render a mesh-coercible target as a minimal STEP AP214-style document."""
     mesh = _mesh_from_target(target, tolerance=tolerance)
@@ -1033,7 +1021,7 @@ def write(target: object, path: str | Path, *, tolerance: float = 1e-3) -> objec
 
 def read_faces(path: str | Path) -> list[StepFace]:
     """Read STEP faces with resolved elementary-surface metadata."""
-    return read_step(path)
+    return _read_step(path)
 
 
 def read_members(path: str | Path) -> list[ExtrudedMember]:
@@ -1056,8 +1044,6 @@ __all__ = [
     "group_cylinders_into_members",
     "read_faces",
     "read_members",
-    "read_step",
-    "read_step_faces",
     "render",
     "write",
 ]

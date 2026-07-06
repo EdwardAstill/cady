@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from math import acos, degrees, isfinite
 from typing import Any, Literal, TypeAlias, cast
 
-from cady.operations.coordinates import dot3, length3, sub3
+from cady.operations.primitives import dot3, length3, sub3
 from cady.view.errors import ViewError
 
 Point3: TypeAlias = tuple[float, float, float]

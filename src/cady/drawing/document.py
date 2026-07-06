@@ -7,15 +7,7 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
 from cady.drawing._geometry import Bounds2, Point2, merge_bounds, transformed_bounds
-from cady.drawing.dimensions import (
-    AlignedDimension2,
-    AngularDimension2,
-    DiameterDimension2,
-    Dimension2,
-    DimStyle,
-    LinearDimension2,
-    RadiusDimension2,
-)
+from cady.drawing.dimensions import Dimension2, DimStyle
 from cady.drawing.entities import BlockDefinition, DrawingEntity, Hatch2, Insert2, Text2
 from cady.drawing.layers import Layer
 
@@ -86,15 +78,6 @@ class Drawing2:
             raise ValueError(f"layer already exists with different settings: {value.name}")
         return replace(self, layers=(*self.layers, value))
 
-    def with_layer(
-        self,
-        layer: Layer | str,
-        *,
-        color: int = 7,
-        linetype: str = "CONTINUOUS",
-    ) -> Drawing2:
-        return self.add_layer(layer, color=color, linetype=linetype)
-
     def layer(self, name: str) -> Layer | None:
         """Return the named layer, if present."""
         return next((layer for layer in self.layers if layer.name == name), None)
@@ -108,28 +91,6 @@ class Drawing2:
         drawing = self._with_entity_layers(entity)
         drawing._validate_entity(entity)
         return replace(drawing, entities=(*drawing.entities, entity))
-
-    def add_text(
-        self,
-        text: str,
-        *,
-        at: Point2,
-        height: float,
-        layer: str = "0",
-        rotation: float = 0.0,
-    ) -> Drawing2:
-        return self.add_entity(Text2(text, at, height, layer, rotation))
-
-    def hatch(
-        self,
-        boundary: object,
-        *,
-        layer: str = "0",
-        pattern: str = "ANSI31",
-        angle: float = 45.0,
-        scale: float = 1.0,
-    ) -> Drawing2:
-        return self.add_entity(Hatch2(boundary, layer, pattern, angle, scale))
 
     def add_block(self, block: BlockDefinition) -> Drawing2:
         """Return a new drawing with an added block definition."""
@@ -169,123 +130,6 @@ class Drawing2:
 
     def add_dimension(self, dimension: Dimension2) -> Drawing2:
         return self.add_entity(dimension)
-
-    def linear_dimension(
-        self,
-        p1: Point2,
-        p2: Point2,
-        *,
-        offset: float,
-        layer: str = "DIMENSIONS",
-        text: str | None = None,
-        text_height: float = 0.025,
-        dim_style: str = "Standard",
-    ) -> Drawing2:
-        return self.add_dimension(
-            LinearDimension2(
-                p1,
-                p2,
-                offset,
-                layer,
-                text,
-                text_height,
-                dim_style,
-            )
-        )
-
-    def aligned_dimension(
-        self,
-        p1: Point2,
-        p2: Point2,
-        *,
-        offset: float,
-        layer: str = "DIMENSIONS",
-        text: str | None = None,
-        text_height: float = 0.025,
-        dim_style: str = "Standard",
-    ) -> Drawing2:
-        return self.add_dimension(
-            AlignedDimension2(
-                p1,
-                p2,
-                offset,
-                layer,
-                text,
-                text_height,
-                dim_style,
-            )
-        )
-
-    def radius_dimension(
-        self,
-        center: Point2,
-        radius: float,
-        *,
-        angle: float = 0.0,
-        layer: str = "DIMENSIONS",
-        text: str | None = None,
-        text_height: float = 0.025,
-        dim_style: str = "Standard",
-    ) -> Drawing2:
-        return self.add_dimension(
-            RadiusDimension2(
-                center,
-                radius,
-                angle,
-                layer,
-                text,
-                text_height,
-                dim_style,
-            )
-        )
-
-    def diameter_dimension(
-        self,
-        center: Point2,
-        radius: float,
-        *,
-        angle: float = 0.0,
-        layer: str = "DIMENSIONS",
-        text: str | None = None,
-        text_height: float = 0.025,
-        dim_style: str = "Standard",
-    ) -> Drawing2:
-        return self.add_dimension(
-            DiameterDimension2(
-                center,
-                radius,
-                angle,
-                layer,
-                text,
-                text_height,
-                dim_style,
-            )
-        )
-
-    def angular_dimension(
-        self,
-        center: Point2,
-        p1: Point2,
-        p2: Point2,
-        distance: float,
-        *,
-        layer: str = "DIMENSIONS",
-        text: str | None = None,
-        text_height: float = 0.025,
-        dim_style: str = "Standard",
-    ) -> Drawing2:
-        return self.add_dimension(
-            AngularDimension2(
-                center,
-                p1,
-                p2,
-                distance,
-                layer,
-                text,
-                text_height,
-                dim_style,
-            )
-        )
 
     def with_header(self, name: str, value: int | float | str) -> Drawing2:
         header = dict(self.header)

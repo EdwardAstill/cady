@@ -10,7 +10,7 @@ def view_format(
     wireframe: bool = True,
 ) -> None:
     if mesh:
-        dxf.view_mesh(DXF_FILE)
+        dxf.read_mesh(DXF_FILE).view()
     if wireframe:
         dxf.read_wireframe(DXF_FILE).view()
 

@@ -15,7 +15,7 @@ point3 = (1.0, 2.0, 3.0)
 ```
 
 There is no public `Vec2` or `Vec3` value type. Use tuples for construction and
-the helpers in `cady.operations.coordinates` when operation code needs vector
+the helpers in `cady.operations.primitives` when operation code needs vector
 arithmetic.
 
 ## 2D geometry
@@ -32,7 +32,7 @@ holes. It stays semantic until `loops(tolerance=...)` or `to_array(tolerance=...
 samples the boundary curves.
 
 ```python
-from cady import Polyline2, Region2, circle2, region_rectangle
+from cady import Circle2, Polyline2, Region2
 
 outline = Polyline2(
     ((0.0, 0.0), (1.0, 0.0), (1.0, 0.6), (0.0, 0.6)),
@@ -40,8 +40,8 @@ outline = Polyline2(
 )
 mesh = outline.to_mesh(tolerance=1e-3)
 
-plate = region_rectangle(1.0, 0.6)
-hole = circle2((0.5, 0.3), 0.12)
+plate = Region2.rectangle(1.0, 0.6)
+hole = Circle2((0.5, 0.3), 0.12)
 region = Region2(plate.outer, holes=(hole,))
 loops = region.loops(tolerance=1e-3)
 ```
@@ -54,7 +54,7 @@ right-handed. `Surface2` and `Surface3` are parametric surfaces, and `Region3`
 places a 2D parameter region on a `Surface3`.
 
 ```python
-from cady import Plane3, Region3, Surface3, region_rectangle
+from cady import Plane3, Region2, Region3, Surface3
 
 plane = Plane3.from_normal(
     origin=(0.0, 0.0, 5.0),
@@ -63,7 +63,7 @@ plane = Plane3.from_normal(
 point = plane.point(0.5, 0.3)
 
 surface = Surface3.plane(plane=plane)
-patch = Region3.from_region(region_rectangle(1.0, 0.6), surface=surface)
+patch = Region3.from_region(Region2.rectangle(1.0, 0.6), surface=surface)
 mesh = patch.to_mesh(tolerance=1e-3)
 ```
 
@@ -94,14 +94,14 @@ Unsupported features such as revolve, boolean, fillet, and chamfer can stay in
 history until evaluators exist.
 
 ```python
-from cady import Body3, box, cylinder, region_rectangle
+from cady import Body3, Region2
 
-profile = region_rectangle(1.0, 0.6)
+profile = Region2.rectangle(1.0, 0.6)
 body = Body3.from_region(profile).extrude(0.04)
 mesh = body.to_mesh(tolerance=1e-3)
 
-box_body = box(width=1.0, depth=0.6, height=0.04)
-cylinder_body = cylinder(radius=0.5, height=2.0)
+box_body = Body3.box(width=1.0, depth=0.6, height=0.04)
+cylinder_body = Body3.cylinder(radius=0.5, height=2.0)
 ```
 
 `Part`, `Assembly`, and `Document` group geometry without changing the geometry

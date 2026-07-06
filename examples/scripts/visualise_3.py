@@ -18,7 +18,7 @@ from example_geometry import (
     scene_summary,
 )
 
-from cady import Assembly, Body3, Part, box, sphere
+from cady import Assembly, Body3, Part
 from cady.view import view_scene
 
 
@@ -43,9 +43,9 @@ def _target_for_shape(shape: str) -> object:
     if shape == "plate":
         return build_plate()
     if shape == "box":
-        return box(1.0, 0.6, 0.4)
+        return Body3.box(width=1.0, depth=0.6, height=0.4)
     if shape == "sphere":
-        return sphere(0.5, centre=(0.5, 0.3, 0.5))
+        return Body3.sphere(radius=0.5, centre=(0.5, 0.3, 0.5))
     if shape == "assembly":
         return build_assembly()
     raise ValueError(f"unknown shape: {shape}")

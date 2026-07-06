@@ -12,7 +12,7 @@ from pathlib import Path
 from cady import Polyline3
 from cady.errors import ReadError
 from cady.files import dxf
-from cady.operations.meshes import classify_linesplan_curves
+from cady.operations.linesplan_meshing import classify_linesplan_curves
 
 ROOT = Path(__file__).resolve().parents[2]
 LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"

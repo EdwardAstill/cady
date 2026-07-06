@@ -13,7 +13,7 @@ from math import cos, sin
 from pathlib import Path
 from typing import NamedTuple
 
-from cady import Camera, DirectionalLight, DisplayStyle, Mesh3, Scene, box, cylinder
+from cady import Body3, Camera, DirectionalLight, DisplayStyle, Mesh3, Scene
 from cady.errors import GeometryError
 from cady.operations import Transform3
 
@@ -85,7 +85,7 @@ def build_case(
             target_faces or 120,
         )
     if key == "closed-box":
-        mesh = box(1.2, 1.0, 0.8).to_mesh(tolerance=1e-3)
+        mesh = Body3.box(width=1.2, depth=1.0, height=0.8).to_mesh(tolerance=1e-3)
         return DecimationCase(
             key,
             "closed box mesh",
@@ -93,7 +93,7 @@ def build_case(
             target_faces or 10,
         )
     if key == "closed-cylinder":
-        mesh = cylinder(1.0, 1.5).to_mesh(tolerance=0.1)
+        mesh = Body3.cylinder(radius=1.0, height=1.5).to_mesh(tolerance=0.1)
         return DecimationCase(
             key,
             "closed cylinder mesh",

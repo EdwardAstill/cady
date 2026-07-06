@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, cast
 
 from cady.geometry.mesh import Mesh3
 from cady.geometry.plane3 import Plane3
-from cady.operations.meshes import (
+from cady.operations.mesh.construction import extrusion_mesh
+from cady.operations.mesh.primitives import (
     box_mesh,
     cylinder_mesh,
     sphere_mesh,
 )
-from cady.operations.meshing import extrusion_mesh
 from cady.operations.transforms import Transform3
 from cady.utils import finite, positive
 

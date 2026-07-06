@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.errors import GeometryError
-from cady.operations.mesh_topology import (
+from cady.operations.mesh.topology import (
     boundary_edges,
     boundary_edges_from_faces,
     compact_mesh_data,
@@ -165,7 +165,8 @@ def close_boundary(
             raise ValueError(
                 f"Boundary loop is non-planar (max deviation {deviation:.3e} > "
                 f"tolerance {tolerance:.3e}); "
-                "close_holes is not implemented - use close_boundary for planar holes only"
+                "non-planar hole filling is not implemented; "
+                "use close_boundary for planar holes only"
             )
         projected = _project_loop(loop, vertices_list, loop_origin, loop_normal)
         all_cap_faces.extend(

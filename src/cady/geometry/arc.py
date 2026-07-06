@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import acos, atan2, ceil, cos, pi, sin
 from typing import TYPE_CHECKING, TypeAlias
 
-from cady.operations.coordinates import add3, dot3, length3, scale3
+from cady.operations.primitives import add3, dot3, length3, scale3
 from cady.utils import finite, positive, positive_tolerance
 
 Point2: TypeAlias = tuple[float, float]

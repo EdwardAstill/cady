@@ -33,7 +33,7 @@ from cady import (
     Scene,
     Wireframe3,
 )
-from cady.operations.meshes import (
+from cady.operations.linesplan_meshing import (
     LinesplanNetwork,
     classify_linesplan_curves,
 )

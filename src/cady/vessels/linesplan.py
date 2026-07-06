@@ -12,8 +12,8 @@ from typing import TypeAlias, cast
 from cady.errors import ReadError
 from cady.files import dxf
 from cady.geometry import Mesh3, Polyline3, Wireframe3
-from cady.operations.meshes import classify_linesplan_curves
-from cady.operations.meshing import closed_polyline_mesh3
+from cady.operations.linesplan_meshing import classify_linesplan_curves
+from cady.operations.mesh.construction import closed_polyline_mesh3
 
 _Point3: TypeAlias = tuple[float, float, float]
 _Face: TypeAlias = tuple[int, int, int]

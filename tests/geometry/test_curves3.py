@@ -4,12 +4,11 @@ from math import pi
 
 import pytest
 
-from cady import arc3, line3, polyline3, spline3
 from cady.errors import GeometryError
 from cady.geometry.arc import Arc3
+from cady.geometry.line import Line3
 from cady.geometry.mesh import Mesh3
 from cady.geometry.polyline import (
-    Line3,
     Polyline3,
 )
 from cady.geometry.spline import Spline3
@@ -74,7 +73,7 @@ def test_arc3_samples_in_custom_plane() -> None:
 
 
 def test_line3_factory_and_sampling() -> None:
-    line = line3((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
+    line = Line3((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
 
     assert isinstance(line, Line3)
     assert line.points() == ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
@@ -111,7 +110,7 @@ def test_spline3_length_property_contributes_to_polyline_length() -> None:
 
 
 def test_spline3_factory_and_adaptive_sampling() -> None:
-    spline = spline3(
+    spline = Spline3(
         (
             (0.0, 0.0, 0.0),
             (0.0, 1.0, 0.0),
@@ -146,7 +145,7 @@ def test_polyline3_composes_curves_and_discretizes_to_lines() -> None:
         )
     )
 
-    polyline = polyline3((line,)).add(arc).add(spline)
+    polyline = Polyline3((line,)).add(arc).add(spline)
     discretized = polyline.discretize(tolerance=1e-2)
 
     assert isinstance(polyline, Polyline3)
@@ -162,7 +161,7 @@ def test_polyline3_composes_curves_and_discretizes_to_lines() -> None:
 
 
 def test_arc3_factory_and_polyline_from_curves() -> None:
-    arc = arc3(
+    arc = Arc3(
         (0.0, 0.0, 0.0),
         1.0,
         0.0,
