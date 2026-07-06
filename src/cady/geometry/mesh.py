@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import fsum, sqrt
+from math import floor, fsum, sqrt
 from operator import index as operator_index
 from typing import TYPE_CHECKING, TypeAlias
 
@@ -84,6 +84,18 @@ class Mesh2:
     def area(self) -> float:
         """Sum of triangle face areas."""
         return float(_mesh2_area(self.vertices, self.faces))
+
+    def face_areas(self) -> np.ndarray:
+        """Return one area per triangle face."""
+        from cady.operations.mesh.statistics import face_areas
+
+        return face_areas(self.triangles)
+
+    def radius_ratios(self) -> np.ndarray:
+        """Return one radius ratio per triangle face."""
+        from cady.operations.mesh.statistics import radius_ratios
+
+        return radius_ratios(self.triangles)
 
     @property
     def boundary(self) -> tuple[Point2, Point2]:
@@ -309,10 +321,30 @@ class Mesh3:
         )
         return _mesh_from_arrays(remeshed_vertices, remeshed_faces, remeshed_edges)
 
+    def snap_close_nodes(self, *, tolerance: float) -> Mesh3:
+        """Return a mesh with vertices closer than ``tolerance`` merged."""
+        _validate_tolerance(tolerance)
+        vertices, remap = _snap_close_vertices(self.vertices, tolerance=tolerance)
+        faces = _snap_remap_faces(self.faces, remap)
+        edges = _snap_remap_edges(self.edges, remap)
+        return Mesh3(vertices, faces, edges)
+
     @property
     def area(self) -> float:
         """Sum of face surface areas after boundary triangulation."""
         return float(_mesh3_area(self.vertices, self.triangulated_faces()))
+
+    def face_areas(self) -> np.ndarray:
+        """Return one area per triangulated face."""
+        from cady.operations.mesh.statistics import face_areas
+
+        return face_areas(self.triangles)
+
+    def radius_ratios(self) -> np.ndarray:
+        """Return one radius ratio per triangulated face."""
+        from cady.operations.mesh.statistics import radius_ratios
+
+        return radius_ratios(self.triangles)
 
     @property
     def volume(self) -> float:
@@ -324,6 +356,11 @@ class Mesh3:
         is always non-negative regardless of face winding.
         """
         return float(_mesh3_volume(self.vertices, self.triangulated_faces()))
+
+    @property
+    def closed(self) -> bool:
+        """Return True when every face edge is shared by exactly two faces."""
+        return _faces_are_closed(self.faces)
 
     @property
     def boundary(self) -> tuple[Point3, Point3]:
@@ -557,6 +594,116 @@ def _face_edges(faces: tuple[FaceIndex, ...]) -> tuple[EdgeIndex, ...]:
         for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
             edges.add((min(start, end), max(start, end)))
     return tuple(sorted(edges))
+
+
+def _faces_are_closed(faces: tuple[FaceIndex, ...]) -> bool:
+    if not faces:
+        return False
+
+    counts: dict[EdgeIndex, int] = {}
+    for face in faces:
+        indices = tuple(int(index) for index in face)
+        for start, end in zip(indices, indices[1:] + indices[:1], strict=True):
+            edge = (min(start, end), max(start, end))
+            counts[edge] = counts.get(edge, 0) + 1
+
+    return bool(counts) and all(count == 2 for count in counts.values())
+
+
+def _snap_close_vertices(
+    points: tuple[Point3, ...],
+    *,
+    tolerance: float,
+) -> tuple[tuple[Point3, ...], tuple[int, ...]]:
+    cells: dict[tuple[int, int, int], list[int]] = defaultdict(list)
+    vertices: list[Point3] = []
+    remap: list[int] = []
+
+    for point in points:
+        vertex = (float(point[0]), float(point[1]), float(point[2]))
+        match = _nearest_snap_vertex(vertex, vertices, cells, tolerance=tolerance)
+        if match is None:
+            match = len(vertices)
+            vertices.append(vertex)
+            cells[_snap_cell(vertex, tolerance)].append(match)
+        remap.append(match)
+
+    return tuple(vertices), tuple(remap)
+
+
+def _nearest_snap_vertex(
+    point: Point3,
+    vertices: list[Point3],
+    cells: dict[tuple[int, int, int], list[int]],
+    *,
+    tolerance: float,
+) -> int | None:
+    best_index: int | None = None
+    best_distance = tolerance
+    for cell in _snap_neighbour_cells(_snap_cell(point, tolerance)):
+        for index in cells.get(cell, ()):
+            distance = _length3(_sub3(point, vertices[index]))
+            if distance <= best_distance:
+                best_index = index
+                best_distance = distance
+    return best_index
+
+
+def _snap_cell(point: Point3, tolerance: float) -> tuple[int, int, int]:
+    return (
+        floor(point[0] / tolerance),
+        floor(point[1] / tolerance),
+        floor(point[2] / tolerance),
+    )
+
+
+def _snap_neighbour_cells(cell: tuple[int, int, int]) -> Iterable[tuple[int, int, int]]:
+    x, y, z = cell
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                yield (x + dx, y + dy, z + dz)
+
+
+def _snap_remap_faces(
+    faces: tuple[FaceIndex, ...],
+    remap: tuple[int, ...],
+) -> tuple[FaceIndex, ...]:
+    cleaned_faces: list[FaceIndex] = []
+    seen_faces: set[tuple[int, ...]] = set()
+
+    for face in faces:
+        mapped: list[int] = []
+        for index in face:
+            new_index = remap[index]
+            if not mapped or mapped[-1] != new_index:
+                mapped.append(new_index)
+        if len(mapped) > 1 and mapped[0] == mapped[-1]:
+            mapped.pop()
+        if len(set(mapped)) < 3:
+            continue
+
+        clean = tuple(mapped)
+        key = tuple(sorted(clean))
+        if key in seen_faces:
+            continue
+        seen_faces.add(key)
+        cleaned_faces.append(clean)
+
+    return tuple(cleaned_faces)
+
+
+def _snap_remap_edges(
+    edges: tuple[EdgeIndex, ...],
+    remap: tuple[int, ...],
+) -> tuple[EdgeIndex, ...]:
+    cleaned_edges: set[EdgeIndex] = set()
+    for start, end in edges:
+        remapped_start = remap[start]
+        remapped_end = remap[end]
+        if remapped_start != remapped_end:
+            cleaned_edges.add(_edge_key(remapped_start, remapped_end))
+    return tuple(sorted(cleaned_edges))
 
 
 def _simplified_face_boundary(

@@ -80,6 +80,59 @@ def test_mesh_boundary_loops_returns_empty_tuple_when_mesh_is_closed() -> None:
     assert mesh.boundary_loops == ()
 
 
+def test_mesh_closed_is_true_when_each_face_edge_has_two_faces() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ),
+        ((0, 2, 1), (0, 1, 3), (1, 2, 3), (2, 0, 3)),
+    )
+
+    assert mesh.closed
+
+
+def test_mesh_closed_is_false_for_open_mesh() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 1, 2),),
+        ((0, 1), (1, 2), (2, 0)),
+    )
+
+    assert not mesh.closed
+
+
+def test_mesh_closed_is_false_for_non_manifold_edges() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ),
+        ((0, 1, 2), (1, 0, 3), (0, 1, 4)),
+    )
+
+    assert not mesh.closed
+
+
+def test_mesh_closed_is_false_for_edge_only_mesh() -> None:
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+        (),
+        ((0, 1),),
+    )
+
+    assert not mesh.closed
+
+
 def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
     mesh = Mesh3(
         (
