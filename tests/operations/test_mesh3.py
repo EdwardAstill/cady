@@ -133,6 +133,46 @@ def test_mesh_closed_is_false_for_edge_only_mesh() -> None:
     assert not mesh.closed
 
 
+def test_mesh_snap_close_nodes_merges_vertices_and_remaps_topology() -> None:
+    mesh = Mesh3(
+        (
+            (0.0, 0.0, 0.0),
+            (0.0005, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ),
+        ((0, 2, 3), (1, 2, 3)),
+        ((0, 1), (1, 2), (2, 3), (3, 0)),
+    )
+
+    snapped = mesh.snap_close_nodes(tolerance=1e-3)
+
+    assert snapped.vertices == (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    )
+    assert snapped.faces == ((0, 1, 2),)
+    assert snapped.edges == ((0, 1), (0, 2), (1, 2))
+
+
+def test_mesh_snap_close_nodes_keeps_vertices_outside_tolerance() -> None:
+    mesh = Mesh3(
+        ((0.0, 0.0, 0.0), (0.002, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        ((0, 2, 3), (1, 2, 3)),
+    )
+
+    snapped = mesh.snap_close_nodes(tolerance=1e-3)
+
+    assert snapped.vertices == mesh.vertices
+    assert snapped.faces == mesh.faces
+
+
+def test_mesh_snap_close_nodes_rejects_non_positive_tolerance() -> None:
+    with pytest.raises(ValueError, match="tolerance must be positive"):
+        Mesh3((), ()).snap_close_nodes(tolerance=0.0)
+
+
 def test_mesh_boundary_loops_raises_for_non_manifold_edges() -> None:
     mesh = Mesh3(
         (

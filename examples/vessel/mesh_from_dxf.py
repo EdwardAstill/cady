@@ -1,8 +1,4 @@
-"""Sketch the target vessel Linesplan API for meshing a DXF linesplan.
-
-This example documents the intended public API before the playground
-linesplan workflow is adopted into :mod:`cady.vessels`.
-"""
+"""Build and view a vessel mesh from a DXF linesplan."""
 
 from __future__ import annotations
 
