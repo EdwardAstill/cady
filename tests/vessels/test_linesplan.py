@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from math import dist
 from pathlib import Path
+from statistics import mean
 
 import pytest
 
@@ -19,6 +21,11 @@ def test_linesplan_from_dxf_builds_cleaned_station_polylines() -> None:
     assert tuple(len(group) for group in linesplan.polyline_groups) == (65, 4)
     assert isinstance(linesplan.settings, LinesplanMeshSettings)
     assert all(len(polyline.points()) >= 2 for polyline in linesplan.polylines)
+    assert all(
+        max(point[0] for point in polyline.points())
+        == min(point[0] for point in polyline.points())
+        for polyline in linesplan.polylines
+    )
     assert all(
         point[1] == 0.0
         for polyline in linesplan.polylines
@@ -94,9 +101,15 @@ def test_linesplan_to_mesh_returns_closed_triangular_mesh() -> None:
     mesh = linesplan.to_mesh()
 
     assert isinstance(mesh, Mesh3)
-    assert len(mesh.vertices) == 2962
-    assert len(mesh.faces) == 5920
-    assert len(mesh.edges) == 8880
+    assert linesplan.settings.node_spacing == pytest.approx(
+        _average_cleaned_polyline_spacing(linesplan)
+    )
+    assert linesplan.settings.mesh_snap_tolerance == pytest.approx(
+        linesplan.settings.node_spacing * 0.25
+    )
+    assert len(mesh.vertices) == 12276
+    assert len(mesh.faces) == 24548
+    assert len(mesh.edges) == 36822
     assert all(len(face) == 3 for face in mesh.faces)
     assert mesh.closed
     assert mesh.boundary_loops == ()
@@ -110,8 +123,11 @@ def test_linesplan_settings_scale_for_small_dxf() -> None:
     assert len(linesplan.polylines) == 23
     assert tuple(len(group) for group in linesplan.polyline_groups) == (23, 0)
     assert linesplan.settings.dxf_snap_tolerance < 1.0
-    assert len(mesh.vertices) == 1263
-    assert len(mesh.faces) == 2522
+    assert linesplan.settings.node_spacing == pytest.approx(
+        _average_cleaned_polyline_spacing(linesplan)
+    )
+    assert len(mesh.vertices) == 699
+    assert len(mesh.faces) == 1394
     assert mesh.closed
 
 
@@ -119,3 +135,11 @@ def test_linesplan_api_does_not_import_from_playground() -> None:
     source = (ROOT / "src" / "cady" / "vessels" / "linesplan.py").read_text()
 
     assert "playground" not in source
+
+
+def _average_cleaned_polyline_spacing(linesplan: Linesplan) -> float:
+    return mean(
+        dist(start, end)
+        for polyline in linesplan.polylines
+        for start, end in zip(polyline.points(), polyline.points()[1:], strict=False)
+    )

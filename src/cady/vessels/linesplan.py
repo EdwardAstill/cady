@@ -143,6 +143,22 @@ class Linesplan:
         )
         if len(prepared_station_polylines) < 2:
             raise ReadError("DXF contained fewer than two connected station line curves")
+        if node_spacing is None or mesh_snap_tolerance is None:
+            prepared_node_spacing = (
+                _average_polyline_spacing(prepared_station_polylines)
+                if node_spacing is None
+                else settings.node_spacing
+            )
+            prepared_snap_tolerance = (
+                prepared_node_spacing * 0.25
+                if mesh_snap_tolerance is None
+                else settings.mesh_snap_tolerance
+            )
+            settings = _settings_with_spacing(
+                settings,
+                node_spacing=prepared_node_spacing,
+                mesh_snap_tolerance=prepared_snap_tolerance,
+            )
 
         polyline_groups = _split_station_lines(
             prepared_station_polylines,
@@ -280,10 +296,11 @@ class Linesplan:
         )
         closed_mesh = _try_close_mesh(combined_mesh, tolerance=mesh_tolerance)
         triangulation_input = _split_quad_faces(closed_mesh)
-        return _triangulate_mesh_faces(
+        triangulated_mesh = _triangulate_mesh_faces(
             triangulation_input,
             tolerance=mesh_tolerance,
         ).snap_close_nodes(tolerance=snap_tolerance)
+        return _try_close_mesh(triangulated_mesh, tolerance=mesh_tolerance)
 
 
 def _resolve_mesh_settings(
@@ -295,7 +312,13 @@ def _resolve_mesh_settings(
     node_spacing: float | None = None,
     short_projection_ratio: float | None = None,
 ) -> LinesplanMeshSettings:
+    station_lines = tuple(station_lines)
     domain_length = _station_domain_length(station_lines)
+    resolved_node_spacing = _setting_value(
+        node_spacing,
+        _average_polyline_spacing(station_lines),
+        "node_spacing",
+    )
     settings = LinesplanMeshSettings(
         dxf_snap_tolerance=_setting_value(
             dxf_snap_tolerance,
@@ -309,14 +332,10 @@ def _resolve_mesh_settings(
         ),
         mesh_snap_tolerance=_setting_value(
             mesh_snap_tolerance,
-            domain_length * 0.0028,
+            resolved_node_spacing * 0.25,
             "mesh_snap_tolerance",
         ),
-        node_spacing=_setting_value(
-            node_spacing,
-            domain_length * 0.0112,
-            "node_spacing",
-        ),
+        node_spacing=resolved_node_spacing,
         short_projection_ratio=_ratio_setting_value(
             short_projection_ratio,
             0.3,
@@ -335,6 +354,21 @@ def _validate_mesh_settings(settings: LinesplanMeshSettings) -> None:
     _validate_ratio(settings.short_projection_ratio, "short_projection_ratio")
 
 
+def _settings_with_spacing(
+    settings: LinesplanMeshSettings,
+    *,
+    node_spacing: float,
+    mesh_snap_tolerance: float,
+) -> LinesplanMeshSettings:
+    return LinesplanMeshSettings(
+        dxf_snap_tolerance=settings.dxf_snap_tolerance,
+        mesh_geometry_tolerance=settings.mesh_geometry_tolerance,
+        mesh_snap_tolerance=_validate_tolerance(mesh_snap_tolerance, "mesh_snap_tolerance"),
+        node_spacing=_validate_tolerance(node_spacing, "node_spacing"),
+        short_projection_ratio=settings.short_projection_ratio,
+    )
+
+
 def _setting_value(value: float | None, default: float, name: str) -> float:
     return _validate_tolerance(default if value is None else value, name)
 
@@ -351,6 +385,17 @@ def _station_domain_length(station_lines: Iterable[Polyline3]) -> float:
     if span <= 0.0:
         raise ValueError("station_lines must have a positive x span")
     return span
+
+
+def _average_polyline_spacing(station_lines: Iterable[Polyline3]) -> float:
+    spacings = tuple(
+        dist(start, end)
+        for polyline in station_lines
+        for start, end in zip(polyline.points(), polyline.points()[1:], strict=False)
+    )
+    if not spacings:
+        raise ValueError("station_lines must contain at least one segment")
+    return sum(spacings) / len(spacings)
 
 
 def _process_station_lines(
@@ -496,7 +541,8 @@ def _prepare_station_line(polyline: Polyline3, *, tolerance: float) -> Polyline3
     prepared = Polyline3(points)
     if prepared.end[2] > prepared.start[2]:
         prepared = prepared.reverse()
-    return prepared
+    x = float(median(point[0] for point in prepared.points()))
+    return Polyline3(tuple((x, point[1], point[2]) for point in prepared.points()))
 
 
 def _split_station_lines(
