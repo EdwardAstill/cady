@@ -26,7 +26,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
-from cady.errors import WriteError
+from cady.errors import ReadError, WriteError
 from cady.files.utils import mesh_from_target
 from cady.geometry import Mesh3
 from cady.operations.primitives import (
@@ -1019,6 +1019,24 @@ def write(target: object, path: str | Path, *, tolerance: float = 1e-3) -> objec
     return target
 
 
+def read_mesh(path: str | Path) -> Mesh3:
+    """Read displayable polygon mesh geometry from a STEP file."""
+    p21 = cast(_P21Module, import_module("steputils.p21"))
+    step_file = p21.readfile(str(path))
+    if not step_file.data:
+        raise ReadError(f"STEP file has no DATA section: {path}")
+
+    instances = step_file.data[0].instances
+    vertices: list[tuple[float, float, float]] = []
+    point_indices: dict[tuple[float, float, float], int] = {}
+    faces = _mesh_poly_loop_faces(instances, vertices, point_indices)
+    if not faces:
+        faces = _mesh_advanced_face_faces(instances, vertices, point_indices)
+    if not faces:
+        raise ReadError(f"STEP file contains no displayable mesh geometry: {path}")
+    return Mesh3(tuple(vertices), tuple(faces), _mesh_face_edges(faces))
+
+
 def read_faces(path: str | Path) -> list[StepFace]:
     """Read STEP faces with resolved elementary-surface metadata."""
     return _read_step(path)
@@ -1033,6 +1051,215 @@ def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
     return mesh_from_target(target, tolerance=tolerance)
 
 
+def _mesh_poly_loop_faces(
+    instances: Mapping[str, Any],
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+) -> list[tuple[int, ...]]:
+    faces: list[tuple[int, ...]] = []
+    for inst in instances.values():
+        entity = _mesh_entity(inst)
+        if entity.name != "POLY_LOOP" or len(entity.params) < 2:
+            continue
+        face: list[int] = []
+        for ref in _mesh_iter_step_refs(entity.params[1]):
+            point = _mesh_cartesian_point(instances, ref)
+            if point is not None:
+                face.append(_mesh_point_index(vertices, point_indices, point))
+        if len(face) >= 3:
+            faces.append(tuple(face))
+    return faces
+
+
+def _mesh_advanced_face_faces(
+    instances: Mapping[str, Any],
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+) -> list[tuple[int, ...]]:
+    faces: list[tuple[int, ...]] = []
+    for inst in instances.values():
+        entity = _mesh_entity(inst)
+        if entity.name != "ADVANCED_FACE":
+            continue
+        face = _mesh_advanced_face_outer_loop(instances, entity, vertices, point_indices)
+        if len(face) >= 3:
+            faces.append(face)
+    return faces
+
+
+def _mesh_advanced_face_outer_loop(
+    instances: Mapping[str, Any],
+    face_entity: Any,
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+) -> tuple[int, ...]:
+    if len(face_entity.params) < 2:
+        return ()
+    for bound_ref in _mesh_iter_step_refs(face_entity.params[1]):
+        bound = _mesh_resolve_entity(instances, bound_ref)
+        if bound is None or bound.name != "FACE_OUTER_BOUND" or len(bound.params) < 2:
+            continue
+        loop = _mesh_resolve_entity(instances, _mesh_first_step_ref(bound.params[1]))
+        if loop is None or loop.name != "EDGE_LOOP":
+            continue
+        face = _mesh_edge_loop_face(instances, loop, vertices, point_indices)
+        if len(face) >= 3:
+            return face
+    return ()
+
+
+def _mesh_edge_loop_face(
+    instances: Mapping[str, Any],
+    loop_entity: Any,
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+) -> tuple[int, ...]:
+    face: list[int] = []
+    for oriented_ref in _mesh_loop_oriented_edges(loop_entity):
+        oriented = _mesh_resolve_entity(instances, oriented_ref)
+        if oriented is None or oriented.name != "ORIENTED_EDGE" or len(oriented.params) < 5:
+            continue
+        edge = _mesh_resolve_entity(instances, _mesh_first_step_ref(oriented.params[3]))
+        if edge is None or edge.name != "EDGE_CURVE":
+            continue
+        edge_indices = _mesh_edge_curve_indices(instances, edge, vertices, point_indices)
+        if _mesh_false_param(oriented.params[4]):
+            edge_indices = tuple(reversed(edge_indices))
+        _mesh_append_ordered_edge(face, edge_indices)
+    return tuple(face)
+
+
+def _mesh_loop_oriented_edges(loop_entity: Any) -> tuple[str, ...]:
+    for param in loop_entity.params:
+        refs = tuple(_mesh_iter_step_refs(param))
+        if refs:
+            return refs
+    return ()
+
+
+def _mesh_edge_curve_indices(
+    instances: Mapping[str, Any],
+    edge_entity: Any,
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+) -> tuple[int, ...]:
+    indices: list[int] = []
+    for param_idx in (1, 2):
+        if len(edge_entity.params) <= param_idx:
+            continue
+        point = _mesh_vertex_point(instances, _mesh_first_step_ref(edge_entity.params[param_idx]))
+        if point is not None:
+            indices.append(_mesh_point_index(vertices, point_indices, point))
+    if len(indices) != 2:
+        return ()
+    return (indices[0], indices[1])
+
+
+def _mesh_append_ordered_edge(face: list[int], edge: tuple[int, ...]) -> None:
+    if len(edge) != 2:
+        return
+    start, end = edge
+    if not face:
+        face.extend((start, end))
+    elif face[-1] == start:
+        face.append(end)
+    elif face[-1] == end:
+        face.append(start)
+    elif face[0] == end:
+        face.insert(0, start)
+    elif face[0] == start:
+        face.insert(0, end)
+    else:
+        face.extend((start, end))
+    if len(face) > 2 and face[0] == face[-1]:
+        face.pop()
+
+
+def _mesh_vertex_point(
+    instances: Mapping[str, Any],
+    ref: str | None,
+) -> tuple[float, float, float] | None:
+    entity = _mesh_resolve_entity(instances, ref)
+    if entity is None:
+        return None
+    if entity.name == "CARTESIAN_POINT":
+        return _point_from_cartesian(entity)
+    if entity.name != "VERTEX_POINT" or len(entity.params) < 2:
+        return None
+    return _mesh_cartesian_point(instances, _mesh_first_step_ref(entity.params[1]))
+
+
+def _mesh_cartesian_point(
+    instances: Mapping[str, Any],
+    ref: str | None,
+) -> tuple[float, float, float] | None:
+    entity = _mesh_resolve_entity(instances, ref)
+    if entity is None or entity.name != "CARTESIAN_POINT":
+        return None
+    return _point_from_cartesian(entity)
+
+
+def _mesh_point_index(
+    vertices: list[tuple[float, float, float]],
+    point_indices: dict[tuple[float, float, float], int],
+    point: tuple[float, float, float],
+) -> int:
+    key = _mesh_point_key(point)
+    index = point_indices.get(key)
+    if index is not None:
+        return index
+    point_indices[key] = len(vertices)
+    vertices.append(point)
+    return len(vertices) - 1
+
+
+def _mesh_resolve_entity(instances: Mapping[str, Any], ref: str | None) -> Any | None:
+    if ref is None:
+        return None
+    inst = instances.get(ref)
+    if inst is None:
+        return None
+    return _mesh_entity(inst)
+
+
+def _mesh_entity(inst: Any) -> Any:
+    if hasattr(inst, "entities"):
+        return inst.entities[0]
+    return inst.entity
+
+
+def _mesh_first_step_ref(value: object) -> str | None:
+    return next(iter(_mesh_iter_step_refs(value)), None)
+
+
+def _mesh_iter_step_refs(value: object) -> Iterable[str]:
+    if isinstance(value, str):
+        if value.startswith("#"):
+            yield value
+        return
+    if not isinstance(value, Iterable):
+        return
+    for item in cast(Iterable[object], value):
+        yield from _mesh_iter_step_refs(item)
+
+
+def _mesh_false_param(value: object) -> bool:
+    return isinstance(value, str) and value.upper() == ".F."
+
+
+def _mesh_point_key(point: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (round(point[0], 12), round(point[1], 12), round(point[2], 12))
+
+
+def _mesh_face_edges(faces: Iterable[tuple[int, ...]]) -> tuple[tuple[int, int], ...]:
+    edges: set[tuple[int, int]] = set()
+    for face in faces:
+        for index, start in enumerate(face):
+            end = face[(index + 1) % len(face)]
+            edges.add((min(start, end), max(start, end)))
+    return tuple(sorted(edges))
+
+
 __all__ = [
     "ExtrudedMember",
     "ExtrudedSection",
@@ -1043,6 +1270,7 @@ __all__ = [
     "find_end_caps",
     "group_cylinders_into_members",
     "read_faces",
+    "read_mesh",
     "read_members",
     "render",
     "write",

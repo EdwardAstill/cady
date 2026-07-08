@@ -234,6 +234,21 @@ def test_step_render_keeps_polygon_mesh_faces_as_poly_loops() -> None:
     assert "POLY_LOOP('',(#1,#2,#3,#4));" in text
 
 
+def test_step_read_mesh_from_written_poly_loops(tmp_path: Path) -> None:
+    mesh = Mesh3(
+        ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)),
+        ((0, 1, 2, 3),),
+    )
+    path = tmp_path / "quad.step"
+
+    step.write(mesh, path, tolerance=1e-9)
+
+    imported = step.read_mesh(path)
+    assert imported.vertices == mesh.vertices
+    assert imported.faces == mesh.faces
+    assert imported.edges == ((0, 1), (0, 3), (1, 2), (2, 3))
+
+
 def test_step_render_document_with_meshable_parts() -> None:
     document = Document("job").add_part(
         Part("box").with_body(Body3.box(width=1, depth=1, height=1))

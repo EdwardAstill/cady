@@ -85,7 +85,7 @@ def test_preferred_package_imports() -> None:
     assert cut_mesh_by_plane
     assert all((mesh_operations, clipping, construction, primitives, topology, cross3))
     assert all((dxf.render, dxf.write, dxf.read_drawing, dxf.read_mesh, dxf.read_wireframe))
-    assert all((stl.write, step.render, step.write, step.read_faces))
+    assert all((stl.write, step.render, step.write, step.read_mesh, step.read_faces))
 
 
 def test_view_overlay_module_exports() -> None:
