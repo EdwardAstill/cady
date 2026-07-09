@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import degrees, radians
+from math import cos, degrees, pi, radians, sin
 from pathlib import Path
 from typing import TypeAlias, cast
 
@@ -261,9 +261,9 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "8",
             layer,
             "10",
-            _f(geometry.centre[0]),
+            _f(geometry.center[0]),
             "20",
-            _f(geometry.centre[1]),
+            _f(geometry.center[1]),
             "40",
             _f(geometry.radius),
         ]
@@ -274,9 +274,9 @@ def _geometry_lines(geometry: object, layer: str, *, tolerance: float) -> list[s
             "8",
             layer,
             "10",
-            _f(geometry.centre[0]),
+            _f(geometry.center[0]),
             "20",
-            _f(geometry.centre[1]),
+            _f(geometry.center[1]),
             "40",
             _f(geometry.radius),
             "50",
@@ -341,12 +341,17 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2:
                 layer=layer,
             )
         elif entity_type == "ARC":
+            center = (_float(chunk, 10), _float(chunk, 20))
+            radius = _float(chunk, 40)
+            start_rad = radians(_float(chunk, 50))
+            end_rad = radians(_float(chunk, 51))
+            while end_rad <= start_rad:
+                end_rad += 2.0 * pi
             drawing = drawing.add(
                 Arc2(
-                    (_float(chunk, 10), _float(chunk, 20)),
-                    _float(chunk, 40),
-                    radians(_float(chunk, 50)),
-                    radians(_float(chunk, 51)),
+                    center,
+                    _arc_point(center, radius, start_rad),
+                    _arc_point(center, radius, start_rad + (end_rad - start_rad) * 0.5),
                 ),
                 layer=layer,
             )
@@ -360,6 +365,10 @@ def _parse_drawing(pairs: tuple[_Pair, ...]) -> Drawing2:
                 )
             )
     return drawing
+
+
+def _arc_point(center: Point2, radius: float, angle: float) -> Point2:
+    return (center[0] + radius * cos(angle), center[1] + radius * sin(angle))
 
 
 def _parse_meshes(

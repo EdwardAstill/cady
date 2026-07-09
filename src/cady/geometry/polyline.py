@@ -511,7 +511,7 @@ def _reverse_curve2(curve: Curve2) -> Curve2:
     from cady.geometry.spline import Spline2
 
     if isinstance(curve, Arc2):
-        return Arc2(curve.centre, curve.radius, curve.end_rad, curve.start_rad)
+        return Arc2(curve.center, curve.end, curve.midpoint)
     if isinstance(curve, Spline2):
         return Spline2(tuple(reversed(curve.control_points)), closed=curve.closed)
     raise GeometryError(f"{type(curve).__name__} cannot be reversed")
@@ -531,14 +531,7 @@ def _reverse_curve3(curve: Curve3) -> Curve3:
     from cady.geometry.spline import Spline3
 
     if isinstance(curve, Arc3):
-        return Arc3(
-            curve.centre,
-            curve.radius,
-            curve.end_rad,
-            curve.start_rad,
-            x_axis=curve.x_axis,
-            y_axis=curve.y_axis,
-        )
+        return Arc3(curve.center, curve.end, curve.midpoint)
     if isinstance(curve, Spline3):
         return Spline3(tuple(reversed(curve.control_points)))
     raise GeometryError(f"{type(curve).__name__} cannot be reversed")

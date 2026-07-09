@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import pi
+from math import pi, sqrt
 
 import pytest
 
@@ -8,10 +8,12 @@ from cady.errors import GeometryError
 from cady.geometry.arc import Arc3
 from cady.geometry.line import Line3
 from cady.geometry.mesh import Mesh3
+from cady.geometry.point import Point3
 from cady.geometry.polyline import (
     Polyline3,
 )
 from cady.geometry.spline import Spline3
+from cady.geometry.vector import Vector3
 
 
 def _face_normal_z(mesh: Mesh3, face: tuple[int, int, int]) -> float:
@@ -49,11 +51,8 @@ def test_closed_polyline3_planar_square_to_mesh() -> None:
 def test_arc3_samples_in_custom_plane() -> None:
     arc = Arc3(
         (0.0, 0.0, 0.0),
-        2.0,
-        -pi / 2.0,
-        pi / 2.0,
-        x_axis=(0.0, 0.0, -1.0),
-        y_axis=(0.0, 1.0, 0.0),
+        (0.0, -2.0, 0.0),
+        (0.0, 0.0, -2.0),
     )
 
     assert arc.points()[0] == pytest.approx((0.0, -2.0, 0.0))
@@ -76,6 +75,7 @@ def test_line3_factory_and_sampling() -> None:
     line = Line3((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
 
     assert isinstance(line, Line3)
+    assert isinstance(line.start, Point3)
     assert line.points() == ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
     assert line.to_array(tolerance=1e-3).tolist() == [
         [0.0, 0.0, 0.0],
@@ -85,7 +85,11 @@ def test_line3_factory_and_sampling() -> None:
 
 def test_curve3_length_properties_are_exact_for_lines_and_arcs() -> None:
     line = Line3((0.0, 0.0, 0.0), (2.0, 3.0, 6.0))
-    arc = Arc3((0.0, 0.0, 0.0), 2.0, 0.0, pi / 2.0)
+    arc = Arc3(
+        (0.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (sqrt(2.0), sqrt(2.0), 0.0),
+    )
     polyline = Polyline3((line, arc))
 
     assert line.length == pytest.approx(7.0)
@@ -128,13 +132,28 @@ def test_spline3_factory_and_adaptive_sampling() -> None:
     assert len(polyline.vertices) > 2
 
 
+def test_spline3_can_be_defined_by_points_and_vectors() -> None:
+    spline = Spline3(
+        ((0.0, 0.0, 0.0), (3.0, 0.0, 0.0)),
+        (Vector3(3.0, 0.0, 0.0), Vector3(3.0, 0.0, 0.0)),
+    )
+
+    assert spline.control_points == (
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (3.0, 0.0, 0.0),
+    )
+    assert isinstance(spline.control_points[0], Point3)
+    assert spline.length == pytest.approx(3.0)
+
+
 def test_polyline3_composes_curves_and_discretizes_to_lines() -> None:
     line = Line3((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
     arc = Arc3(
         (1.0, 1.0, 0.0),
-        1.0,
-        -pi / 2.0,
-        0.0,
+        (1.0, 0.0, 0.0),
+        (1.0 + 2.0**-0.5, 1.0 - 2.0**-0.5, 0.0),
     )
     spline = Spline3(
         (
@@ -163,11 +182,8 @@ def test_polyline3_composes_curves_and_discretizes_to_lines() -> None:
 def test_arc3_factory_and_polyline_from_curves() -> None:
     arc = Arc3(
         (0.0, 0.0, 0.0),
-        1.0,
-        0.0,
-        pi,
-        x_axis=(1.0, 0.0, 0.0),
-        y_axis=(0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0),
     )
 
     polyline = Polyline3.from_curves((arc,), tolerance=1e-3)

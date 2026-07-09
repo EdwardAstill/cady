@@ -22,7 +22,7 @@ def test_region_rectangle_returns_closed_polyline_with_expected_bounds() -> None
 
 
 def test_region_circle_wraps_circle_boundary() -> None:
-    region = Region2.circle(2, centre=(3, 4))
+    region = Region2.circle(2, center=(3, 4))
 
     assert isinstance(region.outer, Circle2)
     assert region.bounds() == ((1, 2), (5, 6))

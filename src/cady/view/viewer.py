@@ -133,7 +133,7 @@ def open_target_view(
     # Centering applies only as a scene pose, leaving the original target value
     # unchanged while giving the default camera a stable origin to orbit.
     pose = _origin_pose(bounds) if center else None
-    camera_bounds = _centred_bounds(bounds) if center else bounds
+    camera_bounds = _centered_bounds(bounds) if center else bounds
     resolved_style = style or _default_style(
         color=color,
         render_mode=render_mode,
@@ -247,7 +247,7 @@ def _fit_camera(
 ) -> Camera:
     """Fit a simple front-right-above camera to the given bounds."""
     lower, upper = bounds
-    centre = (
+    center = (
         (lower[0] + upper[0]) / 2.0,
         (lower[1] + upper[1]) / 2.0,
         (lower[2] + upper[2]) / 2.0,
@@ -256,20 +256,20 @@ def _fit_camera(
     radius = max(sqrt(span[0] ** 2 + span[1] ** 2 + span[2] ** 2) / 2.0, 1.0)
     distance = radius * 3.0
     position = (
-        centre[0] + distance,
-        centre[1] - distance,
-        centre[2] + distance * 0.65,
+        center[0] + distance,
+        center[1] - distance,
+        center[2] + distance * 0.65,
     )
     if projection == "perspective":
         return Camera.perspective(
             position=position,
-            target=centre,
+            target=center,
             fov_degrees=DEFAULT_FOV_DEGREES,
         )
     if projection != "orthographic":
         raise ViewError("projection must be 'orthographic' or 'perspective'")
     scale = max(span[2], span[0] / DEFAULT_VIEW_ASPECT, span[1], 1.0) * FIT_PADDING
-    return Camera.orthographic(position=position, target=centre, scale=scale)
+    return Camera.orthographic(position=position, target=center, scale=scale)
 
 
 def _target_name(target: object) -> str:
@@ -285,22 +285,22 @@ def _origin_pose(
     from cady.operations import Transform3
 
     lower, upper = bounds
-    centre = _centre(lower, upper)
-    return Transform3().translate(-centre[0], -centre[1], -centre[2])
+    center = _center(lower, upper)
+    return Transform3().translate(-center[0], -center[1], -center[2])
 
 
-def _centred_bounds(
+def _centered_bounds(
     bounds: tuple[tuple[float, float, float], tuple[float, float, float]],
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     lower, upper = bounds
-    centre = _centre(lower, upper)
+    center = _center(lower, upper)
     return (
-        (lower[0] - centre[0], lower[1] - centre[1], lower[2] - centre[2]),
-        (upper[0] - centre[0], upper[1] - centre[1], upper[2] - centre[2]),
+        (lower[0] - center[0], lower[1] - center[1], lower[2] - center[2]),
+        (upper[0] - center[0], upper[1] - center[1], upper[2] - center[2]),
     )
 
 
-def _centre(
+def _center(
     lower: tuple[float, float, float],
     upper: tuple[float, float, float],
 ) -> tuple[float, float, float]:

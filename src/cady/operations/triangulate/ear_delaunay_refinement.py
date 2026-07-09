@@ -562,21 +562,21 @@ def _interior_seed2(nodes, indices, tolerance):
 
     best = None
     best_distance = tolerance
-    centre = (lower + upper) / 2.0
-    best_centre_distance = float("inf")
+    center = (lower + upper) / 2.0
+    best_center_distance = float("inf")
     for candidate in candidates:
         if not _point_in_loop2(candidate, nodes, indices, tolerance):
             continue
         boundary_distance = _distance_to_loop2(candidate, nodes, indices)
-        centre_distance = float(np.linalg.norm(candidate - centre))
+        center_distance = float(np.linalg.norm(candidate - center))
         if (
             boundary_distance > best_distance
             or abs(boundary_distance - best_distance) <= tolerance
-            and centre_distance < best_centre_distance
+            and center_distance < best_center_distance
         ):
             best = candidate
             best_distance = boundary_distance
-            best_centre_distance = centre_distance
+            best_center_distance = center_distance
     return best
 
 

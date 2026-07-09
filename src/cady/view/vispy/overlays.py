@@ -172,7 +172,7 @@ class LocalAxesRenderer:
     normals: np.ndarray
     colors: np.ndarray
     index_buffer: object
-    local_centre: np.ndarray
+    local_center: np.ndarray
     gloo: Any
     visible: bool = False
 
@@ -181,11 +181,11 @@ class LocalAxesRenderer:
         cls,
         overlay: LocalAxesOverlay,
         *,
-        local_centre: np.ndarray,
+        local_center: np.ndarray,
         gloo: Any,
     ) -> LocalAxesRenderer:
         colors = (overlay.x_color, overlay.y_color, overlay.z_color)
-        positions, indices, axis_colors = local_axis_line_data(local_centre, 1.0, colors)
+        positions, indices, axis_colors = local_axis_line_data(local_center, 1.0, colors)
         _solid_positions, normals, _solid_colors = solid_color_vertices(
             positions,
             (0.0, 0.0, 0.0),
@@ -195,7 +195,7 @@ class LocalAxesRenderer:
             normals=normals,
             colors=np.ascontiguousarray(axis_colors, dtype=np.float32),
             index_buffer=index_buffer(indices, gloo),
-            local_centre=local_centre,
+            local_center=local_center,
             gloo=gloo,
             visible=overlay.visible,
         )
@@ -204,7 +204,7 @@ class LocalAxesRenderer:
         self.visible = not self.visible
 
     def update_length(self, length: float) -> None:
-        positions, _indices, _colors = local_axis_line_data(self.local_centre, length)
+        positions, _indices, _colors = local_axis_line_data(self.local_center, length)
         self.positions = np.ascontiguousarray(positions, dtype=np.float32)
 
     def draw(self, program: Any) -> None:
@@ -336,7 +336,7 @@ def create_scale_bar_renderer(
 def create_local_axes_renderer(
     prepared: RenderScene,
     *,
-    local_centre: np.ndarray,
+    local_center: np.ndarray,
     gloo: Any,
 ) -> LocalAxesRenderer | None:
     overlay = local_axes_overlay(prepared)
@@ -344,7 +344,7 @@ def create_local_axes_renderer(
         return None
     return LocalAxesRenderer.create(
         overlay,
-        local_centre=local_centre,
+        local_center=local_center,
         gloo=gloo,
     )
 

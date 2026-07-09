@@ -187,14 +187,14 @@ class Body3:
         cls,
         *,
         radius: float,
-        centre: Point3 = (0.0, 0.0, 0.0),
+        center: Point3 = (0.0, 0.0, 0.0),
     ) -> Body3:
         return cls(
             features=(
                 PrimitiveFeature(
                     "sphere",
                     {"radius": radius},
-                    Plane3.from_normal(centre, (0.0, 0.0, 1.0)),
+                    Plane3.from_normal(center, (0.0, 0.0, 1.0)),
                 ),
             )
         )

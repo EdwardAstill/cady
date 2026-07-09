@@ -20,9 +20,9 @@ def test_transform2_chains_sequential_operations() -> None:
     np.testing.assert_allclose(points, [[1.0, 2.0]], atol=1e-12)
 
 
-def test_transform2_centre_mirror_and_linear_transform() -> None:
-    around_centre = Transform2([[2.0, 1.0]]).rotate(pi / 2, centre=(1.0, 1.0)).array
-    np.testing.assert_allclose(around_centre, [[1.0, 2.0]], atol=1e-12)
+def test_transform2_center_mirror_and_linear_transform() -> None:
+    around_center = Transform2([[2.0, 1.0]]).rotate(pi / 2, center=(1.0, 1.0)).array
+    np.testing.assert_allclose(around_center, [[1.0, 2.0]], atol=1e-12)
 
     mirrored = Transform2([[2.0, 0.0]]).mirror((0.0, 0.0), (0.0, 1.0)).array
     np.testing.assert_allclose(mirrored, [[-2.0, 0.0]], atol=1e-12)
@@ -57,7 +57,7 @@ def test_transform3_scale_mirror_and_linear_transform() -> None:
         2.0,
         3.0,
         4.0,
-        centre=(1.0, 1.0, 1.0),
+        center=(1.0, 1.0, 1.0),
     ).array
     np.testing.assert_allclose(scaled, [[3.0, 7.0, 13.0]])
 

@@ -13,8 +13,10 @@ from cady.geometry import (
     Ellipse2,
     Line2,
     Mesh2,
+    Point2,
     Polyline2,
     Spline2,
+    Vector2,
 )
 
 
@@ -22,6 +24,7 @@ def test_line2_is_frozen_and_evaluates_to_polyline() -> None:
     line = Line2((0, 0), (2, 3))
 
     assert line.points() == ((0, 0), (2, 3))
+    assert isinstance(line.start, Point2)
     assert line.bounds() == ((0, 0), (2, 3))
     with pytest.raises(FrozenInstanceError):
         line.start = (1, 1)  # type: ignore[misc]
@@ -41,12 +44,13 @@ def test_to_array_requires_explicit_positive_tolerance() -> None:
 
 
 def test_arc2_samples_with_tolerance() -> None:
-    arc = Arc2((0, 0), 2, 0, pi / 2)
+    arc = Arc2((0, 0), (2, 0), (2**0.5, 2**0.5))
 
     start, end = arc.points()
     assert start == (2, 0)
     assert end[0] == pytest.approx(0.0)
     assert end[1] == pytest.approx(2.0)
+    assert arc.midpoint == pytest.approx((2**0.5, 2**0.5))
     min_bound, max_bound = arc.bounds()
     assert min_bound[0] == pytest.approx(0.0)
     assert min_bound[1] == pytest.approx(0.0)
@@ -68,7 +72,11 @@ def test_arc2_samples_with_tolerance() -> None:
 
 def test_curve2_length_properties_are_exact_for_segments_and_circular_curves() -> None:
     assert Line2((0.0, 0.0), (3.0, 4.0)).length == pytest.approx(5.0)
-    assert Arc2((0.0, 0.0), 2.0, 0.0, pi / 2.0).length == pytest.approx(pi)
+    assert Arc2(
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0**0.5, 2.0**0.5),
+    ).length == pytest.approx(pi)
     assert Circle2((0.0, 0.0), 2.0).length == pytest.approx(4.0 * pi)
     assert Polyline2(((0.0, 0.0), (3.0, 0.0), (3.0, 4.0)), closed=True).length == (
         pytest.approx(12.0)
@@ -139,7 +147,11 @@ def test_polyline2_discontinuities_can_ignore_short_segments() -> None:
 
 def test_polyline2_with_curves_must_be_discretized_before_array_conversion() -> None:
     line = Line2((0.0, 0.0), (1.0, 0.0))
-    arc = Arc2((1.0, 1.0), 1.0, -pi / 2.0, 0.0)
+    arc = Arc2(
+        (1.0, 1.0),
+        (1.0, 0.0),
+        (1.0 + 2.0**-0.5, 1.0 - 2.0**-0.5),
+    )
     spline = Spline2(((2.0, 1.0), (2.0, 2.0), (3.0, 2.0), (3.0, 1.0)))
     polyline = Polyline2((line, arc, spline))
 
@@ -178,6 +190,8 @@ def test_circle2_and_ellipse2_are_closed_polyline_arrays() -> None:
     circle = Circle2((1, 2), 3)
     ellipse = Ellipse2((0, 0), 4, 2, rotation_rad=pi / 6)
 
+    assert isinstance(circle.center, Point2)
+    assert isinstance(ellipse.center, Point2)
     assert circle.bounds() == ((-2, -1), (4, 5))
     assert ellipse.bounds()[0][0] < -3.5
 
@@ -207,11 +221,27 @@ def test_spline2_samples_cubic_bezier_to_polyline() -> None:
     assert len(limited.vertices) > len(coarse.vertices)
 
 
+def test_spline2_can_be_defined_by_points_and_vectors() -> None:
+    spline = Spline2(
+        ((0.0, 0.0), (3.0, 0.0)),
+        (Vector2(3.0, 0.0), Vector2(3.0, 0.0)),
+    )
+
+    assert spline.control_points == (
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (3.0, 0.0),
+    )
+    assert isinstance(spline.control_points[0], Point2)
+    assert spline.length == pytest.approx(3.0)
+
+
 @pytest.mark.parametrize(
     "curve",
     [
         lambda: Line2((0, 0), (0, 0)),
-        lambda: Arc2((0, 0), 0, 0, 1),
+        lambda: Arc2((0, 0), (0, 0), (1, 0)),
         lambda: Polyline2(((0, 0),)),
         lambda: Polyline2(((0, 0), (1, 0)), closed=True),
         lambda: Circle2((0, 0), -1),

@@ -139,12 +139,12 @@ def _make_vispy_canvas(
             self._point_batches = geometry.point_batches
             self._interaction = ViewerInteractionState.from_camera(
                 render_scene.camera,
-                local_centre=geometry.bounds.local_centre,
+                local_center=geometry.bounds.local_center,
                 radius=geometry.bounds.radius,
             )
             self._local_axes = create_local_axes_renderer(
                 render_scene,
-                local_centre=geometry.bounds.local_centre,
+                local_center=geometry.bounds.local_center,
                 gloo=gloo,
             )
             self._scale_bar = create_scale_bar_renderer(

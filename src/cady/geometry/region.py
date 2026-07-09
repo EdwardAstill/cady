@@ -48,8 +48,8 @@ class Region2:
         return cls(_rectangle_boundary(width, height, origin=origin))
 
     @classmethod
-    def circle(cls, radius: float, *, centre: Point2 = (0.0, 0.0)) -> Region2:
-        return cls(Circle2(centre, radius))
+    def circle(cls, radius: float, *, center: Point2 = (0.0, 0.0)) -> Region2:
+        return cls(Circle2(center, radius))
 
     def bounds(self) -> tuple[Point2, Point2]:
         return self.outer.bounds()
@@ -315,7 +315,7 @@ def _plane_from_points(points: tuple[Point3, ...]) -> Plane3:
             # The first non-collinear triple establishes the local region plane.
             normal = cross3(sub3(first, origin), sub3(second, origin))
             try:
-                return Plane3(origin, x_axis, normalised3(normal))
+                return Plane3(origin, normalised3(normal), x_axis=x_axis)
             except ValueError:
                 continue
     raise ValueError("region points must not be collinear")

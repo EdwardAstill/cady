@@ -48,7 +48,7 @@ def closed_polyline_mesh2(
         raise TypeError("polyline must provide to_array(tolerance=...)")
     nodes = _points2_array(to_array(tolerance=tolerance), name="vertices")
     boundary = np.asarray(loop_edges(len(nodes)), dtype=np.int64)
-    nodes_out, edges_out, faces = triangulate(
+    nodes_out, _edges_out, faces = triangulate(
         nodes,
         boundary,
         algorithm=algorithm,
@@ -57,7 +57,7 @@ def closed_polyline_mesh2(
     )
     vertices = tuple((float(x), float(y)) for x, y in nodes_out)
     face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
-    edge_values = tuple((int(a), int(b)) for a, b in edges_out)
+    edge_values = tuple((int(a), int(b)) for a, b in boundary)
     return Mesh2(vertices, face_values, edge_values)
 
 
@@ -77,7 +77,7 @@ def closed_polyline_mesh3(
     if not callable(to_array):
         raise TypeError("polyline must provide to_array(tolerance=...)")
     points = _points3(to_array(tolerance=tolerance))
-    nodes_out, edges_out, faces = _triangulate_points3_loop(
+    nodes_out, _edges_out, faces = _triangulate_points3_loop(
         points,
         tolerance=tolerance,
         algorithm=algorithm,
@@ -85,7 +85,7 @@ def closed_polyline_mesh3(
     )
     vertices = tuple((float(x), float(y), float(z)) for x, y, z in nodes_out)
     face_values = tuple((int(a), int(b), int(c)) for a, b, c in faces)
-    edge_values = tuple((int(a), int(b)) for a, b in edges_out)
+    edge_values = loop_edges(len(points))
     return Mesh3(vertices, face_values, edge_values)
 
 
@@ -178,7 +178,7 @@ def extrusion_mesh(
         tolerance=tolerance,
     )
     end_origin = add3(plane.origin, scale3(plane.normal, distance))
-    end_plane = Plane3(end_origin, plane.x_axis, plane.normal)
+    end_plane = Plane3(end_origin, plane.normal, x_axis=plane.x_axis)
     triangles: list[Triangle3] = []
     for a, b, c in cap_triangles:
         triangles.append((plane.point(*c), plane.point(*b), plane.point(*a)))

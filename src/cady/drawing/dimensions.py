@@ -210,7 +210,7 @@ class DiameterDimension2:
 
 @dataclass(frozen=True, slots=True)
 class AngularDimension2:
-    """Angular measurement between two rays from a shared centre."""
+    """Angular measurement between two rays from a shared center."""
 
     center: Point2
     p1: Point2

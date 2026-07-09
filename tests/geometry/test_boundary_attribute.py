@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from math import pi
-
 from cady.geometry import (
     Arc2,
     Arc3,
@@ -26,8 +24,8 @@ def test_finite_geometry_boundary_matches_bounds() -> None:
     values = (
         Line2((0.0, 1.0), (2.0, 3.0)),
         Line3((0.0, 1.0, 2.0), (3.0, 4.0, 5.0)),
-        Arc2((0.0, 0.0), 1.0, 0.0, pi / 2.0),
-        Arc3((0.0, 0.0, 0.0), 1.0, 0.0, pi / 2.0),
+        Arc2((0.0, 0.0), (1.0, 0.0), (2.0**-0.5, 2.0**-0.5)),
+        Arc3((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0**-0.5, 2.0**-0.5, 0.0)),
         Circle2((1.0, 2.0), 3.0),
         Ellipse2((1.0, 2.0), 3.0, 1.0),
         Polyline2(((0.0, 0.0), (2.0, 1.0))),

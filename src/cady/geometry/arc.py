@@ -4,23 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import acos, atan2, ceil, cos, pi, sin
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
-from cady.operations.primitives import add3, dot3, length3, scale3
-from cady.utils import finite, positive, positive_tolerance
-
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+from cady.geometry.point import Point2, Point3
+from cady.geometry.vector import Vector3
+from cady.operations.primitives import add3, dot3, length3, scale3, sub3
+from cady.utils import positive, positive_tolerance
 
 if TYPE_CHECKING:
     from cady.geometry.polyline import Polyline2, Polyline3
-
-
-def _unit_axis(axis: Point3, name: str) -> Point3:
-    length = length3(axis)
-    if length == 0.0:
-        raise ValueError(f"{name} must not be zero length")
-    return scale3(axis, 1.0 / length)
 
 
 def _angle_in_sweep(angle: float, start_rad: float, end_rad: float) -> bool:
@@ -70,46 +62,58 @@ def _segment_count(
 
 @dataclass(frozen=True, slots=True, init=False)
 class Arc2:
-    """Circular 2D arc described by centre, radius, and sweep angles."""
+    """Circular 2D arc described by center, start, and arc midpoint."""
 
-    centre: Point2
+    center: Point2
+    start: Point2
+    midpoint: Point2
+    end: Point2
     radius: float
     start_rad: float
     end_rad: float
 
     def __init__(
         self,
-        centre: Point2,
-        radius: float,
-        start_rad: float,
-        end_rad: float,
+        center: object,
+        start: object,
+        midpoint: object,
     ) -> None:
-        radius = positive(radius, "radius")
-        start_rad = finite(start_rad, "start_rad")
-        end_rad = finite(end_rad, "end_rad")
-        object.__setattr__(self, "centre", centre)
+        center = Point2(center)
+        start_point = Point2(start)
+        midpoint_point = Point2(midpoint)
+        radius = _radius2(center, start_point)
+        midpoint_radius = _radius2(center, midpoint_point)
+        if abs(midpoint_radius - radius) > 1e-9:
+            raise ValueError(
+                "Arc2 start and midpoint points must be the same distance from center"
+            )
+        start_rad = atan2(start_point[1] - center[1], start_point[0] - center[0])
+        midpoint_rad = atan2(midpoint_point[1] - center[1], midpoint_point[0] - center[0])
+        sweep_to_midpoint = _signed_angle_delta(start_rad, midpoint_rad)
+        if sweep_to_midpoint == 0.0:
+            raise ValueError("Arc2 start and midpoint points must differ")
+        end_rad = start_rad + 2.0 * sweep_to_midpoint
+        end_point = _point2_on_arc(center, radius, end_rad)
+
+        object.__setattr__(self, "center", center)
+        object.__setattr__(self, "start", start_point)
+        object.__setattr__(self, "midpoint", midpoint_point)
+        object.__setattr__(self, "end", end_point)
         object.__setattr__(self, "radius", radius)
         object.__setattr__(self, "start_rad", start_rad)
         object.__setattr__(self, "end_rad", end_rad)
-        if start_rad == end_rad:
-            raise ValueError("Arc2 start and end angles must differ")
 
     def _point(self, angle: float) -> Point2:
-        return (
-            self.centre[0] + self.radius * cos(angle),
-            self.centre[1] + self.radius * sin(angle),
-        )
+        return _point2_on_arc(self.center, self.radius, angle)
 
     def bounds(self) -> tuple[Point2, Point2]:
         points = [self._point(self.start_rad), self._point(self.end_rad)]
-        start = self.start_rad % (2 * pi)
-        sweep = (self.end_rad - self.start_rad) % (2 * pi)
         for angle in (0.0, pi / 2.0, pi, 3.0 * pi / 2.0):
-            if (angle - start) % (2 * pi) <= sweep:
+            if _angle_in_sweep(angle, self.start_rad, self.end_rad):
                 points.append(self._point(angle))
         return (
-            (min(point[0] for point in points), min(point[1] for point in points)),
-            (max(point[0] for point in points), max(point[1] for point in points)),
+            Point2(min(point[0] for point in points), min(point[1] for point in points)),
+            Point2(max(point[0] for point in points), max(point[1] for point in points)),
         )
 
     @property
@@ -121,7 +125,10 @@ class Arc2:
         return abs(self.end_rad - self.start_rad) * self.radius
 
     def points(self) -> tuple[Point2, ...]:
-        return (self._point(self.start_rad), self._point(self.end_rad))
+        return (self.start, self.end)
+
+    def reverse(self) -> Arc2:
+        return Arc2(self.center, self.end, self.midpoint)
 
     def discretize(
         self,
@@ -152,37 +159,53 @@ class Arc2:
 
 @dataclass(frozen=True, slots=True, init=False)
 class Arc3:
-    """Circular 3D arc in the plane spanned by two perpendicular axes."""
+    """Circular 3D arc described by center, start, and arc midpoint."""
 
-    centre: Point3
+    center: Point3
+    start: Point3
+    midpoint: Point3
+    end: Point3
     radius: float
     start_rad: float
     end_rad: float
-    x_axis: Point3
-    y_axis: Point3
+    x_axis: Vector3
+    y_axis: Vector3
 
     def __init__(
         self,
-        centre: Point3,
-        radius: float,
-        start_rad: float,
-        end_rad: float,
-        *,
-        x_axis: Point3 = (1.0, 0.0, 0.0),
-        y_axis: Point3 = (0.0, 1.0, 0.0),
+        center: object,
+        start: object,
+        midpoint: object,
     ) -> None:
-        radius = positive(radius, "radius")
-        start_rad = finite(start_rad, "start_rad")
-        end_rad = finite(end_rad, "end_rad")
-        if start_rad == end_rad:
-            raise ValueError("Arc3 start and end angles must differ")
+        center = Point3(center)
+        start_point = Point3(start)
+        midpoint_point = Point3(midpoint)
+        start_vector = sub3(start_point, center)
+        midpoint_vector = sub3(midpoint_point, center)
+        radius = positive(length3(start_vector), "radius")
+        midpoint_radius = length3(midpoint_vector)
+        if abs(midpoint_radius - radius) > 1e-9:
+            raise ValueError(
+                "Arc3 start and midpoint points must be the same distance from center"
+            )
+        x = Vector3(scale3(start_vector, 1.0 / radius))
+        y_component = sub3(midpoint_vector, scale3(x, dot3(midpoint_vector, x)))
+        y_length = length3(y_component)
+        if y_length == 0.0:
+            raise ValueError("Arc3 center, start, and midpoint points must not be collinear")
+        y = Vector3(scale3(y_component, 1.0 / y_length))
+        start_rad = 0.0
+        midpoint_rad = atan2(dot3(midpoint_vector, y), dot3(midpoint_vector, x))
+        sweep_to_midpoint = _signed_angle_delta(start_rad, midpoint_rad)
+        if sweep_to_midpoint == 0.0:
+            raise ValueError("Arc3 start and midpoint points must differ")
+        end_rad = start_rad + 2.0 * sweep_to_midpoint
+        end_point = _point3_on_arc(center, radius, end_rad, x, y)
 
-        x = _unit_axis(x_axis, "x_axis")
-        y = _unit_axis(y_axis, "y_axis")
-        if abs(dot3(x, y)) > 1e-9:
-            raise ValueError("Arc3 x_axis and y_axis must be perpendicular")
-
-        object.__setattr__(self, "centre", centre)
+        object.__setattr__(self, "center", center)
+        object.__setattr__(self, "start", start_point)
+        object.__setattr__(self, "midpoint", midpoint_point)
+        object.__setattr__(self, "end", end_point)
         object.__setattr__(self, "radius", radius)
         object.__setattr__(self, "start_rad", start_rad)
         object.__setattr__(self, "end_rad", end_rad)
@@ -190,10 +213,7 @@ class Arc3:
         object.__setattr__(self, "y_axis", y)
 
     def _point(self, angle: float) -> Point3:
-        return add3(
-            add3(self.centre, scale3(self.x_axis, self.radius * cos(angle))),
-            scale3(self.y_axis, self.radius * sin(angle)),
-        )
+        return _point3_on_arc(self.center, self.radius, angle, self.x_axis, self.y_axis)
 
     def bounds(self) -> tuple[Point3, Point3]:
         candidate_angles = [self.start_rad, self.end_rad]
@@ -209,12 +229,12 @@ class Arc3:
                     candidate_angles.append(candidate)
         points = tuple(self._point(angle) for angle in candidate_angles)
         return (
-            (
+            Point3(
                 min(point[0] for point in points),
                 min(point[1] for point in points),
                 min(point[2] for point in points),
             ),
-            (
+            Point3(
                 max(point[0] for point in points),
                 max(point[1] for point in points),
                 max(point[2] for point in points),
@@ -230,7 +250,10 @@ class Arc3:
         return abs(self.end_rad - self.start_rad) * self.radius
 
     def points(self) -> tuple[Point3, Point3]:
-        return (self._point(self.start_rad), self._point(self.end_rad))
+        return (self.start, self.end)
+
+    def reverse(self) -> Arc3:
+        return Arc3(self.center, self.end, self.midpoint)
 
     def discretize(
         self,
@@ -257,6 +280,39 @@ class Arc3:
         from cady.geometry.polyline import Polyline3
 
         return Polyline3(points)
+
+
+def _point2_on_arc(center: Point2, radius: float, angle: float) -> Point2:
+    return Point2(
+        center[0] + radius * cos(angle),
+        center[1] + radius * sin(angle),
+    )
+
+
+def _point3_on_arc(
+    center: Point3,
+    radius: float,
+    angle: float,
+    x_axis: Vector3,
+    y_axis: Vector3,
+) -> Point3:
+    return Point3(
+        add3(
+            add3(center, scale3(x_axis, radius * cos(angle))),
+            scale3(y_axis, radius * sin(angle)),
+        )
+    )
+
+
+def _radius2(center: Point2, point: Point2) -> float:
+    return positive(
+        ((point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2) ** 0.5,
+        "radius",
+    )
+
+
+def _signed_angle_delta(start: float, end: float) -> float:
+    return (end - start + pi) % (2.0 * pi) - pi
 
 
 __all__ = ["Arc2", "Arc3"]

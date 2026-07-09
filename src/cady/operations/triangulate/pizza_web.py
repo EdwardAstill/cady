@@ -30,7 +30,7 @@ def pizza_web_triangulate(
     max_inner_rings=3,
     max_split_depth=8,
 ):
-    """Triangulate closed 2D edge loops with centre fills and inner rings."""
+    """Triangulate closed 2D edge loops with center fills and inner rings."""
     tolerance = _positive_number(tolerance, "tolerance")
     explicit_min_angle = min_angle_degrees is not None
     min_angle_degrees = (
@@ -324,11 +324,11 @@ def _next_inner_ring(vertices, ids):
 
 
 def _scaled_inner_rings(vertices, ids, inner_count):
-    centre = np.mean(vertices[np.asarray(ids, dtype=np.int64)], axis=0)
+    center = np.mean(vertices[np.asarray(ids, dtype=np.int64)], axis=0)
     groups = _outer_index_groups(len(ids), inner_count)
-    directions = tuple(_group_direction(vertices, ids, group, centre) for group in groups)
+    directions = tuple(_group_direction(vertices, ids, group, center) for group in groups)
     boundary_distances = tuple(
-        _ray_boundary_distance(vertices, ids, centre, direction) for direction in directions
+        _ray_boundary_distance(vertices, ids, center, direction) for direction in directions
     )
 
     rings = []
@@ -336,7 +336,7 @@ def _scaled_inner_rings(vertices, ids, inner_count):
     while scale <= _INNER_RING_MAX_SCALE + 1e-12:
         rings.append(
             tuple(
-                centre + direction * boundary_distance * scale
+                center + direction * boundary_distance * scale
                 for direction, boundary_distance in zip(
                     directions,
                     boundary_distances,
@@ -365,9 +365,9 @@ def _outer_index_groups(outer_count, inner_count):
     return tuple(groups)
 
 
-def _group_direction(vertices, ids, group, centre):
+def _group_direction(vertices, ids, group, center):
     group_points = vertices[np.asarray([ids[index % len(ids)] for index in group], dtype=np.int64)]
-    direction = np.mean(group_points, axis=0) - centre
+    direction = np.mean(group_points, axis=0) - center
     length = float(np.linalg.norm(direction))
     if length <= 0.0:
         angle = 2.0 * np.pi * group[0] / len(ids)
@@ -375,10 +375,10 @@ def _group_direction(vertices, ids, group, centre):
     return direction / length
 
 
-def _ray_boundary_distance(vertices, ids, centre, direction):
+def _ray_boundary_distance(vertices, ids, center, direction):
     distances = [
         _ray_segment_distance(
-            centre,
+            center,
             direction,
             vertices[ids[index]],
             vertices[ids[(index + 1) % len(ids)]],
@@ -388,7 +388,7 @@ def _ray_boundary_distance(vertices, ids, centre, direction):
     positive = [distance for distance in distances if distance is not None and distance > 0.0]
     if positive:
         return min(positive)
-    fallback = max(float(np.linalg.norm(vertices[index] - centre)) for index in ids)
+    fallback = max(float(np.linalg.norm(vertices[index] - center)) for index in ids)
     return fallback if fallback > 0.0 else 1.0
 
 

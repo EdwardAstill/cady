@@ -60,26 +60,26 @@ class Transform2:
         matrix[:2, 2] = offset
         return self._append(matrix)
 
-    def rotate(self, angle: float, centre: object = (0.0, 0.0)) -> Transform2:
-        centre_array = np.array(centre, dtype=np.float64, copy=True)
-        if centre_array.shape != (2,) or not np.all(np.isfinite(centre_array)):
-            raise ValueError("centre must be a finite 2D vector")
+    def rotate(self, angle: float, center: object = (0.0, 0.0)) -> Transform2:
+        center_array = np.array(center, dtype=np.float64, copy=True)
+        if center_array.shape != (2,) or not np.all(np.isfinite(center_array)):
+            raise ValueError("center must be a finite 2D vector")
         matrix = np.eye(3, dtype=np.float64)
         matrix[:2, :2] = _rotation2(angle)
-        return self._append(_around2(matrix, centre_array))
+        return self._append(_around2(matrix, center_array))
 
     def scale(
         self,
         sx: float,
         sy: float | None = None,
-        centre: object = (0.0, 0.0),
+        center: object = (0.0, 0.0),
     ) -> Transform2:
-        centre_array = np.array(centre, dtype=np.float64, copy=True)
-        if centre_array.shape != (2,) or not np.all(np.isfinite(centre_array)):
-            raise ValueError("centre must be a finite 2D vector")
+        center_array = np.array(center, dtype=np.float64, copy=True)
+        if center_array.shape != (2,) or not np.all(np.isfinite(center_array)):
+            raise ValueError("center must be a finite 2D vector")
         y_scale = sx if sy is None else sy
         matrix = np.diag([float(sx), float(y_scale), 1.0]).astype(np.float64)
-        return self._append(_around2(matrix, centre_array))
+        return self._append(_around2(matrix, center_array))
 
     def mirror(self, point: object, direction: object) -> Transform2:
         point_array = np.array(point, dtype=np.float64, copy=True)
@@ -223,17 +223,17 @@ class Transform3:
         sx: float,
         sy: float | None = None,
         sz: float | None = None,
-        centre: object = (0.0, 0.0, 0.0),
+        center: object = (0.0, 0.0, 0.0),
     ) -> Transform3:
-        centre_array = np.array(centre, dtype=np.float64, copy=True)
-        if centre_array.shape != (3,) or not np.all(np.isfinite(centre_array)):
-            raise ValueError("centre must be a finite 3D vector")
+        center_array = np.array(center, dtype=np.float64, copy=True)
+        if center_array.shape != (3,) or not np.all(np.isfinite(center_array)):
+            raise ValueError("center must be a finite 3D vector")
         y_scale = sx if sy is None else sy
         z_scale = sx if sz is None else sz
         matrix = np.diag([float(sx), float(y_scale), float(z_scale), 1.0]).astype(
             np.float64
         )
-        return self._append(_around3(matrix, centre_array))
+        return self._append(_around3(matrix, center_array))
 
     def mirror(self, plane_origin: object, plane_normal: object) -> Transform3:
         origin = np.array(plane_origin, dtype=np.float64, copy=True)
@@ -320,16 +320,16 @@ def _rotation3(axis_dir: object, angle: float) -> Array:
 
 def _around2(
     matrix: Array,
-    centre: Array,
+    center: Array,
 ) -> Array:
-    return _translation2(centre) @ matrix @ _translation2(-centre)
+    return _translation2(center) @ matrix @ _translation2(-center)
 
 
 def _around3(
     matrix: Array,
-    centre: Array,
+    center: Array,
 ) -> Array:
-    return _translation3(centre) @ matrix @ _translation3(-centre)
+    return _translation3(center) @ matrix @ _translation3(-center)
 
 
 def _translation2(offset: Array) -> Array:

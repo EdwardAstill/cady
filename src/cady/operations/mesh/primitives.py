@@ -135,7 +135,7 @@ def revolution_triangles(
     return tris
 
 
-def sphere_triangles(centre: Point3Tuple, radius: float, *, tolerance: float) -> list[Triangle3]:
+def sphere_triangles(center: Point3Tuple, radius: float, *, tolerance: float) -> list[Triangle3]:
     """Approximate a sphere with latitude-longitude triangles."""
     rings = min(64, max(8, segments_for_circle(radius, tolerance) // 2))
     segs = rings * 2
@@ -150,7 +150,7 @@ def sphere_triangles(centre: Point3Tuple, radius: float, *, tolerance: float) ->
             for theta, phi in ((theta0, phi0), (theta1, phi0), (theta1, phi1), (theta0, phi1)):
                 pts.append(
                     _add(
-                        centre,
+                        center,
                         (
                             radius * sin(theta) * cos(phi),
                             radius * sin(theta) * sin(phi),
@@ -229,9 +229,9 @@ def cylinder_mesh(
         for index in range(segments)
     )
     top = tuple(add3(vertex, top_offset) for vertex in bottom)
-    bottom_centre = plane.origin
-    top_centre = add3(plane.origin, top_offset)
-    vertices = bottom + top + (bottom_centre, top_centre)
+    bottom_center = plane.origin
+    top_center = add3(plane.origin, top_offset)
+    vertices = bottom + top + (bottom_center, top_center)
     bottom_index = segments * 2
     top_index = bottom_index + 1
     faces: list[tuple[int, int, int]] = []

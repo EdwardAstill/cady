@@ -45,10 +45,10 @@ from cady.view.vispy.interaction import (
     zoomed_orthographic_scale as _zoomed_orthographic_scale,
 )
 from cady.view.vispy.mesh_buffers import (
-    orientation_edges as _orientation_edges,
+    flat_face_buffers as _flat_face_buffers,
 )
 from cady.view.vispy.mesh_buffers import (
-    shaded_face_buffers as _shaded_face_buffers,
+    orientation_edges as _orientation_edges,
 )
 from cady.view.vispy.overlays import (
     scale_bar_for_camera as _scale_bar_for_camera,
@@ -324,7 +324,7 @@ def test_pan_moves_view_without_changing_orbit_orientation() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_centre=np.zeros(3, dtype=np.float32),
+        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
     orientation = state.orientation.copy()
@@ -356,7 +356,7 @@ def test_perspective_pan_speed_tracks_camera_distance() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_centre=np.zeros(3, dtype=np.float32),
+        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
 
@@ -378,7 +378,7 @@ def test_orthographic_pan_speed_tracks_view_scale() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_centre=np.zeros(3, dtype=np.float32),
+        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
 
@@ -488,7 +488,7 @@ def test_orientation_edges_hide_coplanar_triangle_diagonal() -> None:
     assert edges == {(0, 1), (1, 2), (2, 3), (0, 3)}
 
 
-def test_shaded_face_buffers_split_normals_at_hard_crease() -> None:
+def test_flat_face_buffers_duplicate_vertices_per_face() -> None:
     vertices = np.array(
         [
             [0.0, 0.0, 0.0],
@@ -500,12 +500,17 @@ def test_shaded_face_buffers_split_normals_at_hard_crease() -> None:
     )
     faces = np.array([[0, 1, 2], [0, 3, 1]], dtype=np.uint32)
 
-    render_vertices, render_faces, render_normals = _shaded_face_buffers(vertices, faces)
+    render_vertices, render_faces, render_normals = _flat_face_buffers(vertices, faces)
 
     assert len(render_vertices) == 6
     assert render_faces[0, 0] != render_faces[1, 0]
     np.testing.assert_allclose(
         render_normals[render_faces[0, 0]],
         [0.0, 0.0, 1.0],
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        render_normals[render_faces[1, 0]],
+        [0.0, 1.0, 0.0],
         atol=1e-6,
     )

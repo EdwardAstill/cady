@@ -394,11 +394,11 @@ def _estimate_max_edge_length(points: NDArray[np.float64], *, tolerance: float) 
 
 def _nearest_indices(
     points: NDArray[np.float64],
-    centre: NDArray[np.float64],
+    center: NDArray[np.float64],
     *,
     count: int,
 ) -> list[int]:
-    diff = points - centre
+    diff = points - center
     d2 = np.einsum("ij,ij->i", diff, diff)
     count = max(1, min(int(count), len(points)))
     indices = np.argpartition(d2, count - 1)[:count]
@@ -409,9 +409,9 @@ def _local_plane_normal(points: NDArray[np.float64], indices: Sequence[int]) -> 
     local = points[list(indices)]
     if len(local) < 3:
         return np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
-    centred = local - np.mean(local, axis=0)
+    centered = local - np.mean(local, axis=0)
     try:
-        _, _, vt = np.linalg.svd(centred, full_matrices=False)
+        _, _, vt = np.linalg.svd(centered, full_matrices=False)
     except np.linalg.LinAlgError:
         return np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
     normal = vt[-1]

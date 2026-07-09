@@ -59,8 +59,8 @@ def test_cylinder_uses_tolerance_for_segment_count() -> None:
     assert len(fine.faces) > len(coarse.faces)
 
 
-def test_sphere_mesh_bounds_are_centred_on_requested_point() -> None:
-    mesh = Body3.sphere(radius=2.0, centre=(1.0, 2.0, 3.0)).to_mesh(tolerance=0.1)
+def test_sphere_mesh_bounds_are_centered_on_requested_point() -> None:
+    mesh = Body3.sphere(radius=2.0, center=(1.0, 2.0, 3.0)).to_mesh(tolerance=0.1)
     lower, upper = mesh.bounds()
 
     assert lower[2] == pytest.approx(1.0)

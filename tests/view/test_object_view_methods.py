@@ -5,7 +5,7 @@ import pytest
 from cady import Assembly, Body3, DisplayStyle, Mesh3, Part
 
 
-def test_mesh_view_builds_centred_wire_scene_and_returns_none(
+def test_mesh_view_builds_centered_wire_scene_and_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     view = pytest.importorskip("cady.view")

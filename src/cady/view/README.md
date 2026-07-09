@@ -102,9 +102,9 @@ kept behind the viewer launch path.
 - `vispy/mesh_buffers.py`
   - Builds view-only mesh buffers for shaded rendering and generated display
     edges.
-  - `shaded_face_buffers(...)` duplicates vertices across hard edges so smooth
-    patches and sharp edges can use different normals.
-  - `orientation_edges(...)` suppresses smooth tessellation diagonals while
+  - `flat_face_buffers(...)` duplicates each triangle's vertices and assigns one
+    normal per face for flat shading.
+  - `orientation_edges(...)` suppresses coplanar tessellation diagonals while
     keeping hard edges and boundaries visible.
   - These operations do not mutate or simplify the source `Mesh3`.
 

@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from cady.view.scene import RenderScene, SceneLine, SceneMesh
-from cady.view.vispy.mesh_buffers import orientation_edges, shaded_face_buffers
+from cady.view.vispy.mesh_buffers import flat_face_buffers, orientation_edges
 
 DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
 _UINT16_MAX = int(np.iinfo(np.uint16).max)
@@ -27,7 +27,7 @@ class DrawBatch:
 
 @dataclass(frozen=True, slots=True)
 class SceneBounds:
-    local_centre: np.ndarray
+    local_center: np.ndarray
     radius: float
 
 
@@ -92,7 +92,7 @@ def line_batch(line: SceneLine, gloo: Any) -> DrawBatch:
 def face_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
     if mesh.render_mode != "shaded" or len(mesh.faces) == 0:
         return None
-    face_vertices, face_indices, face_normals = shaded_face_buffers(
+    face_vertices, face_indices, face_normals = flat_face_buffers(
         mesh.vertices,
         mesh.faces,
     )
@@ -146,12 +146,12 @@ def scene_bounds(geometry_vertices: Sequence[np.ndarray]) -> SceneBounds:
     if not geometry_vertices:
         raise ValueError("viewer requires at least one vertex")
     all_vertices = np.vstack(geometry_vertices)
-    local_centre = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2.0
+    local_center = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2.0
     spans = all_vertices.max(axis=0) - all_vertices.min(axis=0)
-    # The viewer orbits around the local centre; padding the largest span gives
+    # The viewer orbits around the local center; padding the largest span gives
     # short and flat geometry enough radius for clipping and overlay sizing.
     radius = float(np.max(spans)) * 1.2 or 1.0
-    return SceneBounds(local_centre=local_centre, radius=radius)
+    return SceneBounds(local_center=local_center, radius=radius)
 
 
 def build_canvas_geometry(prepared: RenderScene, gloo: Any) -> CanvasGeometry:

@@ -124,8 +124,8 @@ def _key_name(key: object) -> str:
     return str(raw_name).lower()
 
 
-def model_matrix(local_centre: np.ndarray, orientation: np.ndarray) -> np.ndarray:
-    return (translation_matrix(-local_centre) @ orientation).astype(np.float32, copy=False)
+def model_matrix(local_center: np.ndarray, orientation: np.ndarray) -> np.ndarray:
+    return (translation_matrix(-local_center) @ orientation).astype(np.float32, copy=False)
 
 
 def projection_clip_planes(radius: float, distance: float, camera: Camera) -> tuple[float, float]:
@@ -239,7 +239,7 @@ def _clamp_positive(
 @dataclass(slots=True)
 class ViewerInteractionState:
     camera: Camera
-    local_centre: np.ndarray
+    local_center: np.ndarray
     radius: float
     distance: float
     pan: np.ndarray
@@ -251,7 +251,7 @@ class ViewerInteractionState:
         cls,
         camera: Camera,
         *,
-        local_centre: np.ndarray,
+        local_center: np.ndarray,
         radius: float,
     ) -> ViewerInteractionState:
         requested_distance = float(
@@ -262,7 +262,7 @@ class ViewerInteractionState:
         )
         return cls(
             camera=camera,
-            local_centre=local_centre,
+            local_center=local_center,
             radius=radius,
             distance=max(requested_distance, radius * 0.8),
             pan=np.zeros(2, dtype=np.float32),
@@ -274,7 +274,7 @@ class ViewerInteractionState:
         return translation_matrix((self.pan[0], self.pan[1], -self.distance))
 
     def model_matrix(self) -> np.ndarray:
-        return model_matrix(self.local_centre, self.orientation)
+        return model_matrix(self.local_center, self.orientation)
 
     def local_axis_length(self, viewport_size: tuple[int, int]) -> float:
         if self.camera.projection == "orthographic":
