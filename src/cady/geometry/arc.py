@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import acos, atan2, ceil, cos, pi, sin
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
-from cady.geometry.point import Point2, Point3
-from cady.geometry.vector import Vector3
+from cady.geometry._coordinates import point2, point3
 from cady.operations.primitives import add3, dot3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
     from cady.geometry.polyline import Polyline2, Polyline3
@@ -78,9 +80,9 @@ class Arc2:
         start: object,
         midpoint: object,
     ) -> None:
-        center = Point2(center)
-        start_point = Point2(start)
-        midpoint_point = Point2(midpoint)
+        center = point2(center, name="center")
+        start_point = point2(start, name="start")
+        midpoint_point = point2(midpoint, name="midpoint")
         radius = _radius2(center, start_point)
         midpoint_radius = _radius2(center, midpoint_point)
         if abs(midpoint_radius - radius) > 1e-9:
@@ -112,8 +114,8 @@ class Arc2:
             if _angle_in_sweep(angle, self.start_rad, self.end_rad):
                 points.append(self._point(angle))
         return (
-            Point2(min(point[0] for point in points), min(point[1] for point in points)),
-            Point2(max(point[0] for point in points), max(point[1] for point in points)),
+            (min(point[0] for point in points), min(point[1] for point in points)),
+            (max(point[0] for point in points), max(point[1] for point in points)),
         )
 
     @property
@@ -168,8 +170,8 @@ class Arc3:
     radius: float
     start_rad: float
     end_rad: float
-    x_axis: Vector3
-    y_axis: Vector3
+    x_axis: Point3
+    y_axis: Point3
 
     def __init__(
         self,
@@ -177,9 +179,9 @@ class Arc3:
         start: object,
         midpoint: object,
     ) -> None:
-        center = Point3(center)
-        start_point = Point3(start)
-        midpoint_point = Point3(midpoint)
+        center = point3(center, name="center")
+        start_point = point3(start, name="start")
+        midpoint_point = point3(midpoint, name="midpoint")
         start_vector = sub3(start_point, center)
         midpoint_vector = sub3(midpoint_point, center)
         radius = positive(length3(start_vector), "radius")
@@ -188,12 +190,12 @@ class Arc3:
             raise ValueError(
                 "Arc3 start and midpoint points must be the same distance from center"
             )
-        x = Vector3(scale3(start_vector, 1.0 / radius))
+        x = scale3(start_vector, 1.0 / radius)
         y_component = sub3(midpoint_vector, scale3(x, dot3(midpoint_vector, x)))
         y_length = length3(y_component)
         if y_length == 0.0:
             raise ValueError("Arc3 center, start, and midpoint points must not be collinear")
-        y = Vector3(scale3(y_component, 1.0 / y_length))
+        y = scale3(y_component, 1.0 / y_length)
         start_rad = 0.0
         midpoint_rad = atan2(dot3(midpoint_vector, y), dot3(midpoint_vector, x))
         sweep_to_midpoint = _signed_angle_delta(start_rad, midpoint_rad)
@@ -229,12 +231,12 @@ class Arc3:
                     candidate_angles.append(candidate)
         points = tuple(self._point(angle) for angle in candidate_angles)
         return (
-            Point3(
+            (
                 min(point[0] for point in points),
                 min(point[1] for point in points),
                 min(point[2] for point in points),
             ),
-            Point3(
+            (
                 max(point[0] for point in points),
                 max(point[1] for point in points),
                 max(point[2] for point in points),
@@ -283,7 +285,7 @@ class Arc3:
 
 
 def _point2_on_arc(center: Point2, radius: float, angle: float) -> Point2:
-    return Point2(
+    return (
         center[0] + radius * cos(angle),
         center[1] + radius * sin(angle),
     )
@@ -293,14 +295,12 @@ def _point3_on_arc(
     center: Point3,
     radius: float,
     angle: float,
-    x_axis: Vector3,
-    y_axis: Vector3,
+    x_axis: Point3,
+    y_axis: Point3,
 ) -> Point3:
-    return Point3(
-        add3(
-            add3(center, scale3(x_axis, radius * cos(angle))),
-            scale3(y_axis, radius * sin(angle)),
-        )
+    return add3(
+        add3(center, scale3(x_axis, radius * cos(angle))),
+        scale3(y_axis, radius * sin(angle)),
     )
 
 

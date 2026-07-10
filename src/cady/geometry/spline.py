@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil, sqrt
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeAlias, cast
 
-from cady.geometry.point import Point2, Point3
-from cady.geometry.vector import Vector2, Vector3
+from cady.geometry._coordinates import point2, point3
 from cady.operations.primitives import cross3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
     from cady.geometry.polyline import Polyline2, Polyline3
@@ -57,11 +59,11 @@ class Spline2:
             closed = vectors
             vectors = None
         if vectors is None:
-            control_points = tuple(Point2(point) for point in points)
+            control_points = tuple(point2(point) for point in points)
         else:
             control_points = _hermite_control_points2(
-                tuple(Point2(point) for point in points),
-                tuple(Vector2(vector) for vector in vectors),
+                tuple(point2(point) for point in points),
+                tuple(point2(vector, name="vector") for vector in vectors),
                 closed=bool(closed),
             )
         points = tuple(control_points)
@@ -72,11 +74,11 @@ class Spline2:
 
     def bounds(self) -> tuple[Point2, Point2]:
         return (
-            Point2(
+            (
                 min(point[0] for point in self.control_points),
                 min(point[1] for point in self.control_points),
             ),
-            Point2(
+            (
                 max(point[0] for point in self.control_points),
                 max(point[1] for point in self.control_points),
             ),
@@ -139,11 +141,11 @@ class Spline3:
         vectors: Iterable[object] | None = None,
     ) -> None:
         if vectors is None:
-            control_points = tuple(Point3(point) for point in points)
+            control_points = tuple(point3(point) for point in points)
         else:
             control_points = _hermite_control_points3(
-                tuple(Point3(point) for point in points),
-                tuple(Vector3(vector) for vector in vectors),
+                tuple(point3(point) for point in points),
+                tuple(point3(vector, name="vector") for vector in vectors),
             )
         points = tuple(control_points)
         object.__setattr__(self, "control_points", points)
@@ -152,12 +154,12 @@ class Spline3:
 
     def bounds(self) -> tuple[Point3, Point3]:
         return (
-            Point3(
+            (
                 min(point[0] for point in self.control_points),
                 min(point[1] for point in self.control_points),
                 min(point[2] for point in self.control_points),
             ),
-            Point3(
+            (
                 max(point[0] for point in self.control_points),
                 max(point[1] for point in self.control_points),
                 max(point[2] for point in self.control_points),
@@ -230,7 +232,7 @@ def _cubic_bezier_points2(
             u = 1.0 - t
             _append_unique_point2(
                 points,
-                Point2(
+                (
                     p0[0] * (u**3)
                     + p1[0] * (3.0 * u * u * t)
                     + p2[0] * (3.0 * u * t * t)
@@ -246,7 +248,7 @@ def _cubic_bezier_points2(
 
 def _hermite_control_points2(
     points: tuple[Point2, ...],
-    vectors: tuple[Vector2, ...],
+    vectors: tuple[Point2, ...],
     *,
     closed: bool,
 ) -> tuple[Point2, ...]:
@@ -268,8 +270,8 @@ def _hermite_control_points2(
             control_points.append(start)
         control_points.extend(
             (
-                Point2(start[0] + start_vector[0] / 3.0, start[1] + start_vector[1] / 3.0),
-                Point2(end[0] - end_vector[0] / 3.0, end[1] - end_vector[1] / 3.0),
+                (start[0] + start_vector[0] / 3.0, start[1] + start_vector[1] / 3.0),
+                (end[0] - end_vector[0] / 3.0, end[1] - end_vector[1] / 3.0),
                 end,
             )
         )
@@ -278,7 +280,7 @@ def _hermite_control_points2(
 
 def _hermite_control_points3(
     points: tuple[Point3, ...],
-    vectors: tuple[Vector3, ...],
+    vectors: tuple[Point3, ...],
 ) -> tuple[Point3, ...]:
     if len(points) < 2:
         raise ValueError("Spline3 requires at least two points")
@@ -294,12 +296,12 @@ def _hermite_control_points3(
             control_points.append(start)
         control_points.extend(
             (
-                Point3(
+                (
                     start[0] + start_vector[0] / 3.0,
                     start[1] + start_vector[1] / 3.0,
                     start[2] + start_vector[2] / 3.0,
                 ),
-                Point3(
+                (
                     end[0] - end_vector[0] / 3.0,
                     end[1] - end_vector[1] / 3.0,
                     end[2] - end_vector[2] / 3.0,
@@ -327,7 +329,7 @@ def _densify_points2(
             t = step / count
             _append_unique_point2(
                 output,
-                Point2(
+                (
                     start[0] + (end[0] - start[0]) * t,
                     start[1] + (end[1] - start[1]) * t,
                 ),
@@ -356,7 +358,7 @@ def _densify_points3(
             t = step / count
             _append_unique_point(
                 output,
-                Point3(
+                (
                     start[0] + (end[0] - start[0]) * t,
                     start[1] + (end[1] - start[1]) * t,
                     start[2] + (end[2] - start[2]) * t,
@@ -466,7 +468,7 @@ def _cubic_bezier_length3_recursive(
 
 
 def _midpoint2(left: Point2, right: Point2) -> Point2:
-    return Point2((left[0] + right[0]) * 0.5, (left[1] + right[1]) * 0.5)
+    return ((left[0] + right[0]) * 0.5, (left[1] + right[1]) * 0.5)
 
 
 def _append_cubic_points(
@@ -512,7 +514,7 @@ def _append_cubic_points(
 
 
 def _midpoint(left: Point3, right: Point3) -> Point3:
-    return Point3(
+    return (
         scale3((left[0] + right[0], left[1] + right[1], left[2] + right[2]), 0.5)
     )
 

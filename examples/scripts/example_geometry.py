@@ -20,7 +20,7 @@ from cady import (
 )
 from cady.view import SceneObject
 
-GALLERY_DIR = Path(__file__).resolve().parents[1] / "gallery"
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "files" / "created"
 
 PLATE_WIDTH = 1.0
 PLATE_HEIGHT = 0.6

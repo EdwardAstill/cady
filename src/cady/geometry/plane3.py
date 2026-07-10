@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TypeAlias
 
-from cady.geometry.point import Point2, Point3
-from cady.geometry.vector import Vector3
+from cady.geometry._coordinates import point3
 from cady.operations.primitives import add3, cross3, dot3, normalised3, scale3, sub3
 from cady.operations.transforms import Transform3
+
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -16,8 +19,8 @@ class Plane3:
     """Right-handed 3D plane defined by a point and a normal vector."""
 
     origin: Point3
-    normal: Vector3
-    x_axis: Vector3
+    normal: Point3
+    x_axis: Point3
 
     def __init__(
         self,
@@ -26,10 +29,10 @@ class Plane3:
         *,
         x_axis: object | None = None,
     ) -> None:
-        point = Point3(point)
-        normal = Vector3(normalised3(Vector3(normal)))
+        point = point3(point, name="point")
+        normal = normalised3(point3(normal, name="normal"))
         x_axis = _orthogonal_x_axis(
-            Vector3((1.0, 0.0, 0.0)) if x_axis is None else Vector3(x_axis),
+            (1.0, 0.0, 0.0) if x_axis is None else point3(x_axis, name="x_axis"),
             normal,
         )
         object.__setattr__(self, "origin", point)
@@ -37,8 +40,8 @@ class Plane3:
         object.__setattr__(self, "normal", normal)
 
     @property
-    def y_axis(self) -> Vector3:
-        return Vector3(normalised3(cross3(self.normal, self.x_axis)))
+    def y_axis(self) -> Point3:
+        return normalised3(cross3(self.normal, self.x_axis))
 
     @classmethod
     def world_xy(cls) -> Plane3:
@@ -52,7 +55,7 @@ class Plane3:
         *,
         x_axis: object | None = None,
     ) -> Plane3:
-        normal_vec = Vector3(normalised3(Vector3(normal)))
+        normal_vec = normalised3(point3(normal, name="normal"))
         x_axis_vec = (
             x_axis
             if x_axis is not None
@@ -65,7 +68,7 @@ class Plane3:
         """Fit a plane to 3D points and return its local frame."""
         import numpy as np
 
-        point_tuple = tuple(Point3(point) for point in points)
+        point_tuple = tuple(point3(point) for point in points)
         if len(point_tuple) < 3:
             raise ValueError("plane fit requires at least three points")
         point_array = np.array(point_tuple, dtype=np.float64, copy=True)
@@ -86,27 +89,23 @@ class Plane3:
         )
 
     def point(self, u: float, v: float) -> Point3:
-        return Point3(
-            add3(
-                add3(self.origin, scale3(self.x_axis, float(u))),
-                scale3(self.y_axis, float(v)),
-            )
+        return add3(
+            add3(self.origin, scale3(self.x_axis, float(u))),
+            scale3(self.y_axis, float(v)),
         )
 
     def coordinates(self, point: object) -> Point2:
         """Return plane-local ``(u, v)`` coordinates for a 3D point."""
-        offset = sub3(Point3(point), self.origin)
-        return Point2(dot3(offset, self.x_axis), dot3(offset, self.y_axis))
+        offset = sub3(point3(point), self.origin)
+        return (dot3(offset, self.x_axis), dot3(offset, self.y_axis))
 
     def signed_distance(self, point: object) -> float:
         """Return signed distance from a 3D point to this plane."""
-        return dot3(sub3(Point3(point), self.origin), self.normal)
+        return dot3(sub3(point3(point), self.origin), self.normal)
 
     def project(self, point: object) -> Point3:
         """Return the orthogonal projection of a 3D point onto this plane."""
-        return Point3(
-            sub3(Point3(point), scale3(self.normal, self.signed_distance(point)))
-        )
+        return sub3(point3(point), scale3(self.normal, self.signed_distance(point)))
 
     def max_deviation(self, points: Iterable[object]) -> float:
         """Return the maximum absolute point distance from this plane."""
@@ -122,21 +121,21 @@ class Plane3:
         return Plane3(origin, sub3(normal_point, origin), x_axis=sub3(x_point, origin))
 
 
-def _orthogonal_x_axis(x_axis: Vector3, normal: Vector3) -> Vector3:
+def _orthogonal_x_axis(x_axis: Point3, normal: Point3) -> Point3:
     projected = sub3(x_axis, scale3(normal, dot3(x_axis, normal)))
     try:
-        return Vector3(normalised3(projected))
+        return normalised3(projected)
     except ValueError:
         return _fallback_x_axis(normal)
 
 
-def _fallback_x_axis(normal: Vector3) -> Vector3:
+def _fallback_x_axis(normal: Point3) -> Point3:
     candidate = (1.0, 0.0, 0.0)
     if abs(dot3(normal, candidate)) > 0.9:
         candidate = (0.0, 1.0, 0.0)
-    return Vector3(normalised3(sub3(candidate, scale3(normal, dot3(candidate, normal)))))
+    return normalised3(sub3(candidate, scale3(normal, dot3(candidate, normal))))
 
 
 def _transform_point(transform: Transform3, point: object) -> Point3:
     array = transform.apply_points([point])
-    return Point3(float(array[0, 0]), float(array[0, 1]), float(array[0, 2]))
+    return (float(array[0, 0]), float(array[0, 1]), float(array[0, 2]))

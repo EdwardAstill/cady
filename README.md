@@ -146,20 +146,21 @@ PYTHONPATH=src .venv/bin/python examples/scripts/production_step.py
 PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3.py --shape all
 ```
 
-Most scripts write to `examples/gallery` and accept `--out <dir>`.
+File-producing scripts write to `examples/files/created` by default and accept
+`--out <dir>`.
 
 ## Package layout
 
 ```text
-cady.geometry   2D curves, closed curves, regions, and meshes
-cady.geometry   bodies, regions, surfaces, planes, meshes, features, and primitives
-cady.drawing      drawing documents, layers, text, hatches, blocks, dimensions
-cady.product      parts, assemblies, materials, and assembly flattening
-cady.view         scenes, cameras, lights, display styles, and optional viewers
-cady.document     optional top-level registry
-cady.operations      NumPy-backed evaluated arrays and transforms
-cady.operations          object-agnostic geometry algorithms
+cady.geometry     2D/3D curves, regions, surfaces, meshes, and bodies
+cady.operations   NumPy-backed transforms, meshing, and topology algorithms
+cady.measurement  object-level distance and intersection queries
+cady.drawing      drawing documents, layers, entities, and dimensions
+cady.product      parts, assemblies, materials, and flattening
+cady.view         scenes, cameras, styles, and optional viewer helpers
+cady.vessels      vessel-specific workflows such as linesplan meshing
 cady.files        DXF, STL, and STEP facades
+cady.document     optional top-level registry
 cady.errors       shared exception hierarchy
 ```
 

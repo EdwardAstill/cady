@@ -1,125 +1,97 @@
 # API reference
 
-## Top-level exports
+The top-level `cady` package exposes the common authoring values. More focused
+helpers remain in their owning subpackages.
 
-### 2D geometry
-
-| Name | Description |
-|------|-------------|
-| `Line2D` | Line segment between two points. |
-| `Arc2D` | Circular arc (centre, radius, start/end angle). |
-| `Spline2D` | Bezier spline curve. |
-| `Polyline2D` | Open or closed polyline. |
-| `Circle2D` | Full circle. |
-| `Ellipse2D` | Ellipse. |
-| `Region2D` | Filled region (outer boundary + holes). |
-| `Mesh2D` | 2D triangle mesh. |
-| `Curve2D` | Protocol for open curves. |
-| `ClosedCurve2D` | Protocol for closed boundaries. |
-
-### 3D geometry
+## Geometry
 
 | Name | Description |
-|------|-------------|
-| `Plane3D` | Coordinate plane in 3D space. |
-| `Surface3D` | Parametric surface defined by `x(u,v)`, `y(u,v)`, and `z(u,v)`. |
-| `Region3D` | Bounded 2D region in a surface parameter domain. |
-| `Body3D` | Editable solid with feature history. |
-| `Polyline3D` | Open 3D polyline. |
-| `ClosedPolyline3D` | Closed planar 3D polyline loop. |
-| `Mesh3D` | Evaluated triangle mesh. |
-| `Wireframe3D` | Edge-only wireframe (vertices + edges). |
+|---|---|
+| `Line2`, `Line3` | Straight line segments. |
+| `Arc2`, `Arc3` | Circular arcs defined by center, start, and midpoint. |
+| `Spline2`, `Spline3` | Cubic Bezier splines, optionally built from endpoint tangent vectors. |
+| `Polyline2`, `Polyline3` | Open or closed polyline and curve sequences. |
+| `Circle2`, `Ellipse2` | Closed 2D conic curves. |
+| `Region2`, `Region3` | Filled 2D regions and surface-placed regions. |
+| `Surface2`, `Surface3` | Parametric surfaces. |
+| `Plane3` | Local coordinate plane in 3D. |
+| `Mesh2`, `Mesh3` | Indexed polygon meshes. |
+| `Wireframe3` | Edge-only 3D topology. |
+| `PointCloud2`, `PointCloud3` | Unconnected point collections. |
+| `Body3` | Immutable feature-history body. |
+| `Curve2`, `Curve3` | Curve protocols used by polyline composition. |
 
-### Product
+Coordinates are plain `(x, y)` or `(x, y, z)` tuples. There are no public
+point or vector wrapper classes.
 
-| Name | Description |
-|------|-------------|
-| `Part` | Named manufacturable item with bodies. |
-| `PartInstance` | Placed part reference. |
-| `Assembly` | Tree of placed parts and subassemblies. |
-| `AssemblyInstance` | Placed subassembly reference. |
-| `Material` | Material name and density. |
+Common constructors include:
 
-### Drawing
+```python
+Line2(start, end)
+Arc2(center, start, midpoint)
+Circle2(center, radius)
+Polyline2(items, closed=False)
+Spline2(points, vectors=None, closed=False)
+Plane3(point, normal, x_axis=None)
+Region2.rectangle(width, height, origin=(0.0, 0.0))
+Region2.circle(radius, center=(0.0, 0.0))
+Body3.box(width=..., depth=..., height=...)
+Body3.cylinder(radius=..., height=...)
+Body3.sphere(radius=..., center=(0.0, 0.0, 0.0))
+```
 
-| Name | Description |
-|------|-------------|
-| `Drawing2D` | 2D drafting document. |
-| `DrawingEntity` | Curve/region with layer assignment. |
-| `Layer` | Named layer with color and linetype. |
-| `Text2D` | Text entity. |
-| `Hatch2D` | Hatch fill entity. |
-| `Insert2D` | Block insertion entity. |
-| `BlockDefinition` | Reusable block definition. |
-| `DimStyle` | Dimension style. |
-| `LinearDimension2D` | Horizontal/vertical dimension. |
-| `AlignedDimension2D` | Aligned dimension. |
-| `RadiusDimension2D` | Radius dimension. |
-| `DiameterDimension2D` | Diameter dimension. |
-| `AngularDimension2D` | Angular dimension. |
+## Drawing and product values
 
-### View
+Top-level drawing exports are `Drawing2`, `DrawingEntity`, `Layer`, `Text2`,
+`Hatch2`, `Insert2`, `BlockDefinition`, `DimStyle`, and the suffix-`2`
+dimension values.
 
-| Name | Description |
-|------|-------------|
-| `Scene` | Named collection of view targets, cameras, lights. |
-| `SceneObject` | Target reference with pose and visibility. |
-| `Camera` | Perspective or orthographic camera. |
-| `AmbientLight` | Ambient light. |
-| `Light` | Protocol base for light sources. |
-| `DirectionalLight` | Directional light. |
-| `PointLight` | Point light. |
-| `DisplayStyle` | Color, alpha, and edge visibility. |
+Product exports are `Part`, `PartInstance`, `Assembly`, `AssemblyInstance`, and
+`Material`. `Document` is the optional registry for named drawings, products,
+and scenes.
 
-### Other
+## View values
 
-| Name | Description |
-|------|-------------|
-| `Document` | Optional project registry. |
+Top-level view exports include `Scene`, `SceneObject`, `Camera`, the light
+values, `DisplayStyle`, and scene overlays. Backend-independent preparation is
+available from `cady.view`:
 
-## Constructors
+```python
+from cady.view import RenderScene, SceneLine, SceneMesh, prepare_scene
+```
 
-| Constructor | Returns | Signature |
-|----------|---------|-----------|
-| `Line2(start, end)` | `Line2` | Two points. |
-| `Arc2(centre, radius, start_angle, end_angle)` | `Arc2` | Angles in radians. |
-| `Circle2(centre, radius)` | `Circle2` | Centre point and radius. |
-| `Polyline2(points, *, closed=False)` | `Polyline2` | Sequence of points. |
-| `Region2.rectangle(width, height, *, origin=(0,0))` | `Region2` | Width and height. |
-| `Region2.circle(radius, *, centre=(0,0))` | `Region2` | Radius. |
-| `Body3.box(*, width, depth, height, plane=None)` | `Body3` | Dimensions in 3D. |
-| `Body3.cylinder(*, radius, height, plane=None)` | `Body3` | Radius and height. |
-| `Body3.sphere(*, radius, centre=(0,0,0))` | `Body3` | Radius. |
+`view_scene` and `view_lines` are imported lazily when requested.
 
-## Errors
+## Operations and measurements
 
-| Exception | Use |
-|-----------|-----|
-| `CadError` | Base package error. |
-| `GeometryError` | Invalid curve, region, or body construction. |
-| `DrawingError` | Invalid drawing composition or layers. |
-| `ProductError` | Invalid part/assembly structure or cycles. |
-| `ViewError` | Invalid camera, light, or scene reference. |
-| `ReadError` | File import failure. |
-| `WriteError` | File export failure. |
+`cady.operations` exports `Transform2`, `Transform3`, triangulation, mesh
+clipping helpers, and `sphere_triangles`. Mesh construction, statistics, and
+topology helpers live in `cady.operations.mesh` modules.
+
+`cady.measurement` owns object-level `distance(...)` and `intersection(...)`
+queries and their result records.
 
 ## File I/O
 
 ```python
-from cady.files import dxf, stl, step
+from cady.files import dxf, step, stl
 ```
 
-| Function | Accepts | Action |
-|----------|---------|--------|
-| `dxf.read(path)` | file path | Returns `DxfImportResult`. |
-| `dxf.read_drawing(path)` | file path | Returns `Drawing2D`. |
-| `dxf.read_curves(path)` | file path | Returns imported 3D polyline curves with DXF metadata. |
-| `dxf.read_mesh(path)` | file path | Returns `Mesh3D` from actual DXF mesh entities such as `3DFACE`. |
-| `dxf.read_wireframe(path)` | file path | Returns `Wireframe3D` merged from imported 3D polyline wires. |
-| `dxf.write(drawing, path, *, tolerance)` | `Drawing2D` | Writes DXF R2018. |
-| `dxf.render(drawing, *, tolerance)` | `Drawing2D` | Returns DXF string. |
-| `stl.write(target, path, *, ascii, tolerance)` | `Mesh3D\|Body3D\|Part\|Assembly\|Document` | Writes binary or ASCII STL. |
-| `step.write(target, path, *, tolerance)` | `Body3D\|Part\|Assembly\|Document` | Writes STEP. |
-| `step.render(target, *, tolerance)` | `Body3D\|Part\|Assembly\|Document` | Returns STEP string. |
-| `step.read_faces(path)` | file path | Returns list of parsed faces. |
-| `step.read_members(path)` | file path | Returns list of extruded members. |
+| Function | Result or action |
+|---|---|
+| `dxf.read(path)` | Returns a `DxfImportResult`. |
+| `dxf.read_drawing(path)` | Returns a `Drawing2`. |
+| `dxf.read_curves(path)` | Returns imported 3D wire-curve records. |
+| `dxf.read_mesh(path)` | Returns a `Mesh3` from DXF mesh entities. |
+| `dxf.read_wireframe(path)` | Returns merged imported wires as `Wireframe3`. |
+| `dxf.write(drawing, path, *, tolerance)` | Writes DXF R2018. |
+| `stl.write(target, path, *, ascii, tolerance)` | Writes binary or ASCII STL. |
+| `step.write(target, path, *, tolerance)` | Writes mesh-oriented STEP. |
+| `step.read_mesh(path)` | Returns elementary STEP faces as a `Mesh3`. |
+| `step.read_faces(path)` | Returns parsed elementary face records. |
+| `step.read_members(path)` | Returns extracted simple extruded members. |
+
+## Errors
+
+`CadError` is the shared base. The public specialisations are `GeometryError`,
+`DrawingError`, `ProductError`, `ViewError`, `ReadError`, and `WriteError`.

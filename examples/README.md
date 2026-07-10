@@ -1,7 +1,7 @@
 # Examples
 
-`scripts/` contains runnable example programs. `gallery/` contains generated
-DXF, STL, and STEP artifacts.
+`scripts/` contains runnable examples, grouped further where useful.
+`files/` contains inputs and `files/created/` is the default output directory.
 
 Examples use the current value API directly:
 
@@ -11,7 +11,7 @@ Examples use the current value API directly:
 - `Scene`, `Camera`, `Light`, and `DisplayStyle` for view descriptions;
 - `cady.files.dxf`, `cady.files.stl`, and `cady.files.step` for file I/O.
 
-Run gallery examples from the repository root:
+Run file-producing examples from the repository root:
 
 ```bash
 PYTHONPATH=src .venv/bin/python examples/scripts/plate_with_hole.py
@@ -21,16 +21,13 @@ PYTHONPATH=src .venv/bin/python examples/scripts/production_step.py
 ```
 
 Each script accepts `--out <dir>` when you want products somewhere other than
-`examples/gallery`.
+`examples/files/created`.
 
 View-related examples:
 
 ```bash
 PYTHONPATH=src .venv/bin/python examples/scripts/visualise_plate.py --out /tmp/cady-visualisation
 PYTHONPATH=src .venv/bin/python examples/scripts/visualise_3.py --shape plate
-PYTHONPATH=src .venv/bin/python examples/scripts/visualise_linesplan_9m.py
+PYTHONPATH=src .venv/bin/python examples/scripts/meshes/pointcloud2mesh.py --no-view
+PYTHONPATH=src .venv/bin/python examples/scripts/meshes/mesh_decimate.py --case surface --no-view
 ```
-
-The linesplan example first opens the imported DXF wires directly, then opens a
-second scene built from `Mesh3.from_dxf(...)`. Both scenes are shifted so their
-bounding-box centre sits at the world origin before fitting the profile camera.

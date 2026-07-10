@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from example_geometry import GALLERY_DIR, plate_document, scene_for_target, scene_summary
+from example_geometry import OUTPUT_DIR, plate_document, scene_for_target, scene_summary
 
 from cady import Drawing2, Part
 from cady.files import dxf, stl
@@ -11,7 +11,7 @@ from cady.files import dxf, stl
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, default=GALLERY_DIR)
+    parser.add_argument("--out", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--tolerance", type=float, default=1e-3)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)

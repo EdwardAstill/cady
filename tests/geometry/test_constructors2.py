@@ -5,18 +5,14 @@ from cady.geometry import (
     Arc2,
     Circle2,
     Line2,
-    Point2,
     Polyline2,
     Region2,
-    Vector2,
 )
 
 
 def test_constructors_return_new_geometry_concepts() -> None:
     assert isinstance(Line2((0, 0), (1, 0)), Line2)
     assert isinstance(Arc2((0, 0), (1, 0), (0, 1)), Arc2)
-    assert Point2(1, 2) == (1.0, 2.0)
-    assert Vector2(3, 4).length == 5.0
     assert isinstance(Circle2((0, 0), 1), Circle2)
     assert isinstance(Polyline2(((0, 0), (1, 0))), Polyline2)
     closed = Polyline2(((0, 0), (1, 0), (1, 1)), closed=True)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from inspect import signature
 from math import dist
 from pathlib import Path
 from statistics import mean
@@ -64,15 +65,6 @@ def test_linesplan_from_dxf_nodes_on_polyline_sets_default_sample_count() -> Non
     assert len(wireframe.edges) == 1483
 
 
-def test_linesplan_grid_wireframe_accepts_legacy_nodes_per_station_override() -> None:
-    linesplan = Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=12)
-
-    wireframe = linesplan.to_grid_wireframe(nodes_per_station=8)
-
-    assert len(wireframe.vertices) == 65 * 8
-    assert len(wireframe.edges) == 967
-
-
 def test_linesplan_rejects_invalid_nodes_on_polyline() -> None:
     with pytest.raises(TypeError, match="nodes_on_polyline must be an integer"):
         Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=12.5)
@@ -81,11 +73,10 @@ def test_linesplan_rejects_invalid_nodes_on_polyline() -> None:
         Linesplan.from_dxf(LINESPLAN_DXF, nodes_on_polyline=1)
 
 
-def test_linesplan_rejects_conflicting_sample_count_names() -> None:
-    linesplan = Linesplan.from_dxf(LINESPLAN_DXF)
-
-    with pytest.raises(ValueError, match="use either nodes_on_polyline or nodes_per_station"):
-        linesplan.to_grid_wireframe(nodes_on_polyline=12, nodes_per_station=8)
+def test_linesplan_legacy_keyword_aliases_are_removed() -> None:
+    assert "snap_tolerance" not in signature(Linesplan.from_dxf).parameters
+    assert "nodes_per_station" not in signature(Linesplan.to_grid_wireframe).parameters
+    assert "nodes_per_station" not in signature(Linesplan.to_mesh).parameters
 
 
 def test_linesplan_to_mesh_rejects_conflicting_spacing_controls() -> None:

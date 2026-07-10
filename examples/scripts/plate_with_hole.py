@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from example_geometry import GALLERY_DIR, plate_example
+from example_geometry import OUTPUT_DIR, plate_example
 
 from cady.files import dxf, stl
 
@@ -14,7 +14,7 @@ def build_plate():
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, default=GALLERY_DIR)
+    parser.add_argument("--out", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--tolerance", type=float, default=1e-3)
     parser.add_argument("--ascii-stl", action="store_true")
     args = parser.parse_args()

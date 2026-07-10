@@ -9,9 +9,10 @@ from typing import TypeAlias
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.geometry.point import Point2
+from cady.geometry._coordinates import point2
 from cady.utils import finite, positive, positive_tolerance
 
+Point2: TypeAlias = tuple[float, float]
 PointArray2: TypeAlias = NDArray[np.float64]
 
 
@@ -31,13 +32,13 @@ class Circle2:
     radius: float
 
     def __init__(self, center: object, radius: float) -> None:
-        object.__setattr__(self, "center", Point2(center))
+        object.__setattr__(self, "center", point2(center, name="center"))
         object.__setattr__(self, "radius", positive(radius, "radius"))
 
     def bounds(self) -> tuple[Point2, Point2]:
         return (
-            Point2(self.center[0] - self.radius, self.center[1] - self.radius),
-            Point2(self.center[0] + self.radius, self.center[1] + self.radius),
+            (self.center[0] - self.radius, self.center[1] - self.radius),
+            (self.center[0] + self.radius, self.center[1] + self.radius),
         )
 
     @property
@@ -49,7 +50,7 @@ class Circle2:
         return 2.0 * pi * self.radius
 
     def points(self) -> tuple[Point2, ...]:
-        point = Point2(self.center[0] + self.radius, self.center[1])
+        point = (self.center[0] + self.radius, self.center[1])
         return (point, point)
 
     @property
@@ -87,7 +88,7 @@ class Ellipse2:
         radius_y: float,
         rotation_rad: float = 0.0,
     ) -> None:
-        object.__setattr__(self, "center", Point2(center))
+        object.__setattr__(self, "center", point2(center, name="center"))
         object.__setattr__(self, "radius_x", positive(radius_x, "radius_x"))
         object.__setattr__(self, "radius_y", positive(radius_y, "radius_y"))
         object.__setattr__(self, "rotation_rad", finite(rotation_rad, "rotation_rad"))
@@ -98,8 +99,8 @@ class Ellipse2:
         half_width = ((self.radius_x * cr) ** 2 + (self.radius_y * sr) ** 2) ** 0.5
         half_height = ((self.radius_x * sr) ** 2 + (self.radius_y * cr) ** 2) ** 0.5
         return (
-            Point2(self.center[0] - half_width, self.center[1] - half_height),
-            Point2(self.center[0] + half_width, self.center[1] + half_height),
+            (self.center[0] - half_width, self.center[1] - half_height),
+            (self.center[0] + half_width, self.center[1] + half_height),
         )
 
     @property
@@ -116,7 +117,7 @@ class Ellipse2:
     def points(self) -> tuple[Point2, ...]:
         cr = cos(self.rotation_rad)
         sr = sin(self.rotation_rad)
-        start = Point2(self.center[0] + self.radius_x * cr, self.center[1] + self.radius_x * sr)
+        start = (self.center[0] + self.radius_x * cr, self.center[1] + self.radius_x * sr)
         return (start, start)
 
     @property
@@ -135,7 +136,7 @@ class Ellipse2:
             x = self.radius_x * cos(angle)
             y = self.radius_y * sin(angle)
             points.append(
-                Point2(
+                (
                     self.center[0] + x * cr - y * sr,
                     self.center[1] + x * sr + y * cr,
                 )

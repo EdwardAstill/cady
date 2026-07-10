@@ -163,15 +163,15 @@ The parser walks entity chunks in the `ENTITIES` section.
 
 Supported 2D entities:
 
-- `LINE` -> `Line2D`
-- `LWPOLYLINE` -> `Polyline2D` with `closed` set from DXF flags
-- `CIRCLE` -> `Circle2D`
-- `ARC` -> `Arc2D`
-- `TEXT` / `MTEXT` -> `Text2D`
+- `LINE` -> `Line2`
+- `LWPOLYLINE` -> `Polyline2` with `closed` set from DXF flags
+- `CIRCLE` -> `Circle2`
+- `ARC` -> `Arc2`
+- `TEXT` / `MTEXT` -> `Text2`
 
 Supported 3D imports:
 
-- `3DFACE` -> `Mesh3D`
+- `3DFACE` -> `Mesh3`
 - 3D `POLYLINE` vertex sequences -> wire tuples of `(x, y, z)` coordinates
 
 Unsupported ACIS-backed entities such as `3DSOLID`, `BODY`, `REGION`, and

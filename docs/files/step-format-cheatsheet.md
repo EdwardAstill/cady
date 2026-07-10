@@ -47,8 +47,8 @@ Each entity line ends with `;`. Entity references use `#<integer>`.
 The facade first resolves a mesh:
 
 ```text
-Mesh3D                -> Mesh3D
-Body3D                -> Body3D.to_mesh(tolerance=...)
+Mesh3                 -> Mesh3
+Body3                 -> Body3.to_mesh(tolerance=...)
 Part                  -> Part.to_mesh(tolerance=...)
 Assembly              -> Assembly.to_mesh(tolerance=...)
 Document              -> merged meshable parts and assemblies

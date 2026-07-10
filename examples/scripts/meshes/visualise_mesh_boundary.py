@@ -1,8 +1,8 @@
 """Visualise boundary loops on a nontrivial triangle mesh.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_mesh_boundary.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/scripts/visualise_mesh_boundary.py
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/visualise_mesh_boundary.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/visualise_mesh_boundary.py
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
 """Simplify several meshes with Mesh3.decimate.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/scripts/mesh_decimate.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/scripts/mesh_decimate.py --case closed-cylinder
-    PYTHONPATH=src .venv/bin/python examples/scripts/mesh_decimate.py --case linesplan-dxf
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/mesh_decimate.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/mesh_decimate.py --case closed-cylinder
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/mesh_decimate.py --case linesplan-dxf
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from cady.operations import Transform3
 
 Point3 = tuple[float, float, float]
 
-ROOT = Path(__file__).resolve().parents[2]
-LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
+ROOT = Path(__file__).resolve().parents[3]
+LINESPLAN_DXF = ROOT / "examples" / "files" / "linesplan_9m.dxf"
 CASE_KEYS = ("surface", "closed-box", "closed-cylinder", "linesplan-dxf")
 
 SOURCE_STYLE = DisplayStyle(color=(0.72, 0.76, 0.80), opacity=0.62, render_mode="shaded")

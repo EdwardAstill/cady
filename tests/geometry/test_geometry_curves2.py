@@ -13,10 +13,8 @@ from cady.geometry import (
     Ellipse2,
     Line2,
     Mesh2,
-    Point2,
     Polyline2,
     Spline2,
-    Vector2,
 )
 
 
@@ -24,7 +22,7 @@ def test_line2_is_frozen_and_evaluates_to_polyline() -> None:
     line = Line2((0, 0), (2, 3))
 
     assert line.points() == ((0, 0), (2, 3))
-    assert isinstance(line.start, Point2)
+    assert type(line.start) is tuple
     assert line.bounds() == ((0, 0), (2, 3))
     with pytest.raises(FrozenInstanceError):
         line.start = (1, 1)  # type: ignore[misc]
@@ -190,8 +188,8 @@ def test_circle2_and_ellipse2_are_closed_polyline_arrays() -> None:
     circle = Circle2((1, 2), 3)
     ellipse = Ellipse2((0, 0), 4, 2, rotation_rad=pi / 6)
 
-    assert isinstance(circle.center, Point2)
-    assert isinstance(ellipse.center, Point2)
+    assert type(circle.center) is tuple
+    assert type(ellipse.center) is tuple
     assert circle.bounds() == ((-2, -1), (4, 5))
     assert ellipse.bounds()[0][0] < -3.5
 
@@ -224,7 +222,7 @@ def test_spline2_samples_cubic_bezier_to_polyline() -> None:
 def test_spline2_can_be_defined_by_points_and_vectors() -> None:
     spline = Spline2(
         ((0.0, 0.0), (3.0, 0.0)),
-        (Vector2(3.0, 0.0), Vector2(3.0, 0.0)),
+        ((3.0, 0.0), (3.0, 0.0)),
     )
 
     assert spline.control_points == (
@@ -233,7 +231,7 @@ def test_spline2_can_be_defined_by_points_and_vectors() -> None:
         (2.0, 0.0),
         (3.0, 0.0),
     )
-    assert isinstance(spline.control_points[0], Point2)
+    assert type(spline.control_points[0]) is tuple
     assert spline.length == pytest.approx(3.0)
 
 

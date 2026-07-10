@@ -266,8 +266,6 @@ and push numeric work into operations modules when it becomes reusable.
 - `Linesplan.to_grid_wireframe(...)` samples stations into a `Wireframe3`.
 - `Linesplan.to_mesh(...)` builds a closed triangular `Mesh3` from the sampled
   station grid and caps.
-- `nodes_per_station` remains a legacy override accepted by output methods, but
-  new code should prefer `nodes_on_polyline`.
 
 ## Files And I/O
 

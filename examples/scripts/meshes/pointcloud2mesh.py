@@ -1,9 +1,9 @@
 """Visualise advancing-front meshing from an array of 3D points.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python examples/scripts/pointcloud2mesh.py
-    PYTHONPATH=src .venv/bin/python examples/scripts/pointcloud2mesh.py --no-view
-    PYTHONPATH=src .venv/bin/python examples/scripts/pointcloud2mesh.py --grid-size 13
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/pointcloud2mesh.py
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/pointcloud2mesh.py --no-view
+    PYTHONPATH=src .venv/bin/python examples/scripts/meshes/pointcloud2mesh.py --grid-size 13
 """
 
 from __future__ import annotations

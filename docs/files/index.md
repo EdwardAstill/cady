@@ -9,7 +9,7 @@ from cady.files import dxf, step, stl
 
 ## DXF
 
-Write a `Drawing2D`:
+Write a `Drawing2`:
 
 ```python
 dxf.write(drawing, "front.dxf", tolerance=1e-3)
@@ -18,11 +18,11 @@ text = dxf.render(drawing, tolerance=1e-3)
 
 Current DXF output emits:
 
-- `LINE` from `Line2D`;
-- `LWPOLYLINE` from open and closed `Polyline2D`;
-- `CIRCLE` from `Circle2D`;
-- `ARC` from `Arc2D`;
-- `TEXT` from `Text2D`;
+- `LINE` from `Line2`;
+- `LWPOLYLINE` from open and closed `Polyline2`;
+- `CIRCLE` from `Circle2`;
+- `ARC` from `Arc2`;
+- `TEXT` from `Text2`;
 - layer table records for drawing layers;
 - sampled closed polylines for other region-like objects that expose
   `to_array(tolerance=...)`.
@@ -56,7 +56,7 @@ stl.write(part, "plate.stl", tolerance=1e-3)
 stl.write(assembly, "assembly-ascii.stl", ascii=True, tolerance=1e-3)
 ```
 
-Supported targets include `Mesh3D`, `Body3D`, `Part`, `Assembly`, and
+Supported targets include `Mesh3`, `Body3`, `Part`, `Assembly`, and
 `Document` values containing meshable parts or assemblies.
 
 STL has no curves, layers, units, materials, or product structure. cady writes
@@ -84,7 +84,7 @@ members = step.read_members("member.step")
 
 `read_faces(...)` parses elementary surface data. `read_members(...)` attempts
 to infer simple extruded members from parsed faces. cady does not rebuild
-arbitrary STEP assemblies into editable `Body3D`, `Part`, or `Assembly` values.
+arbitrary STEP assemblies into editable `Body3`, `Part`, or `Assembly` values.
 
 Implementation notes: [STEP format cheatsheet](step-format-cheatsheet.md).
 

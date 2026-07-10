@@ -109,15 +109,10 @@ class Linesplan:
         mesh_snap_tolerance: float | None = None,
         node_spacing: float | None = None,
         short_projection_ratio: float | None = None,
-        snap_tolerance: float | None = None,
     ) -> Linesplan:
         """Read station lines from a DXF and return cleaned station polylines."""
         nodes_on_polyline = _validate_nodes_on_polyline(nodes_on_polyline)
         _validate_tolerance(tolerance, "tolerance")
-        if snap_tolerance is not None and dxf_snap_tolerance is not None:
-            raise ValueError("use either dxf_snap_tolerance or snap_tolerance, not both")
-        if dxf_snap_tolerance is None:
-            dxf_snap_tolerance = snap_tolerance
 
         network = classify_linesplan_curves(dxf.read_curves(path), tolerance=tolerance)
         station_polylines = tuple(Polyline3(curve.vertices) for curve in network.sections)
@@ -207,14 +202,11 @@ class Linesplan:
         self,
         *,
         nodes_on_polyline: int | None = None,
-        nodes_per_station: int | None = None,
         tolerance: float | None = None,
     ) -> Wireframe3:
         """Sample cleaned stations into an equal-width grid wireframe."""
-        nodes_on_polyline = _resolve_nodes_on_polyline(
-            nodes_on_polyline,
-            nodes_per_station,
-            default=self.nodes_on_polyline,
+        nodes_on_polyline = _validate_nodes_on_polyline(
+            self.nodes_on_polyline if nodes_on_polyline is None else nodes_on_polyline
         )
         tolerance = (
             self.settings.mesh_geometry_tolerance
@@ -231,7 +223,6 @@ class Linesplan:
         *,
         node_spacing: float | None = None,
         nodes_on_polyline: int | None = None,
-        nodes_per_station: int | None = None,
         tolerance: float | None = None,
         snap_tolerance: float | None = None,
         short_projection_ratio: float | None = None,
@@ -256,7 +247,6 @@ class Linesplan:
             self.polylines,
             node_spacing,
             nodes_on_polyline,
-            nodes_per_station,
             default=self.settings.node_spacing,
         )
 
@@ -1227,18 +1217,18 @@ def _resolve_node_spacing(
     polylines: Iterable[Polyline3],
     node_spacing: float | None,
     nodes_on_polyline: int | None,
-    nodes_per_station: int | None,
     *,
     default: float,
 ) -> float:
-    has_node_count = nodes_on_polyline is not None or nodes_per_station is not None
-    if node_spacing is not None and has_node_count:
+    if node_spacing is not None and nodes_on_polyline is not None:
         raise ValueError("use node_spacing or a node count, not both")
     if node_spacing is not None:
         return _validate_tolerance(node_spacing, "node_spacing")
-    if nodes_on_polyline is not None or nodes_per_station is not None:
-        count = _resolve_nodes_on_polyline(nodes_on_polyline, nodes_per_station, default=0)
-        return _node_spacing_for_count(tuple(polylines), count)
+    if nodes_on_polyline is not None:
+        return _node_spacing_for_count(
+            tuple(polylines),
+            _validate_nodes_on_polyline(nodes_on_polyline),
+        )
     return _validate_tolerance(default, "node_spacing")
 
 
@@ -1246,21 +1236,6 @@ def _node_spacing_for_count(polylines: Sequence[Polyline3], count: int) -> float
     if not polylines:
         raise ValueError("station_lines must not be empty")
     return float(median(polyline.length for polyline in polylines)) / (count - 1)
-
-
-def _resolve_nodes_on_polyline(
-    nodes_on_polyline: int | None,
-    nodes_per_station: int | None,
-    *,
-    default: int,
-) -> int:
-    if nodes_on_polyline is not None and nodes_per_station is not None:
-        raise ValueError("use either nodes_on_polyline or nodes_per_station, not both")
-    if nodes_on_polyline is not None:
-        return _validate_nodes_on_polyline(nodes_on_polyline)
-    if nodes_per_station is not None:
-        return _validate_nodes_on_polyline(nodes_per_station)
-    return _validate_nodes_on_polyline(default)
 
 
 def _validate_nodes_on_polyline(nodes_on_polyline: object) -> int:

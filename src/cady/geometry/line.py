@@ -9,9 +9,11 @@ from typing import TypeAlias
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.geometry.point import Point2, Point3
+from cady.geometry._coordinates import point2, point3
 from cady.utils import positive_tolerance
 
+Point2: TypeAlias = tuple[float, float]
+Point3: TypeAlias = tuple[float, float, float]
 PointArray2: TypeAlias = NDArray[np.float64]
 PointArray3: TypeAlias = NDArray[np.float64]
 
@@ -24,8 +26,8 @@ class Line2:
     end: Point2
 
     def __init__(self, start: object, end: object) -> None:
-        start = Point2(start)
-        end = Point2(end)
+        start = point2(start, name="start")
+        end = point2(end, name="end")
         object.__setattr__(self, "start", start)
         object.__setattr__(self, "end", end)
         if start == end:
@@ -33,8 +35,8 @@ class Line2:
 
     def bounds(self) -> tuple[Point2, Point2]:
         return (
-            Point2(min(self.start[0], self.end[0]), min(self.start[1], self.end[1])),
-            Point2(max(self.start[0], self.end[0]), max(self.start[1], self.end[1])),
+            (min(self.start[0], self.end[0]), min(self.start[1], self.end[1])),
+            (max(self.start[0], self.end[0]), max(self.start[1], self.end[1])),
         )
 
     @property
@@ -64,8 +66,8 @@ class Line3:
     end: Point3
 
     def __init__(self, start: object, end: object) -> None:
-        start = Point3(start)
-        end = Point3(end)
+        start = point3(start, name="start")
+        end = point3(end, name="end")
         object.__setattr__(self, "start", start)
         object.__setattr__(self, "end", end)
         if start == end:
@@ -73,12 +75,12 @@ class Line3:
 
     def bounds(self) -> tuple[Point3, Point3]:
         return (
-            Point3(
+            (
                 min(self.start[0], self.end[0]),
                 min(self.start[1], self.end[1]),
                 min(self.start[2], self.end[2]),
             ),
-            Point3(
+            (
                 max(self.start[0], self.end[0]),
                 max(self.start[1], self.end[1]),
                 max(self.start[2], self.end[2]),
