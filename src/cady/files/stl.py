@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TypeAlias
 
@@ -11,7 +12,7 @@ from cady.files.utils import mesh_from_target
 from cady.geometry import Mesh3
 from cady.operations.primitives import cross3, normalised3, sub3
 
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 Triangle3 = tuple[Point3, Point3, Point3]
 
 

@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+from cady.geometry._coordinates import vector2
 from cady.geometry.plane3 import Plane3
+from cady.geometry.point import Point2 as Point2Value
+from cady.geometry.point import Point3 as Point3Value
+from cady.geometry.vector import Vector3
 from cady.operations.primitives import cross3, normalised2, normalised3, sub3
 
 SurfaceKind = Literal["plane", "parametric"]
 ScalarFunction = Callable[[float, float], float]
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +38,7 @@ class Surface2:
         origin: Point2 = (0.0, 0.0),
         x_axis: Point2 = (1.0, 0.0),
     ) -> Surface2:
-        x_axis = normalised2(x_axis)
+        x_axis = vector2(normalised2(x_axis), name="x_axis")
         y_axis = (-x_axis[1], x_axis[0])
         return cls(
             lambda u, v: origin[0] + x_axis[0] * u + y_axis[0] * v,
@@ -49,7 +53,7 @@ class Surface2:
     def point(self, u: float, v: float) -> Point2:
         u = float(u)
         v = float(v)
-        return (float(self.x_function(u, v)), float(self.y_function(u, v)))
+        return Point2Value(float(self.x_function(u, v)), float(self.y_function(u, v)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,13 +111,13 @@ class Surface3:
     def point(self, u: float, v: float) -> Point3:
         u = float(u)
         v = float(v)
-        return (
+        return Point3Value(
             float(self.x_function(u, v)),
             float(self.y_function(u, v)),
             float(self.z_function(u, v)),
         )
 
-    def normal(self, u: float, v: float) -> Point3:
+    def normal(self, u: float, v: float) -> Vector3:
         if self.kind == "plane" and self.base_plane is not None:
             return self.base_plane.normal
         step = 1e-6
@@ -121,7 +125,7 @@ class Surface3:
         centre_v = float(v)
         du = sub3(self.point(centre_u + step, centre_v), self.point(centre_u - step, centre_v))
         dv = sub3(self.point(centre_u, centre_v + step), self.point(centre_u, centre_v - step))
-        return normalised3(cross3(du, dv))
+        return Vector3(*normalised3(cross3(du, dv)))
 
 
 __all__ = ["ScalarFunction", "Surface2", "Surface3", "SurfaceKind"]

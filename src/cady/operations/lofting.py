@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from math import dist
 from typing import TypeAlias, cast
 
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 Face: TypeAlias = tuple[int, int, int]
 Edge: TypeAlias = tuple[int, int]
 

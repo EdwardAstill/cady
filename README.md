@@ -10,6 +10,8 @@ Start with [docs/index.md](docs/index.md) for the full documentation.
 
 - immutable 2D geometry values such as `Line2`, `Circle2`, open or closed
   `Polyline2`, `Spline2`, `Ellipse2`, `Region2`, and `Mesh2`;
+- immutable `Point2`/`Point3` positions and `Vector2`/`Vector3` directions with
+  affine-safe arithmetic;
 - meshable 3D geometry through `Body3`, `Region3`, `Surface3`, `Plane3`,
   `Mesh3`, and closed 3D polylines;
 - product structure with `Part`, `Assembly`, placed part instances, materials,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import cos, degrees, pi, radians, sin
 from pathlib import Path
@@ -13,7 +13,7 @@ from cady.errors import ReadError, WriteError
 from cady.geometry import Arc2, Circle2, Line2, Mesh3, Polyline2, Wireframe3
 
 Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 
 
 @dataclass(frozen=True, slots=True)

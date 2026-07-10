@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeAlias, cast
 
 import numpy as np
 
+from cady.geometry._coordinates import point3
 from cady.geometry.mesh import EdgeIndex, Mesh3
+from cady.geometry.point import Point3 as Point3Value
 from cady.geometry.polyline import Polyline3
 from cady.operations.transforms import Transform3
 
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 
 if TYPE_CHECKING:
     from cady.view import Camera, DisplayStyle, Light
@@ -47,7 +49,7 @@ class Wireframe3:
             object.__setattr__(self, "_edges", edge_values)
             return
         vertices = cast(Iterable[Point3], polylines)
-        vertex_values = tuple(vertices)
+        vertex_values = tuple(point3(vertex, name="vertex") for vertex in vertices)
         edge_values = tuple(_validate_edge(vertex_values, edge) for edge in edges)
         object.__setattr__(
             self,
@@ -94,12 +96,12 @@ class Wireframe3:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty wireframe")
         return (
-            (
+            Point3Value(
                 min(vertex[0] for vertex in self.vertices),
                 min(vertex[1] for vertex in self.vertices),
                 min(vertex[2] for vertex in self.vertices),
             ),
-            (
+            Point3Value(
                 max(vertex[0] for vertex in self.vertices),
                 max(vertex[1] for vertex in self.vertices),
                 max(vertex[2] for vertex in self.vertices),
@@ -258,7 +260,7 @@ def _find_or_add_exact_vertex(
     vertex_indices: dict[tuple[float, float, float], int],
     point: Point3,
 ) -> int:
-    key = point
+    key = (float(point[0]), float(point[1]), float(point[2]))
     existing_index = vertex_indices.get(key)
     if existing_index is not None:
         return existing_index

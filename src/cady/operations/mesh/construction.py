@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 import numpy as np
@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from cady.geometry.plane3 import Plane3
     from cady.geometry.surface import Surface3
 
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
-Point3Tuple: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
+Point3Tuple: TypeAlias = Sequence[float]
 Triangle2: TypeAlias = tuple[Point2, Point2, Point2]
 Triangle3: TypeAlias = tuple[Point3Tuple, Point3Tuple, Point3Tuple]
 PointArray2 = NDArray[np.float64]

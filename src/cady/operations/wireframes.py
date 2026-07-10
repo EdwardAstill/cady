@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from cady.geometry.mesh import Mesh3
     from cady.geometry.wireframe import Wireframe3
 
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 EdgeIndex: TypeAlias = tuple[int, int]
 FaceIndex: TypeAlias = tuple[int, int, int]
 

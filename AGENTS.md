@@ -81,9 +81,10 @@ package, `cady.operations`. Do not add split packages like `geometry2`,
 
 Authoring layer:
 
-- Points are plain tuples (`tuple[float, float]` and
-  `tuple[float, float, float]`) validated at construction or conversion
-  boundaries. There are no public `Vec2` or `Vec3` classes.
+- `Point2`/`Point3` are immutable positions and `Vector2`/`Vector3` are
+  immutable directions or displacements. Geometry boundaries accept coordinate
+  sequences and normalize semantic fields to these values. `Vec2` and `Vec3`
+  aliases remain absent.
 - 2D geometry: `Line2`, `Arc2`, `Spline2`, `Polyline2`, `Circle2`, `Ellipse2`,
   `Region2`, `Mesh2`, `PointCloud2`
 - 3D geometry: `Line3`, `Arc3`, `Spline3`, `Polyline3`, `Plane3`, `Surface2`,
@@ -149,7 +150,8 @@ Top-level `cady` re-exports currently include:
 - constructors: `line2`, `arc2`, `line3`, `arc3`, `spline3`, `polyline2`,
   `polyline3`, `circle2`, `region_rectangle`, `region_circle`, `box`,
   `cylinder`, `sphere`
-- geometry: `Line2`, `Line3`, `Arc2`, `Arc3`, `Spline2`, `Spline3`,
+- geometry: `Point2`, `Point3`, `Vector2`, `Vector3`, `Line2`, `Line3`,
+  `Arc2`, `Arc3`, `Spline2`, `Spline3`,
   `Polyline2`, `Polyline3`, `Circle2`, `Ellipse2`, `Region2`, `Region3`,
   `Surface2`, `Surface3`, `Plane3`, `Mesh2`, `Mesh3`, `Wireframe3`,
   `PointCloud2`, `PointCloud3`, `Body3`

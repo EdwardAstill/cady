@@ -7,6 +7,8 @@ helpers remain in their owning subpackages.
 
 | Name | Description |
 |---|---|
+| `Point2`, `Point3` | Immutable positions with named coordinates and affine arithmetic. |
+| `Vector2`, `Vector3` | Immutable directions and displacements. |
 | `Line2`, `Line3` | Straight line segments. |
 | `Arc2`, `Arc3` | Circular arcs defined by center, start, and midpoint. |
 | `Spline2`, `Spline3` | Cubic Bezier splines, optionally built from endpoint tangent vectors. |
@@ -21,8 +23,23 @@ helpers remain in their owning subpackages.
 | `Body3` | Immutable feature-history body. |
 | `Curve2`, `Curve3` | Curve protocols used by polyline composition. |
 
-Coordinates are plain `(x, y)` or `(x, y, z)` tuples. There are no public
-point or vector wrapper classes.
+Geometry constructors accept plain `(x, y)` and `(x, y, z)` coordinate
+sequences as well as `Point2`/`Point3` values. Semantic geometry exposes points
+and directions as immutable point and vector values; numeric and file boundaries
+remain sequence-oriented.
+
+```python
+point = Point3(1.0, 2.0, 3.0)
+offset = Vector3(0.0, 0.0, 2.0)
+moved = point + offset
+direction = moved - point
+```
+
+Point arithmetic follows affine rules: subtracting points produces a vector,
+and adding or subtracting a vector produces a point. Vectors support length,
+normalization, dot products, scaling, and vector arithmetic; `Vector3` also
+supports cross products. Equality remains exact, with geometric tolerances kept
+in explicit measurement and operation APIs.
 
 Common constructors include:
 

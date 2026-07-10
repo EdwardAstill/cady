@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cady.geometry import Plane3
+from cady.geometry import Plane3, Point3, Vector3
 from cady.operations.transforms import Transform3
 
 
@@ -10,8 +10,8 @@ def test_world_xy_frame_maps_local_points() -> None:
     plane = Plane3.world_xy()
 
     assert plane.point(2.0, 3.0) == (2.0, 3.0, 0.0)
-    assert type(plane.origin) is tuple
-    assert type(plane.normal) is tuple
+    assert isinstance(plane.origin, Point3)
+    assert isinstance(plane.normal, Vector3)
     assert plane.y_axis == (0.0, 1.0, 0.0)
 
 

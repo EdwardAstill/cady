@@ -31,6 +31,8 @@ def test_smoke_import() -> None:
         "Mesh3",
         "Mesh2",
         "Part",
+        "Point2",
+        "Point3",
         "PointLight",
         "PointCloud2",
         "PointCloud3",
@@ -42,6 +44,8 @@ def test_smoke_import() -> None:
         "Spline3",
         "Surface2",
         "Surface3",
+        "Vector2",
+        "Vector3",
         "Wireframe3",
     )
 

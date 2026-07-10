@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from math import acos, degrees, dist, fsum, isfinite
@@ -13,11 +13,14 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.errors import GeometryError
+from cady.geometry._coordinates import point2, point3
 from cady.geometry.line import Line2, Line3
+from cady.geometry.point import Point2 as Point2Value
+from cady.geometry.point import Point3 as Point3Value
 from cady.utils import positive_tolerance
 
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 PointArray2: TypeAlias = NDArray[np.float64]
 PointArray3: TypeAlias = NDArray[np.float64]
 
@@ -115,11 +118,11 @@ class Polyline2:
     def bounds(self) -> tuple[Point2, Point2]:
         points = tuple(bound for curve in self.curves for bound in curve.bounds())
         return (
-            (
+            Point2Value(
                 min(point[0] for point in points),
                 min(point[1] for point in points),
             ),
-            (
+            Point2Value(
                 max(point[0] for point in points),
                 max(point[1] for point in points),
             ),
@@ -328,12 +331,12 @@ class Polyline3:
     def bounds(self) -> tuple[Point3, Point3]:
         points = tuple(bound for curve in self.curves for bound in curve.bounds())
         return (
-            (
+            Point3Value(
                 min(point[0] for point in points),
                 min(point[1] for point in points),
                 min(point[2] for point in points),
             ),
-            (
+            Point3Value(
                 max(point[0] for point in points),
                 max(point[1] for point in points),
                 max(point[2] for point in points),
@@ -476,8 +479,9 @@ def _vertices2_from_curves(curves: Iterable[Curve2]) -> tuple[Point2, ...]:
     points: list[Point2] = []
     for curve in curves:
         for point in curve.points():
-            if not points or points[-1] != point:
-                points.append(point)
+            value = point2(point)
+            if not points or points[-1] != value:
+                points.append(value)
     return tuple(points)
 
 
@@ -485,8 +489,9 @@ def _vertices_from_curves(curves: Iterable[Curve3]) -> tuple[Point3, ...]:
     points: list[Point3] = []
     for curve in curves:
         for point in curve.points():
-            if not points or points[-1] != point:
-                points.append(point)
+            value = point3(point)
+            if not points or points[-1] != value:
+                points.append(value)
     return tuple(points)
 
 

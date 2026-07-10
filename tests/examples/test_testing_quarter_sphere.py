@@ -7,6 +7,7 @@ from math import isclose
 from pathlib import Path
 from types import ModuleType
 
+from cady.geometry import Point3
 from cady.view import prepare_scene
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -159,7 +160,7 @@ def test_intersection_nodes_to_edge_mesh_connects_matrix_neighbours() -> None:
     )
 
 
-def test_repair_examples_accept_tuple_backed_polyline_vertices() -> None:
+def test_repair_examples_accept_semantic_polyline_vertices() -> None:
     for filename in ("testing2.py", "testing3.py", "testing4-bad.py"):
         module = _load_testing_script(filename)
 
@@ -179,7 +180,7 @@ def test_repair_examples_accept_tuple_backed_polyline_vertices() -> None:
         )
         node_mesh = wireframe_array.to_mesh()
 
-        assert isinstance(linesplan[0].vertices[0], tuple)
+        assert isinstance(linesplan[0].vertices[0], Point3)
         assert len(wireframe.vertices) == 95
         assert len(wireframe.edges) == 96
         assert len(wireframe_array.node_array) == 3
@@ -187,7 +188,7 @@ def test_repair_examples_accept_tuple_backed_polyline_vertices() -> None:
         assert len(node_mesh.vertices) > 0
 
 
-def test_strip_mesh_example_uses_shared_tuple_backed_wireframe() -> None:
+def test_strip_mesh_example_uses_shared_semantic_wireframe() -> None:
     module = _load_testing_script("testing5-strip-mesh.py")
 
     y_values = module.slice_y_values(
@@ -202,7 +203,7 @@ def test_strip_mesh_example_uses_shared_tuple_backed_wireframe() -> None:
         refinement_rows=module.REFINEMENT_ROWS,
     )
 
-    assert isinstance(module.WIREFRAME_OBJECT.linesplan[0].vertices[0], tuple)
+    assert isinstance(module.WIREFRAME_OBJECT.linesplan[0].vertices[0], Point3)
     assert len(module.WIREFRAME_OBJECT.wireframe.vertices) == 95
     assert len(strip_mesh.base_node_array) == 3
     assert all(len(row) == 8 for row in strip_mesh.base_node_array)

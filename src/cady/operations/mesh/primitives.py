@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from math import acos, ceil, cos, pi, sin
 from typing import TYPE_CHECKING, TypeAlias
 
@@ -13,9 +14,9 @@ if TYPE_CHECKING:
     from cady.geometry.mesh import Mesh3
     from cady.geometry.plane3 import Plane3
 
-Point2: TypeAlias = tuple[float, float]
-Point3Tuple: TypeAlias = tuple[float, float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3Tuple: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 Triangle3: TypeAlias = tuple[Point3Tuple, Point3Tuple, Point3Tuple]
 Triangle2: TypeAlias = tuple[Point2, Point2, Point2]
 

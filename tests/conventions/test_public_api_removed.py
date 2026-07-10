@@ -12,8 +12,6 @@ def test_removed_top_level_api_names_are_not_exported() -> None:
         "DxfDrawing",
         "Extrusion",
         "Model",
-        "Point2",
-        "Point3",
         "Prism",
         "Rectangle",
         "Revolution",
@@ -24,8 +22,6 @@ def test_removed_top_level_api_names_are_not_exported() -> None:
         "StlMesh",
         "Vec2",
         "Vec3",
-        "Vector2",
-        "Vector3",
     }
 
     for name in removed:
@@ -51,8 +47,6 @@ def test_removed_vec_module_is_absent() -> None:
     import importlib.util
 
     assert importlib.util.find_spec("cady.vec") is None
-    assert importlib.util.find_spec("cady.geometry.point") is None
-    assert importlib.util.find_spec("cady.geometry.vector") is None
 
 
 def test_removed_operations_arrays_module_is_absent() -> None:

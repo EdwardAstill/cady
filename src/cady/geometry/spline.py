@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import ceil, sqrt
 from typing import TYPE_CHECKING, TypeAlias, cast
 
-from cady.geometry._coordinates import point2, point3
+from cady.geometry._coordinates import point2, point3, vector2, vector3
+from cady.geometry.point import Point2 as Point2Value
+from cady.geometry.point import Point3 as Point3Value
 from cady.operations.primitives import cross3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
 
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 
 if TYPE_CHECKING:
     from cady.geometry.polyline import Polyline2, Polyline3
@@ -46,7 +48,7 @@ def _max_segment_length(value: float | None) -> float | None:
 class Spline2:
     """Cubic 2D spline made from points and tangent vectors."""
 
-    control_points: tuple[Point2, ...]
+    control_points: tuple[Point2Value, ...]
     closed: bool = False
 
     def __init__(
@@ -61,10 +63,13 @@ class Spline2:
         if vectors is None:
             control_points = tuple(point2(point) for point in points)
         else:
-            control_points = _hermite_control_points2(
-                tuple(point2(point) for point in points),
-                tuple(point2(vector, name="vector") for vector in vectors),
-                closed=bool(closed),
+            control_points = tuple(
+                point2(point)
+                for point in _hermite_control_points2(
+                    tuple(point2(point) for point in points),
+                    tuple(vector2(vector) for vector in vectors),
+                    closed=bool(closed),
+                )
             )
         points = tuple(control_points)
         object.__setattr__(self, "control_points", points)
@@ -74,11 +79,11 @@ class Spline2:
 
     def bounds(self) -> tuple[Point2, Point2]:
         return (
-            (
+            Point2Value(
                 min(point[0] for point in self.control_points),
                 min(point[1] for point in self.control_points),
             ),
-            (
+            Point2Value(
                 max(point[0] for point in self.control_points),
                 max(point[1] for point in self.control_points),
             ),
@@ -100,7 +105,7 @@ class Spline2:
             length += _distance2(self.control_points[-1], self.control_points[0])
         return length
 
-    def points(self) -> tuple[Point2, ...]:
+    def points(self) -> tuple[Point2Value, ...]:
         if self.closed and self.control_points[0] != self.control_points[-1]:
             return self.control_points + (self.control_points[0],)
         return self.control_points
@@ -133,7 +138,7 @@ class Spline2:
 class Spline3:
     """Cubic 3D spline made from points and tangent vectors."""
 
-    control_points: tuple[Point3, ...]
+    control_points: tuple[Point3Value, ...]
 
     def __init__(
         self,
@@ -143,9 +148,12 @@ class Spline3:
         if vectors is None:
             control_points = tuple(point3(point) for point in points)
         else:
-            control_points = _hermite_control_points3(
-                tuple(point3(point) for point in points),
-                tuple(point3(vector, name="vector") for vector in vectors),
+            control_points = tuple(
+                point3(point)
+                for point in _hermite_control_points3(
+                    tuple(point3(point) for point in points),
+                    tuple(vector3(vector) for vector in vectors),
+                )
             )
         points = tuple(control_points)
         object.__setattr__(self, "control_points", points)
@@ -154,12 +162,12 @@ class Spline3:
 
     def bounds(self) -> tuple[Point3, Point3]:
         return (
-            (
+            Point3Value(
                 min(point[0] for point in self.control_points),
                 min(point[1] for point in self.control_points),
                 min(point[2] for point in self.control_points),
             ),
-            (
+            Point3Value(
                 max(point[0] for point in self.control_points),
                 max(point[1] for point in self.control_points),
                 max(point[2] for point in self.control_points),
@@ -179,7 +187,7 @@ class Spline3:
             for index in range(0, len(self.control_points) - 1, 3)
         )
 
-    def points(self) -> tuple[Point3, ...]:
+    def points(self) -> tuple[Point3Value, ...]:
         return self.control_points
 
     def discretize(

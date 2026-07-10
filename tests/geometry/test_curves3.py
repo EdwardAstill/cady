@@ -8,6 +8,7 @@ from cady.errors import GeometryError
 from cady.geometry.arc import Arc3
 from cady.geometry.line import Line3
 from cady.geometry.mesh import Mesh3
+from cady.geometry.point import Point3
 from cady.geometry.polyline import (
     Polyline3,
 )
@@ -73,7 +74,7 @@ def test_line3_factory_and_sampling() -> None:
     line = Line3((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
 
     assert isinstance(line, Line3)
-    assert type(line.start) is tuple
+    assert isinstance(line.start, Point3)
     assert line.points() == ((0.0, 0.0, 0.0), (1.0, 2.0, 3.0))
     assert line.to_array(tolerance=1e-3).tolist() == [
         [0.0, 0.0, 0.0],
@@ -142,7 +143,7 @@ def test_spline3_can_be_defined_by_points_and_vectors() -> None:
         (2.0, 0.0, 0.0),
         (3.0, 0.0, 0.0),
     )
-    assert type(spline.control_points[0]) is tuple
+    assert isinstance(spline.control_points[0], Point3)
     assert spline.length == pytest.approx(3.0)
 
 

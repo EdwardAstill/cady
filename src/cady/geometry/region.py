@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias, TypeGuard, cast
 
@@ -12,13 +12,15 @@ from numpy.typing import NDArray
 from cady.geometry.conic2 import Circle2
 from cady.geometry.mesh import Mesh3
 from cady.geometry.plane3 import Plane3
+from cady.geometry.point import Point2 as Point2Value
+from cady.geometry.point import Point3 as Point3Value
 from cady.geometry.polyline import Curve2, Polyline2
 from cady.geometry.surface import Surface3
 from cady.operations.mesh.construction import surface_region_mesh
 from cady.operations.primitives import cross3, normalised3, sub3
 
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 PointArray2: TypeAlias = NDArray[np.float64]
 
 if TYPE_CHECKING:
@@ -148,12 +150,12 @@ class Region3:
             self.surface.point(u_min, v_max),
         )
         return (
-            (
+            Point3Value(
                 min(point[0] for point in points),
                 min(point[1] for point in points),
                 min(point[2] for point in points),
             ),
-            (
+            Point3Value(
                 max(point[0] for point in points),
                 max(point[1] for point in points),
                 max(point[2] for point in points),
@@ -214,7 +216,7 @@ class Region3:
 
 @dataclass(frozen=True, slots=True)
 class _ProjectedRegion:
-    outer: tuple[tuple[float, float], ...]
+    outer: tuple[Point2, ...]
 
     @classmethod
     def from_points(cls, points: tuple[Point3, ...], plane: Plane3) -> _ProjectedRegion:
@@ -226,11 +228,11 @@ class _ProjectedRegion:
 
     def bounds(self) -> tuple[Point2, Point2]:
         return (
-            (
+            Point2Value(
                 min(point[0] for point in self.outer),
                 min(point[1] for point in self.outer),
             ),
-            (
+            Point2Value(
                 max(point[0] for point in self.outer),
                 max(point[1] for point in self.outer),
             ),
@@ -267,9 +269,9 @@ def _is_bounds2(value: object) -> TypeGuard[tuple[Point2, Point2]]:
 
 
 def _is_point2(value: object) -> TypeGuard[Point2]:
-    if not isinstance(value, tuple):
+    if isinstance(value, str | bytes) or not isinstance(value, Sequence):
         return False
-    values = cast(tuple[object, ...], value)
+    values = cast(Sequence[object], value)
     return len(values) == 2 and all(isinstance(component, int | float) for component in values)
 
 
@@ -321,8 +323,8 @@ def _plane_from_points(points: tuple[Point3, ...]) -> Plane3:
     raise ValueError("region points must not be collinear")
 
 
-def _convex_hull(points: tuple[tuple[float, float], ...]) -> tuple[tuple[float, float], ...]:
-    ordered = tuple(sorted(set(points)))
+def _convex_hull(points: tuple[Point2, ...]) -> tuple[Point2, ...]:
+    ordered = tuple(sorted({(float(point[0]), float(point[1])) for point in points}))
     if len(ordered) < 3:
         raise ValueError("convex hull requires at least three unique points")
 

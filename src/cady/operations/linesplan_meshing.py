@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from cady.geometry.mesh import Mesh3
     from cady.geometry.wireframe import Wireframe3
 
-Point3: TypeAlias = tuple[float, float, float]
+Point3: TypeAlias = Sequence[float]
 
 
 class _SourceCurveLike(Protocol):

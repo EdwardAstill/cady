@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from cady.view.style import RenderMode
     from cady.view.viewer import Projection
 
-_Point3: TypeAlias = tuple[float, float, float]
+_Point3: TypeAlias = Sequence[float]
 _Face: TypeAlias = tuple[int, ...]
 _Edge: TypeAlias = tuple[int, int]
 _PolylineGroup: TypeAlias = tuple[Polyline3, ...]

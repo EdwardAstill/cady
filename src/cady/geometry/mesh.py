@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import floor, fsum, sqrt
 from operator import index as operator_index
@@ -13,10 +13,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.errors import GeometryError
+from cady.geometry._coordinates import point2, point3
+from cady.geometry.point import Point2 as Point2Value
+from cady.geometry.point import Point3 as Point3Value
 from cady.operations.transforms import Transform2, Transform3
 
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
 PointArray2: TypeAlias = NDArray[np.float64]
 PointArray3: TypeAlias = NDArray[np.float64]
 
@@ -40,7 +43,7 @@ class Mesh2:
     edges: tuple[EdgeIndex, ...] = ()
 
     def __post_init__(self) -> None:
-        vertices = tuple(self.vertices)
+        vertices = tuple(point2(vertex, name="vertex") for vertex in self.vertices)
         faces = tuple(_triangle_face(face) for face in self.faces)
         edges = tuple(_edge(edge) for edge in self.edges)
         for face in faces:
@@ -132,11 +135,11 @@ class Mesh2:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty mesh")
         return (
-            (
+            Point2Value(
                 min(vertex[0] for vertex in self.vertices),
                 min(vertex[1] for vertex in self.vertices),
             ),
-            (
+            Point2Value(
                 max(vertex[0] for vertex in self.vertices),
                 max(vertex[1] for vertex in self.vertices),
             ),
@@ -152,7 +155,7 @@ class Mesh3:
     edges: tuple[EdgeIndex, ...] = ()
 
     def __post_init__(self) -> None:
-        vertices = tuple(self.vertices)
+        vertices = tuple(point3(vertex, name="vertex") for vertex in self.vertices)
         faces = tuple(_polygon_face(face) for face in self.faces)
         edges = tuple(_edge(edge) for edge in self.edges)
         for face in faces:
@@ -401,12 +404,12 @@ class Mesh3:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty mesh")
         return (
-            (
+            Point3Value(
                 min(vertex[0] for vertex in self.vertices),
                 min(vertex[1] for vertex in self.vertices),
                 min(vertex[2] for vertex in self.vertices),
             ),
-            (
+            Point3Value(
                 max(vertex[0] for vertex in self.vertices),
                 max(vertex[1] for vertex in self.vertices),
                 max(vertex[2] for vertex in self.vertices),

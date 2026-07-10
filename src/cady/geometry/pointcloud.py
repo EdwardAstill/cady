@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
+from cady.geometry._coordinates import point2, point3
+from cady.geometry.point import Point2, Point3
 from cady.operations.transforms import Transform2, Transform3
 from cady.utils import positive_tolerance
-
-Point2: TypeAlias = tuple[float, float]
-Point3: TypeAlias = tuple[float, float, float]
 
 if TYPE_CHECKING:
     import numpy as np
@@ -26,18 +25,22 @@ class PointCloud2:
 
     vertices: tuple[Point2, ...]
 
-    def __init__(self, vertices: Iterable[Point2]) -> None:
-        object.__setattr__(self, "vertices", tuple(vertices))
+    def __init__(self, vertices: Iterable[Sequence[float]]) -> None:
+        object.__setattr__(
+            self,
+            "vertices",
+            tuple(point2(vertex, name="vertex") for vertex in vertices),
+        )
 
     def bounds(self) -> tuple[Point2, Point2]:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty point cloud")
         return (
-            (
+            Point2(
                 min(vertex[0] for vertex in self.vertices),
                 min(vertex[1] for vertex in self.vertices),
             ),
-            (
+            Point2(
                 max(vertex[0] for vertex in self.vertices),
                 max(vertex[1] for vertex in self.vertices),
             ),
@@ -72,19 +75,23 @@ class PointCloud3:
 
     vertices: tuple[Point3, ...]
 
-    def __init__(self, vertices: Iterable[Point3]) -> None:
-        object.__setattr__(self, "vertices", tuple(vertices))
+    def __init__(self, vertices: Iterable[Sequence[float]]) -> None:
+        object.__setattr__(
+            self,
+            "vertices",
+            tuple(point3(vertex, name="vertex") for vertex in vertices),
+        )
 
     def bounds(self) -> tuple[Point3, Point3]:
         if not self.vertices:
             raise ValueError("cannot calculate bounds for an empty point cloud")
         return (
-            (
+            Point3(
                 min(vertex[0] for vertex in self.vertices),
                 min(vertex[1] for vertex in self.vertices),
                 min(vertex[2] for vertex in self.vertices),
             ),
-            (
+            Point3(
                 max(vertex[0] for vertex in self.vertices),
                 max(vertex[1] for vertex in self.vertices),
                 max(vertex[2] for vertex in self.vertices),
