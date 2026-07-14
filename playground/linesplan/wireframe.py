@@ -18,7 +18,7 @@ from cady.files import dxf
 from cady.operations.linesplan_meshing import classify_linesplan_curves
 
 ROOT = Path(__file__).resolve().parents[2]
-LINESPLAN_DXF = ROOT / "examples" / "inputs" / "linesplan_9m.dxf"
+LINESPLAN_DXF = ROOT / "examples" / "files" / "linesplan_9m.dxf"
 VIEW_ASPECT = 900.0 / 700.0
 FIT_PADDING = 1.08
 WIRE_STYLE = DisplayStyle(color=(0.05, 0.23, 0.55), render_mode="wireframe")
@@ -32,7 +32,7 @@ class _PointTupleLike(Protocol):
 
 
 def station_polylines(
-    path: str | Path = LINESPLAN_DXF,
+    path: str | Path,
     *,
     tolerance: float = 1e-3,
 ) -> tuple[Polyline3, ...]:
@@ -42,9 +42,6 @@ def station_polylines(
     if not polylines:
         raise ReadError("DXF contained no station line geometry")
     return polylines
-
-
-STATION_POLYLINES = station_polylines()
 
 
 def main() -> None:

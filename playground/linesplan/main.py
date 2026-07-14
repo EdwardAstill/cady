@@ -48,9 +48,10 @@ class ResolvedLinesplanMeshSettings(TypedDict):
     short_projection_ratio: float
 
 
-# DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "linesplan_9m.dxf"
-DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "3d_lp.dxf"
-#DXF_FILE = Path(__file__).resolve().parents[2] / "examples" / "inputs" / "example_mesh.dxf"
+DXF_FOLDER = Path(__file__).resolve().parents[2] / "examples" / "files"
+# DXF_FILE = DXF_FOLDER / "linesplan_9m.dxf"
+DXF_FILE = DXF_FOLDER / "3d_lp.dxf"
+# DXF_FILE = DXF_FOLDER / "example_mesh.dxf"
 
 
 SETTINGS: LinesplanMeshSettings = {

@@ -332,12 +332,13 @@ def _clean_point(point: object) -> Point3:
 
 
 if __name__ == "__main__":
-    from wireframe import STATION_POLYLINES
+    from wireframe import LINESPLAN_DXF, station_polylines
 
+    original_station_polylines = station_polylines(LINESPLAN_DXF)
     processed_station_polylines = prepare_station_lines(
-        process_station_lines(STATION_POLYLINES, 1000.0)
+        process_station_lines(original_station_polylines, 1000.0)
     )
-    view_original_station_lines(STATION_POLYLINES)
+    view_original_station_lines(original_station_polylines)
     view_processed_station_lines(
         processed_station_polylines,
         station_top_positive_y_points(processed_station_polylines),
