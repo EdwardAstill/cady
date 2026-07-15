@@ -601,7 +601,7 @@ def test_dxf_read_wireframe_converts_polyline_wires_to_wireframe(tmp_path: Path)
     assert wf.edges == ((0, 1), (1, 2))
 
 
-def test_dxf_read_mesh_rejects_polyline_mesh_conversion_kwargs(tmp_path: Path) -> None:
+def test_dxf_read_mesh_does_not_convert_polyline_to_mesh(tmp_path: Path) -> None:
     from cady.files import dxf
 
     path = tmp_path / "wire_mesh.dxf"
@@ -646,18 +646,11 @@ def test_dxf_read_mesh_rejects_polyline_mesh_conversion_kwargs(tmp_path: Path) -
         encoding="ascii",
     )
 
-    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
-        dxf.read_mesh(
-            path,
-            mirror_origin=(0.0, 0.0, 0.0),
-            mirror_normal=(1.0, 0.0, 0.0),
-        )
-
     with pytest.raises(ReadError, match="DXF contained no supported mesh geometry"):
         dxf.read_mesh(path)
 
 
-def test_dxf_read_mesh_no_longer_lofts_section_wires_to_faces(tmp_path: Path) -> None:
+def test_dxf_read_mesh_does_not_loft_section_wires_to_faces(tmp_path: Path) -> None:
     from cady.files import dxf
 
     path = tmp_path / "section_mesh.dxf"
@@ -679,13 +672,6 @@ def test_dxf_read_mesh_no_longer_lofts_section_wires_to_faces(tmp_path: Path) ->
         + "\n",
         encoding="ascii",
     )
-
-    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
-        dxf.read_mesh(
-            path,
-            mirror_origin=(0.0, 0.0, 0.0),
-            mirror_normal=(1.0, 0.0, 0.0),
-        )
 
     with pytest.raises(ReadError, match="DXF contained no supported mesh geometry"):
         dxf.read_mesh(path)

@@ -1,9 +1,7 @@
+from inspect import signature
 from pathlib import Path
 
-import pytest
-
 from cady import Body3, Document, Drawing2, Line2, Part
-from cady.errors import ReadError
 from cady.files import dxf, step, stl
 from cady.geometry import Mesh3
 
@@ -133,55 +131,8 @@ def test_dxf_read_polyline_curves_and_legacy_wireframes(tmp_path: Path) -> None:
     assert dxf.read_curves(path) == result.curves
 
 
-def test_dxf_read_mesh_rejects_legacy_line_mesh_kwargs(tmp_path: Path) -> None:
-    path = tmp_path / "wire.dxf"
-    path.write_text(
-        "\n".join(
-            [
-                "0",
-                "SECTION",
-                "2",
-                "ENTITIES",
-                "0",
-                "POLYLINE",
-                "8",
-                "WATERLINES",
-                "66",
-                "1",
-                "0",
-                "VERTEX",
-                "10",
-                "0",
-                "20",
-                "0",
-                "30",
-                "1",
-                "0",
-                "VERTEX",
-                "10",
-                "2",
-                "20",
-                "0",
-                "30",
-                "3",
-                "0",
-                "SEQEND",
-                "0",
-                "ENDSEC",
-                "0",
-                "EOF",
-            ]
-        )
-        + "\n",
-        encoding="ascii",
-    )
-
-    with pytest.raises(ReadError, match="no longer converts DXF line geometry"):
-        dxf.read_mesh(
-            path,
-            mirror_origin=(0.0, 0.0, 0.0),
-            mirror_normal=(1.0, 0.0, 0.0),
-        )
+def test_dxf_read_mesh_only_accepts_path() -> None:
+    assert tuple(signature(dxf.read_mesh).parameters) == ("path",)
 
 
 def test_stl_write_mesh(tmp_path: Path) -> None:

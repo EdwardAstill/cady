@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from cady.geometry.mesh import Mesh3
 from cady.geometry.plane3 import Plane3
@@ -16,7 +16,7 @@ from cady.operations.mesh.primitives import (
     sphere_mesh,
 )
 from cady.operations.transforms import Transform3
-from cady.utils import finite, positive
+from cady.utils import finite, positive, positive_tolerance
 
 Point3: TypeAlias = tuple[float, float, float]
 
@@ -29,18 +29,16 @@ PrimitiveKind = Literal["box", "cylinder", "sphere", "cone"]
 BooleanKind = Literal["union", "difference", "intersection"]
 
 
-class Feature(Protocol):
-    """Marker protocol for body construction records."""
-
-    pass
-
-
 @dataclass(frozen=True, slots=True)
 class RegionFeature:
     """Stored source region placed in a 3D plane."""
 
     region: object
     plane: Plane3
+
+    def __post_init__(self) -> None:
+        _validate_region(self.region)
+        _validate_plane(self.plane)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +50,8 @@ class ExtrudeFeature:
     distance: float
 
     def __post_init__(self) -> None:
+        _validate_region(self.region)
+        _validate_plane(self.plane)
         distance = finite(self.distance, "extrude distance")
         if distance == 0.0:
             raise ValueError("extrude distance must be finite and non-zero")
@@ -67,6 +67,8 @@ class RevolveFeature:
     angle: float
 
     def __post_init__(self) -> None:
+        _validate_region(self.region)
+        _validate_plane(self.plane)
         angle = finite(self.angle, "revolve angle")
         if angle == 0.0:
             raise ValueError("revolve angle must be finite and non-zero")
@@ -84,6 +86,7 @@ class PrimitiveFeature:
     def __post_init__(self) -> None:
         if self.kind not in {"box", "cylinder", "sphere", "cone"}:
             raise ValueError(f"unsupported primitive kind {self.kind!r}")
+        _validate_plane(self.plane)
         parameters = {key: finite(value, key) for key, value in self.parameters.items()}
         object.__setattr__(self, "parameters", MappingProxyType(parameters))
 
@@ -120,8 +123,26 @@ class ChamferFeature:
         object.__setattr__(self, "distance", positive(self.distance, "distance"))
 
 
-MeshEvaluator: TypeAlias = Callable[[Feature, float], Mesh3 | None]
-TransformEvaluator: TypeAlias = Callable[[Feature, Transform3], Feature]
+Feature: TypeAlias = (
+    RegionFeature
+    | ExtrudeFeature
+    | RevolveFeature
+    | PrimitiveFeature
+    | BooleanFeature
+    | FilletFeature
+    | ChamferFeature
+)
+
+_FEATURE_TYPES = (
+    RegionFeature,
+    ExtrudeFeature,
+    RevolveFeature,
+    PrimitiveFeature,
+    BooleanFeature,
+    FilletFeature,
+    ChamferFeature,
+)
+_GENERATOR_TYPES = (ExtrudeFeature, RevolveFeature, PrimitiveFeature)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +154,9 @@ class Body3:
     metadata: Mapping[str, object] = field(default_factory=lambda: {})
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "features", tuple(self.features))
+        features = tuple(self.features)
+        _validate_feature_history(features)
+        object.__setattr__(self, "features", features)
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     @classmethod
@@ -143,7 +166,11 @@ class Body3:
         *,
         plane: Plane3 | None = None,
     ) -> Body3:
-        return cls(features=(RegionFeature(region, plane or Plane3.world_xy()),))
+        return cls(
+            features=(
+                RegionFeature(region, Plane3.world_xy() if plane is None else plane),
+            )
+        )
 
     @classmethod
     def box(
@@ -154,12 +181,15 @@ class Body3:
         height: float,
         plane: Plane3 | None = None,
     ) -> Body3:
+        width = positive(width, "width")
+        depth = positive(depth, "depth")
+        height = positive(height, "height")
         return cls(
             features=(
                 PrimitiveFeature(
                     "box",
                     {"width": width, "depth": depth, "height": height},
-                    plane or Plane3.world_xy(),
+                    Plane3.world_xy() if plane is None else plane,
                 ),
             )
         )
@@ -172,12 +202,14 @@ class Body3:
         height: float,
         plane: Plane3 | None = None,
     ) -> Body3:
+        radius = positive(radius, "radius")
+        height = positive(height, "height")
         return cls(
             features=(
                 PrimitiveFeature(
                     "cylinder",
                     {"radius": radius, "height": height},
-                    plane or Plane3.world_xy(),
+                    Plane3.world_xy() if plane is None else plane,
                 ),
             )
         )
@@ -189,6 +221,7 @@ class Body3:
         radius: float,
         center: Point3 = (0.0, 0.0, 0.0),
     ) -> Body3:
+        radius = positive(radius, "radius")
         return cls(
             features=(
                 PrimitiveFeature(
@@ -209,10 +242,10 @@ class Body3:
         if region is None:
             region_feature = self._last_region_feature()
             resolved_region = region_feature.region
-            resolved_plane = plane or region_feature.plane
+            resolved_plane = region_feature.plane if plane is None else plane
         else:
             resolved_region = region
-            resolved_plane = plane or Plane3.world_xy()
+            resolved_plane = Plane3.world_xy() if plane is None else plane
         features = tuple(
             feature for feature in self.features if not isinstance(feature, RegionFeature)
         )
@@ -231,14 +264,15 @@ class Body3:
         )
 
     def to_mesh(self, *, tolerance: float) -> Mesh3:
-        meshes: list[Mesh3] = []
+        tolerance = positive_tolerance(tolerance)
+        mesh: Mesh3 | None = None
         for feature in self.features:
-            mesh = _feature_to_mesh(feature, tolerance=tolerance)
-            if mesh is not None:
-                meshes.append(mesh)
-        if not meshes:
+            generated = _feature_to_mesh(feature, tolerance=tolerance)
+            if generated is not None:
+                mesh = generated
+        if mesh is None:
             raise ValueError("body has no meshable features")
-        return Mesh3.merged(meshes)
+        return mesh
 
     def view(
         self,
@@ -298,75 +332,69 @@ def _primitive_to_mesh(feature: PrimitiveFeature, *, tolerance: float) -> Mesh3:
     raise NotImplementedError(f"{feature.kind} primitive evaluation is not implemented")
 
 
-def _region_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3 | None:
-    return None
-
-
-def _extrude_feature_to_mesh(feature: Feature, tolerance: float) -> Mesh3:
-    extrude = cast(ExtrudeFeature, feature)
-    return extrusion_mesh(
-        extrude.region,
-        extrude.plane,
-        distance=extrude.distance,
-        tolerance=tolerance,
-    )
-
-
-def _revolve_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3:
-    raise NotImplementedError("revolve feature evaluation is not implemented")
-
-
-def _boolean_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3:
-    raise NotImplementedError("boolean feature evaluation is not implemented")
-
-
-def _edge_finish_feature_to_mesh(_feature: Feature, _tolerance: float) -> Mesh3:
-    raise NotImplementedError("fillet and chamfer feature evaluation is not implemented")
-
-
 def _feature_to_mesh(feature: Feature, *, tolerance: float) -> Mesh3 | None:
-    evaluator = _FEATURE_MESH_EVALUATORS.get(type(feature))
-    if evaluator is None:
-        raise TypeError(f"unsupported feature {type(feature).__name__}")
-    return evaluator(feature, tolerance)
-
-
-def _transform_feature_plane(feature: Feature, transform: Transform3) -> Feature:
-    plane_feature = cast(
-        RegionFeature | ExtrudeFeature | PrimitiveFeature | RevolveFeature,
-        feature,
-    )
-    return replace(plane_feature, plane=plane_feature.plane.transformed(transform))
+    if isinstance(feature, RegionFeature):
+        return None
+    if isinstance(feature, PrimitiveFeature):
+        return _primitive_to_mesh(feature, tolerance=tolerance)
+    if isinstance(feature, ExtrudeFeature):
+        return extrusion_mesh(
+            feature.region,
+            feature.plane,
+            distance=feature.distance,
+            tolerance=tolerance,
+        )
+    if isinstance(feature, RevolveFeature):
+        raise NotImplementedError("revolve feature evaluation is not implemented")
+    if isinstance(feature, BooleanFeature):
+        raise NotImplementedError("boolean feature evaluation is not implemented")
+    operation = "fillet" if isinstance(feature, FilletFeature) else "chamfer"
+    raise NotImplementedError(f"{operation} feature evaluation is not implemented")
 
 
 def _transform_feature(feature: Feature, transform: Transform3) -> Feature:
-    transformer = _FEATURE_TRANSFORMERS.get(type(feature))
-    if transformer is None:
-        return feature
-    return transformer(feature, transform)
+    if isinstance(
+        feature,
+        (RegionFeature, ExtrudeFeature, PrimitiveFeature, RevolveFeature),
+    ):
+        return replace(feature, plane=feature.plane.transformed(transform))
+    return feature
 
 
-_FEATURE_MESH_EVALUATORS: Mapping[type[object], MeshEvaluator] = MappingProxyType(
-    {
-        RegionFeature: _region_feature_to_mesh,
-        PrimitiveFeature: lambda feature, tolerance: _primitive_to_mesh(
-            cast(PrimitiveFeature, feature),
-            tolerance=tolerance,
-        ),
-        ExtrudeFeature: _extrude_feature_to_mesh,
-        RevolveFeature: _revolve_feature_to_mesh,
-        BooleanFeature: _boolean_feature_to_mesh,
-        FilletFeature: _edge_finish_feature_to_mesh,
-        ChamferFeature: _edge_finish_feature_to_mesh,
-    }
-)
+def _validate_region(region: object) -> None:
+    if not callable(getattr(region, "loops", None)) and not callable(
+        getattr(region, "to_array", None)
+    ):
+        raise TypeError(
+            "region must provide loops(tolerance=...) or to_array(tolerance=...)"
+        )
 
 
-_FEATURE_TRANSFORMERS: Mapping[type[object], TransformEvaluator] = MappingProxyType(
-    {
-        RegionFeature: _transform_feature_plane,
-        ExtrudeFeature: _transform_feature_plane,
-        PrimitiveFeature: _transform_feature_plane,
-        RevolveFeature: _transform_feature_plane,
-    }
-)
+def _validate_plane(plane: object) -> None:
+    if not isinstance(plane, Plane3):
+        raise TypeError("feature plane must be a Plane3")
+
+
+def _validate_feature_history(features: tuple[Feature, ...]) -> None:
+    region_seen = False
+    generator_seen = False
+    for feature in features:
+        if type(feature) not in _FEATURE_TYPES:
+            raise TypeError(f"unsupported feature {type(feature).__name__}")
+        if isinstance(feature, RegionFeature):
+            if region_seen:
+                raise ValueError("body can contain at most one pending region feature")
+            if generator_seen:
+                raise ValueError("region feature must precede the solid generator")
+            region_seen = True
+        elif isinstance(feature, _GENERATOR_TYPES):
+            if generator_seen:
+                raise ValueError(
+                    "body can contain only one solid generator; use "
+                    "Part.with_bodies(...) for independent solids or an explicit "
+                    "boolean operation"
+                )
+            generator_seen = True
+        else:
+            if not generator_seen:
+                raise ValueError("body modifier requires a solid generator")

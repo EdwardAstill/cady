@@ -1,114 +1,184 @@
-# API reference
+# Main objects and methods
 
-The top-level `cady` package exposes the common authoring values. More focused
-helpers remain in their owning subpackages.
+The top-level `cady` package exports the values used for ordinary authoring.
+Algorithmic helpers and file formats stay in focused subpackages such as
+`cady.operations`, `cady.measurement`, and `cady.files`.
 
-## Geometry
+Most cady objects are immutable. A method named `add(...)`, `with_...(...)`, or
+`transformed(...)` returns a new value. Methods that sample a curve or create a
+mesh take an explicit keyword-only `tolerance`.
 
-| Name | Description |
+## Choosing an object
+
+| Need | Main object |
 |---|---|
-| `Point2`, `Point3` | Immutable positions with named coordinates and affine arithmetic. |
-| `Vector2`, `Vector3` | Immutable directions and displacements. |
-| `Line2`, `Line3` | Straight line segments. |
-| `Arc2`, `Arc3` | Circular arcs defined by center, start, and midpoint. |
-| `Spline2`, `Spline3` | Cubic Bezier splines, optionally built from endpoint tangent vectors. |
-| `Polyline2`, `Polyline3` | Open or closed polyline and curve sequences. |
-| `Circle2`, `Ellipse2` | Closed 2D conic curves. |
-| `Region2`, `Region3` | Filled 2D regions and surface-placed regions. |
-| `Surface2`, `Surface3` | Parametric surfaces. |
-| `Plane3` | Local coordinate plane in 3D. |
-| `Mesh2`, `Mesh3` | Indexed polygon meshes. |
-| `Wireframe3` | Edge-only 3D topology. |
-| `PointCloud2`, `PointCloud3` | Unconnected point collections. |
-| `Body3` | Immutable feature-history body. |
-| `Curve2`, `Curve3` | Curve protocols used by polyline composition. |
+| A position or displacement | `Point2`, `Point3`, `Vector2`, `Vector3` |
+| A line, arc, spline, or path | `Line2`, `Line3`, `Arc2`, `Arc3`, `Spline2`, `Spline3`, `Polyline2`, `Polyline3` |
+| A filled planar profile | `Region2` |
+| A plane or parametric surface in 3D | `Plane3`, `Surface3`, `Region3` |
+| Triangle or edge topology | `Mesh2`, `Mesh3`, `Wireframe3` |
+| Unconnected samples | `PointCloud2`, `PointCloud3` |
+| One generated solid | `Body3` |
+| A 2D drafting document | `Drawing2` |
+| A named item made from bodies | `Part` |
+| Positioned parts and subassemblies | `Assembly` |
+| Viewer state | `Scene` |
+| A registry of related artefacts | `Document` |
 
-Geometry constructors accept plain `(x, y)` and `(x, y, z)` coordinate
-sequences as well as `Point2`/`Point3` values. Semantic geometry exposes points
-and directions as immutable point and vector values; numeric and file boundaries
-remain sequence-oriented.
+## Coordinates and curves
 
-```python
-point = Point3(1.0, 2.0, 3.0)
-offset = Vector3(0.0, 0.0, 2.0)
-moved = point + offset
-direction = moved - point
-```
+`Point2` and `Point3` represent positions. `Vector2` and `Vector3` represent
+directions or displacements. Points support affine arithmetic with vectors;
+vectors provide `length`, `normalized()`, `dot(...)`, scaling, and vector
+arithmetic. `Vector3` also provides `cross(...)`.
 
-Point arithmetic follows affine rules: subtracting points produces a vector,
-and adding or subtracting a vector produces a point. Vectors support length,
-normalization, dot products, scaling, and vector arithmetic; `Vector3` also
-supports cross products. Equality remains exact, with geometric tolerances kept
-in explicit measurement and operation APIs.
-
-Common constructors include:
+Geometry constructors accept coordinate sequences as well as point values:
 
 ```python
-Line2(start, end)
-Arc2(center, start, midpoint)
-Circle2(center, radius)
-Polyline2(items, closed=False)
-Spline2(points, vectors=None, closed=False)
-Plane3(point, normal, x_axis=None)
-Region2.rectangle(width, height, origin=(0.0, 0.0))
-Region2.circle(radius, center=(0.0, 0.0))
-Body3.box(width=..., depth=..., height=...)
-Body3.cylinder(radius=..., height=...)
-Body3.sphere(radius=..., center=(0.0, 0.0, 0.0))
+from cady import Line3, Point3, Vector3
+
+start = Point3(1.0, 2.0, 3.0)
+end = start + Vector3(0.0, 0.0, 2.0)
+line = Line3(start, end)
 ```
 
-## Drawing and product values
+The curve classes share a small vocabulary:
 
-Top-level drawing exports are `Drawing2`, `DrawingEntity`, `Layer`, `Text2`,
-`Hatch2`, `Insert2`, `BlockDefinition`, `DimStyle`, and the suffix-`2`
-dimension values.
-
-Product exports are `Part`, `PartInstance`, `Assembly`, `AssemblyInstance`, and
-`Material`. `Document` is the optional registry for named drawings, products,
-and scenes.
-
-## View values
-
-Top-level view exports include `Scene`, `SceneObject`, `Camera`, the light
-values, `DisplayStyle`, and scene overlays. Backend-independent preparation is
-available from `cady.view`:
-
-```python
-from cady.view import RenderScene, SceneLine, SceneMesh, prepare_scene
-```
-
-`view_scene` and `view_lines` are imported lazily when requested.
-
-## Operations and measurements
-
-`cady.operations` exports `Transform2`, `Transform3`, triangulation, mesh
-clipping helpers, and `sphere_triangles`. Mesh construction, statistics, and
-topology helpers live in `cady.operations.mesh` modules.
-
-`cady.measurement` owns object-level `distance(...)` and `intersection(...)`
-queries and their result records.
-
-## File I/O
-
-```python
-from cady.files import dxf, step, stl
-```
-
-| Function | Result or action |
+| Objects | Important methods and properties |
 |---|---|
-| `dxf.read(path)` | Returns a `DxfImportResult`. |
-| `dxf.read_drawing(path)` | Returns a `Drawing2`. |
-| `dxf.read_curves(path)` | Returns imported 3D wire-curve records. |
-| `dxf.read_mesh(path)` | Returns a `Mesh3` from DXF mesh entities. |
-| `dxf.read_wireframe(path)` | Returns merged imported wires as `Wireframe3`. |
-| `dxf.write(drawing, path, *, tolerance)` | Writes DXF R2018. |
-| `stl.write(target, path, *, ascii, tolerance)` | Writes binary or ASCII STL. |
-| `step.write(target, path, *, tolerance)` | Writes mesh-oriented STEP. |
-| `step.read_mesh(path)` | Returns elementary STEP faces as a `Mesh3`. |
-| `step.read_faces(path)` | Returns parsed elementary face records. |
-| `step.read_members(path)` | Returns extracted simple extruded members. |
+| `Line2`, `Line3` | `bounds()`, `points()`, `length`, `to_array(tolerance=...)` |
+| `Arc2`, `Arc3` | `bounds()`, `points()`, `length`, `reverse()`, `discretize(tolerance=...)` |
+| `Spline2`, `Spline3` | `bounds()`, `points()`, `length`, `discretize(tolerance=...)` |
+| `Polyline2`, `Polyline3` | `from_curves(...)`, `bounds()`, `points()`, `length`, `reverse()`, `discretize(...)`, `to_array(...)` |
+| `Circle2`, `Ellipse2` | `bounds()`, `points()`, `length`, `to_array(tolerance=...)` |
+
+`Polyline2` and `Polyline3` may be open or closed. A closed polyline can use
+`to_mesh(tolerance=...)` when it defines a valid planar boundary.
+
+## Regions, planes, and surfaces
+
+`Region2` represents a filled outer loop with optional holes. Use
+`Region2.rectangle(...)` or `Region2.circle(...)` for common profiles,
+`loops(tolerance=...)` to sample every boundary, and
+`to_array(tolerance=...)` to sample the outer boundary.
+
+`Plane3` is a local 3D frame. Its main constructors are `world_xy()`,
+`from_normal(...)`, and `fit(...)`. Use `point(u, v)` and `coordinates(point)`
+to move between local and world coordinates, `project(...)` for projection,
+and `transformed(...)` to place a plane with a `Transform3`.
+
+`Surface2` and `Surface3` describe parametric surfaces. Their `plane(...)` and
+`parametric(...)` constructors create surfaces, while `point(u, v)` evaluates
+them. `Surface3.normal(u, v)` evaluates a surface normal. `Region3` places a 2D
+region on a surface and converts it with `to_mesh(tolerance=...)`.
+
+## Meshes, wireframes, and point clouds
+
+| Object | Purpose | Important methods and properties |
+|---|---|---|
+| `Mesh2`, `Mesh3` | Indexed triangle topology | `merged(...)`, `bounds()`, `triangles`, `area`, `boundary_loops`, `to_array(...)`, `transformed(...)` |
+| `Mesh3` | 3D mesh analysis and editing | `volume`, `closed`, `triangulate(...)`, `decimate(...)`, `remesh(...)`, `to_wireframe()`, `view(...)` |
+| `Wireframe3` | Indexed edges without faces | `from_polylines(...)`, `from_edges(...)`, `bounds()`, `to_mesh(...)`, `transformed(...)`, `view(...)` |
+| `PointCloud2`, `PointCloud3` | Unconnected point samples | `bounds()`, `points()`, `to_array(...)`, `transformed(...)`, `mirror(...)` |
+
+## Bodies and products
+
+`Body3` describes one generated solid. Create a primitive with `box(...)`,
+`cylinder(...)`, or `sphere(...)`, or create an extrusion with
+`from_region(...).extrude(...)`. Use `transformed(...)` for placement,
+`to_mesh(tolerance=...)` for conversion, and `view(...)` for the optional
+interactive viewer.
+
+```python
+from cady import Body3, Part, Region2
+
+profile = Region2.rectangle(1.0, 0.6)
+plate = Body3.from_region(profile).extrude(0.04)
+pin = Body3.cylinder(radius=0.05, height=0.12)
+part = Part("plate and pin").with_bodies(plate, pin)
+```
+
+A `Body3` has one solid generator. Use `Part.with_bodies(...)` for independent
+solids rather than placing multiple generators in one body.
+
+`Part` is a named manufacturable item. Its main methods are `with_body(...)`,
+`with_bodies(...)`, `with_material(...)`, `with_metadata(...)`,
+`to_mesh(tolerance=...)`, and `view(...)`.
+
+`Assembly` contains positioned part or assembly instances. Use
+`add_part(...)`, `add_assembly(...)`, and `with_metadata(...)` to build it;
+`flatten()` resolves the hierarchy and `to_mesh(tolerance=...)` converts the
+placed result.
+
+## Drawings
+
+`Drawing2` is a named 2D drafting document containing layers and entities.
+
+| Method | Purpose |
+|---|---|
+| `add_layer(...)` | Add or reuse a layer definition. |
+| `add(geometry, layer=...)` | Wrap geometry as a drawing entity. |
+| `add_entity(...)` | Add text, hatches, inserts, dimensions, or an existing entity. |
+| `add_block(...)`, `insert(...)` | Define and place reusable blocks. |
+| `with_dim_style(...)`, `add_dimension(...)` | Configure and add dimensions. |
+| `with_header(...)`, `with_metadata(...)` | Return a drawing with updated descriptive data. |
+| `bounds()` | Return bounds covering the drawing entities. |
+| `to_arrays(tolerance=...)` | Convert supported drawing geometry at an explicit boundary. |
+
+## Scenes and viewing
+
+`Scene` stores targets together with a camera, lights, display styles, poses,
+and overlays. `add(...)`, `add_object(...)`, `with_overlay(...)`, and
+`with_metadata(...)` return updated scenes. `Scene.view(...)` opens the optional
+viewer.
+
+`prepare_scene(...)` is the backend-independent conversion boundary:
+
+```python
+from cady import Circle2, Scene
+from cady.view import prepare_scene
+
+circle = Circle2((0.0, 0.0), 1.0)
+scene = Scene("profile").add(circle, name="outline")
+render_scene = prepare_scene(scene, tolerance=1e-3)
+```
+
+Scenes keep their targets semantic. Preparation samples supported curves,
+lifts 2D curves onto `z = 0`, applies object poses, and converts meshable
+targets into render data. `Camera.look_at(...)`, `perspective(...)`, and
+`orthographic(...)` create camera values; `DisplayStyle` controls color,
+visibility, and render mode.
+
+## Documents
+
+`Document` is optional. It is an immutable registry for named drawings, parts,
+assemblies, and scenes. Use `add_drawing(...)`, `add_part(...)`,
+`add_assembly(...)`, or `add_scene(...)`, then retrieve entries with
+`get(kind, name)` or list them with `names(kind)`.
+
+## Operations, measurements, and files
+
+`cady.operations` exposes `Transform2`, `Transform3`, triangulation, and focused
+mesh helpers. Transforms are chainable values with methods such as
+`translate(...)`, `rotate(...)`, `scale(...)`, `mirror(...)`, `compose(...)`,
+`inverse()`, and `apply_points(...)`.
+
+`cady.measurement.distance(...)` and `intersection(...)` perform object-level
+geometric queries.
+
+File facades live under `cady.files`:
+
+| Facade | Main entry points |
+|---|---|
+| `dxf` | `read(...)`, `read_drawing(...)`, `read_mesh(...)`, `read_curves(...)`, `read_wireframe(...)`, `write(...)` |
+| `stl` | `write(...)` for meshable 3D targets |
+| `step` | `write(...)`, `read_mesh(...)`, `read_faces(...)`, `read_members(...)` |
+
+Writers that sample or mesh data accept `tolerance=...`; pass it explicitly so
+the conversion quality is visible at the file boundary.
 
 ## Errors
 
-`CadError` is the shared base. The public specialisations are `GeometryError`,
-`DrawingError`, `ProductError`, `ViewError`, `ReadError`, and `WriteError`.
+`CadError` is the shared error base. Public specialisations include
+`GeometryError`, `DrawingError`, `ProductError`, `ViewError`, `ReadError`, and
+`WriteError`.

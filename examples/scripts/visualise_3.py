@@ -45,7 +45,7 @@ def _target_for_shape(shape: str) -> object:
     if shape == "box":
         return Body3.box(width=1.0, depth=0.6, height=0.4)
     if shape == "sphere":
-        return Body3.sphere(radius=0.5, centre=(0.5, 0.3, 0.5))
+        return Body3.sphere(radius=0.5, center=(0.5, 0.3, 0.5))
     if shape == "assembly":
         return build_assembly()
     raise ValueError(f"unknown shape: {shape}")

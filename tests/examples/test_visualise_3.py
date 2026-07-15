@@ -10,7 +10,7 @@ from cady import Mesh3, PointCloud3
 from cady.view import prepare_scene
 
 
-def test_visualise_3_prints_scene_summary_without_opening_viewer(
+def test_visualise_3_prints_all_scene_summaries_without_opening_viewer(
     import_env: dict[str, str],
 ) -> None:
     completed = subprocess.run(
@@ -18,7 +18,7 @@ def test_visualise_3_prints_scene_summary_without_opening_viewer(
             sys.executable,
             "examples/scripts/visualise_3.py",
             "--shape",
-            "box",
+            "all",
             "--no-view",
         ],
         cwd=Path(__file__).resolve().parents[2],
@@ -31,8 +31,15 @@ def test_visualise_3_prints_scene_summary_without_opening_viewer(
 
     assert completed.returncode == 0, completed.stdout
     assert "cady 3D scene demo" in completed.stdout
-    assert "Plain box" in completed.stdout
-    assert "mesh:" in completed.stdout
+    assert "  shape: all" in completed.stdout
+    for label in (
+        "Extruded plate with hole",
+        "Plain box",
+        "Sphere",
+        "Two-part assembly (plate + pin)",
+    ):
+        assert label in completed.stdout
+    assert completed.stdout.count("mesh:") == 4
     assert "VisPy viewer skipped." in completed.stdout
 
 

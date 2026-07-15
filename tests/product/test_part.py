@@ -4,7 +4,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from cady.geometry import Mesh3
+from cady.geometry import Body3, Mesh3
+from cady.operations.transforms import Transform3
 from cady.product import Material, Part, ProductError
 
 
@@ -54,6 +55,17 @@ def test_part_with_body_returns_new_part_and_merges_meshes() -> None:
     mesh = updated.to_mesh(tolerance=1e-3)
     assert len(mesh.vertices) == 6
     assert mesh.faces == ((0, 1, 2), (3, 4, 5))
+
+
+def test_part_with_bodies_combines_independent_body3_solids() -> None:
+    first = Body3.box(width=1.0, depth=1.0, height=1.0)
+    second = first.transformed(Transform3().translate(2.0, 0.0, 0.0))
+
+    mesh = Part("two solids").with_bodies(first, second).to_mesh(tolerance=1e-3)
+
+    assert mesh.bounds() == ((0.0, 0.0, 0.0), (3.0, 1.0, 1.0))
+    assert len(mesh.vertices) == 16
+    assert len(mesh.faces) == 24
 
 
 def test_part_rejects_non_meshable_bodies() -> None:

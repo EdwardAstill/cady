@@ -147,9 +147,9 @@ or public names.
 
 Top-level `cady` re-exports currently include:
 
-- constructors: `line2`, `arc2`, `line3`, `arc3`, `spline3`, `polyline2`,
-  `polyline3`, `circle2`, `region_rectangle`, `region_circle`, `box`,
-  `cylinder`, `sphere`
+- constructors are the exported value classes and their classmethods, such as
+  `Line2(...)`, `Region2.rectangle(...)`, `Body3.box(...)`, and
+  `Body3.sphere(...)`; removed lowercase constructor wrappers stay absent
 - geometry: `Point2`, `Point3`, `Vector2`, `Vector3`, `Line2`, `Line3`,
   `Arc2`, `Arc3`, `Spline2`, `Spline3`,
   `Polyline2`, `Polyline3`, `Circle2`, `Ellipse2`, `Region2`, `Region3`,
@@ -210,9 +210,11 @@ names.
   triangulation, loft-style conversion, and close-to-plane workflows.
 - `PointCloud2` and `PointCloud3` are unconnected point collections. They are
   not curves, meshes, or wireframes.
-- `Body3` is a feature-history body. Currently meshable paths are region
-  extrusion and box/cylinder/sphere primitives. Cone, revolve, boolean, fillet,
-  and chamfer features are records only until their evaluators are implemented.
+- `Body3` is the feature history for one generated solid followed by modifiers.
+  Currently meshable paths are region extrusion and box/cylinder/sphere
+  primitives. Independent solids belong in `Part.with_bodies(...)`. Cone,
+  revolve, boolean, fillet, and chamfer features are records only until their
+  evaluators are implemented.
 
 ## Operations Notes
 

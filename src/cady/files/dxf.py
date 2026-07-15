@@ -88,26 +88,9 @@ def read_drawing(path: str | Path) -> Drawing2:
     return result.drawing
 
 
-def read_mesh(
-    path: str | Path,
-    *,
-    mirror_origin: object | None = None,
-    mirror_normal: object | None = None,
-    close_origin: object | None = None,
-    close_normal: object | None = None,
-    tolerance: float = 1e-3,
-    max_distance: float | None = None,
-) -> Mesh3:
+def read_mesh(path: str | Path) -> Mesh3:
     """Read mesh entities from a DXF file and merge them into one ``Mesh3``."""
     result = read(path)
-    if _line_mesh_requested(
-        mirror_origin=mirror_origin,
-        mirror_normal=mirror_normal,
-        close_origin=close_origin,
-        close_normal=close_normal,
-        max_distance=max_distance,
-    ):
-        raise ReadError("read_mesh no longer converts DXF line geometry to mesh faces")
     if not result.meshes:
         raise ReadError("DXF contained no supported mesh geometry")
     return Mesh3.merged(result.meshes)
@@ -135,26 +118,6 @@ def _merge_wireframes(wireframes: Iterable[Wireframe3]) -> Wireframe3:
         edges.extend((a + offset, b + offset) for a, b in wf.edges)
         offset += len(wf.vertices)
     return Wireframe3.from_edges(tuple(vertices), tuple(edges))
-
-
-def _line_mesh_requested(
-    *,
-    mirror_origin: object | None,
-    mirror_normal: object | None,
-    close_origin: object | None,
-    close_normal: object | None,
-    max_distance: float | None,
-) -> bool:
-    return any(
-        value is not None
-        for value in (
-            mirror_origin,
-            mirror_normal,
-            close_origin,
-            close_normal,
-            max_distance,
-        )
-    )
 
 
 def render(drawing: Drawing2, *, tolerance: float = 1e-3) -> str:

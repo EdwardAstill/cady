@@ -5,7 +5,8 @@ sample locations or node positions but no curve, mesh, face, or edge topology.
 
 ## `PointCloud2`
 
-`PointCloud2` stores 2D points as plain `(x, y)` tuples.
+`PointCloud2` stores unconnected `Point2` values. Coordinate sequences passed
+to the constructor are normalized to those immutable point values.
 
 ```python
 from cady import PointCloud2
@@ -14,12 +15,13 @@ from cady.operations.transforms import Transform2
 cloud = PointCloud2([(0.0, 0.0), (1.0, -2.0)])
 lower, upper = cloud.bounds()
 array = cloud.to_array(tolerance=1e-3)
-moved = cloud.transformed(Transform2.translation(0.0, 2.0))
+move = Transform2(cloud.vertices).translate(0.0, 2.0)
+moved = cloud.transformed(move)
 ```
 
-- Constructor input is an iterable of `(x, y)` tuples.
-- `vertices` and `points()` return the stored points.
-- `bounds()` returns `(lower, upper)` as `(x, y)` tuples and raises for an empty
+- Constructor input is an iterable of 2D coordinate sequences.
+- `vertices` and `points()` return the stored `Point2` values.
+- `bounds()` returns `(lower, upper)` as `Point2` values and raises for an empty
   cloud.
 - `to_array(tolerance=...)` returns an `(n, 2)` NumPy array and validates that
   tolerance is positive.
@@ -28,7 +30,7 @@ moved = cloud.transformed(Transform2.translation(0.0, 2.0))
 
 ## `PointCloud3`
 
-`PointCloud3` stores 3D points as plain `(x, y, z)` tuples.
+`PointCloud3` is the equivalent collection of `Point3` values.
 
 ```python
 from cady import PointCloud3
@@ -37,12 +39,12 @@ from cady.operations.transforms import Transform3
 cloud = PointCloud3([(0.0, 0.0, 0.0), (1.0, -2.0, 3.0)])
 lower, upper = cloud.bounds()
 array = cloud.to_array(tolerance=1e-3)
-moved = cloud.transformed(Transform3.translation(0.0, 0.0, 2.0))
+moved = cloud.transformed(Transform3().translate(0.0, 0.0, 2.0))
 ```
 
-- Constructor input is an iterable of `(x, y, z)` tuples.
-- `vertices` and `points()` return the stored points.
-- `bounds()` returns `(lower, upper)` as `(x, y, z)` tuples and raises for an empty
+- Constructor input is an iterable of 3D coordinate sequences.
+- `vertices` and `points()` return the stored `Point3` values.
+- `bounds()` returns `(lower, upper)` as `Point3` values and raises for an empty
   cloud.
 - `to_array(tolerance=...)` returns an `(n, 3)` NumPy array and validates that
   tolerance is positive.

@@ -4,7 +4,8 @@ cady is a small native CAD geometry package for building 2D drawings, meshable
 3D parts, assemblies, and view scenes in Python. It writes DXF, STL, and STEP
 files without requiring a large CAD kernel at runtime.
 
-Start with [docs/index.md](docs/index.md) for the full documentation.
+Start with the [object model](docs/object-model.md), then use the
+[main objects and methods](docs/api.md) guide as a concise reference.
 
 ## What cady provides
 
@@ -165,10 +166,6 @@ cady.files        DXF, STL, and STEP facades
 cady.document     optional top-level registry
 cady.errors       shared exception hierarchy
 ```
-
-The legacy `Model`, `Shape2`, `Shape3`, `Rectangle`, `Prism`, `Extrusion`,
-`DxfDrawing`, `StlMesh`, `cady.domain`, `cady.build`, `cady.plotting`, and
-`write_model(...)` APIs have been removed from this branch.
 
 ## Development gates
 

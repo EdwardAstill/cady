@@ -38,6 +38,11 @@ class Region2:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "holes", tuple(self.holes))
+        if not getattr(self.outer, "closed", False):
+            raise ValueError("region outer boundary must be closed")
+        for index, hole in enumerate(self.holes):
+            if not getattr(hole, "closed", False):
+                raise ValueError(f"region holes[{index}] boundary must be closed")
 
     @classmethod
     def rectangle(
@@ -67,14 +72,10 @@ class Region2:
         return self.loops(tolerance=tolerance)[0]
 
     def loops(self, *, tolerance: float) -> tuple[PointArray2, ...]:
-        curves = (self.outer, *self.holes)
         outer = _curve2_array(self.outer, tolerance=tolerance)
         hole_arrays = tuple(_curve2_array(hole, tolerance=tolerance) for hole in self.holes)
         loops = (outer, *hole_arrays)
-        for index, (curve, loop) in enumerate(zip(curves, loops, strict=True)):
-            if not getattr(curve, "closed", False):
-                label = "outer" if index == 0 else f"holes[{index - 1}]"
-                raise ValueError(f"region {label} boundary must be closed")
+        for index, loop in enumerate(loops):
             if len(loop) < 3:
                 label = "outer" if index == 0 else f"holes[{index - 1}]"
                 raise ValueError(f"region {label} boundary must contain at least three points")

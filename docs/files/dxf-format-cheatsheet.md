@@ -235,8 +235,9 @@ z
 SEQEND
 ```
 
-The reader returns supported wires as `tuple[tuple[float, float, float], ...]` values in
-`DxfImportResult.wires`.
+The reader records supported wires as source-oriented `DxfWireCurve` values in
+`DxfImportResult.curves` and as render/mesh-oriented `Wireframe3` values in
+`DxfImportResult.wireframes`.
 
 ## Units and versions
 

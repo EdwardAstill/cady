@@ -42,7 +42,8 @@ result = dxf.read("mixed.dxf")
 
 - `drawing` for supported 2D entities;
 - `meshes` for `3DFACE` triangle/quad entities;
-- `wires` for 3D `POLYLINE` vertex sequences;
+- `wireframes` for imported edge topology;
+- `curves` for source-oriented 3D wire-curve records;
 - `skipped` records for unsupported entities such as ACIS-backed solids.
 
 Implementation notes: [DXF format cheatsheet](dxf-format-cheatsheet.md).

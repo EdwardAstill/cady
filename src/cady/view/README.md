@@ -54,7 +54,8 @@ kept behind the viewer launch path.
   - Defines prepared render payloads: `RenderScene`, `SceneMesh`, and
     `SceneLine`.
   - Converts scene targets into renderable arrays in `prepare_scene(...)`.
-    Point clouds and explicit polylines are handled before mesh conversion.
+    Point clouds, semantic curves, and explicit polylines are handled before
+    mesh conversion. Curve sampling uses the preparation tolerance.
   - Applies scene-object poses, resolves display colors, and reduces scene
     lights to the ambient/directional values used by the current shader.
   - Defaults to one restrained ambient light, one directional light, and no

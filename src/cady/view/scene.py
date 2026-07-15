@@ -9,7 +9,21 @@ from typing import Any, TypeAlias, cast
 import numpy as np
 
 from cady.document import Document
-from cady.geometry import Mesh3, PointCloud3, Wireframe3
+from cady.geometry import (
+    Arc2,
+    Arc3,
+    Circle2,
+    Ellipse2,
+    Line2,
+    Line3,
+    Mesh3,
+    PointCloud3,
+    Polyline2,
+    Polyline3,
+    Spline2,
+    Spline3,
+    Wireframe3,
+)
 from cady.operations.transforms import Transform3
 from cady.product import Assembly, Part
 from cady.product.material import Metadata, metadata_items
@@ -187,6 +201,11 @@ class RenderScene:
 
 def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
     """Convert scene objects into mesh and line buffers for rendering."""
+    try:
+        tolerance = positive_tolerance(tolerance)
+    except (TypeError, ValueError) as exc:
+        raise ViewError(str(exc)) from exc
+
     meshes: list[SceneMesh] = []
     lines: list[SceneLine] = []
     for scene_object in scene.objects:
@@ -198,8 +217,8 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
             transform_from_pose(scene_object.pose) if scene_object.pose is not None else None
         )
 
-        # Point clouds and explicit polylines are already render primitives, so
-        # recognise them before falling back to the mesh conversion boundary.
+        # Point clouds and line-like targets are recognised before falling back
+        # to the mesh conversion boundary.
         point_cloud = _point_cloud_from_target(target)
         if point_cloud is not None:
             if transform is not None:
@@ -218,7 +237,13 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
                 )
             continue
 
-        line = _line_from_target(target, transform=transform)
+        line = _curve_line_from_target(
+            target,
+            tolerance=tolerance,
+            transform=transform,
+        )
+        if line is None:
+            line = _line_from_target(target, transform=transform)
         if line is not None:
             vertices, indices = line
             if len(indices) > 0:
@@ -265,12 +290,16 @@ def prepare_scene(scene: Scene, *, tolerance: float = 1e-3) -> RenderScene:
     )
 
 
-def _polyline_indices(vertex_count: int) -> np.ndarray:
+def _polyline_indices(vertex_count: int, *, closed: bool = False) -> np.ndarray:
     if vertex_count < 2:
         return np.empty((0, 2), dtype=np.uint32)
     starts = np.arange(0, vertex_count - 1, dtype=np.uint32)
     ends = np.arange(1, vertex_count, dtype=np.uint32)
-    return np.column_stack((starts, ends)).astype(np.uint32, copy=False)
+    indices = np.column_stack((starts, ends)).astype(np.uint32, copy=False)
+    if closed:
+        closing_edge = np.array(((vertex_count - 1, 0),), dtype=np.uint32)
+        indices = np.concatenate((indices, closing_edge))
+    return np.ascontiguousarray(indices, dtype=np.uint32)
 
 
 def prepare_polyline(vertices: LineVertices) -> tuple[np.ndarray, np.ndarray]:
@@ -294,10 +323,6 @@ def _polyline_point_row(point: object) -> object:
 def _mesh_from_target(target: object, *, tolerance: float) -> Mesh3:
     if isinstance(target, Wireframe3):
         return Mesh3(target.vertices, (), target.edges)
-    try:
-        positive_tolerance(tolerance)
-    except ValueError as exc:
-        raise ViewError(str(exc)) from exc
     if isinstance(target, Mesh3):
         return target
     if isinstance(target, Document):
@@ -321,6 +346,33 @@ def _point_cloud_from_target(target: object) -> PointCloud3 | None:
     if isinstance(target, PointCloud3):
         return target
     return None
+
+
+def _curve_line_from_target(
+    target: object,
+    *,
+    tolerance: float,
+    transform: Transform3 | None,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if isinstance(target, (Line2, Line3, Circle2, Ellipse2)):
+        sampled = target.to_array(tolerance=tolerance)
+    elif isinstance(target, (Arc2, Arc3, Spline2, Spline3, Polyline2, Polyline3)):
+        sampled = target.discretize(tolerance=tolerance).to_array(tolerance=tolerance)
+    else:
+        return None
+
+    if isinstance(target, (Line2, Arc2, Spline2, Polyline2, Circle2, Ellipse2)):
+        sampled = np.column_stack((sampled, np.zeros(len(sampled))))
+    vertices = np.ascontiguousarray(sampled, dtype=np.float32)
+    if transform is not None:
+        vertices = np.ascontiguousarray(
+            transform.apply_points(vertices),
+            dtype=np.float32,
+        )
+    closed = isinstance(target, (Circle2, Ellipse2)) or (
+        isinstance(target, (Spline2, Polyline2, Polyline3)) and target.closed
+    )
+    return vertices, _polyline_indices(len(vertices), closed=closed)
 
 
 def _line_from_target(

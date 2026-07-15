@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from typing import TypeAlias
 
 import numpy as np
@@ -8,6 +9,12 @@ import pytest
 from numpy.typing import NDArray
 
 from cady.geometry import Body3, Circle2, Plane3, Region2
+from cady.geometry.body3 import (
+    BooleanFeature,
+    ChamferFeature,
+    FilletFeature,
+    RevolveFeature,
+)
 from cady.operations.transforms import Transform3
 
 PointArray2: TypeAlias = NDArray[np.float64]
@@ -72,6 +79,33 @@ def test_sphere_mesh_bounds_are_centered_on_requested_point() -> None:
     assert upper[1] >= 3.9
 
 
+@pytest.mark.parametrize("tolerance", [0.0, -1.0, float("inf"), float("nan")])
+def test_body_to_mesh_requires_positive_finite_tolerance(tolerance: float) -> None:
+    body = Body3.box(width=1.0, depth=1.0, height=1.0)
+
+    with pytest.raises(ValueError, match="tolerance"):
+        body.to_mesh(tolerance=tolerance)
+
+
+@pytest.mark.parametrize(
+    ("constructor", "message"),
+    (
+        (lambda: Body3.box(width=0.0, depth=1.0, height=1.0), "width must be positive"),
+        (lambda: Body3.box(width=1.0, depth=-1.0, height=1.0), "depth must be positive"),
+        (lambda: Body3.box(width=1.0, depth=1.0, height=float("inf")), "height must be finite"),
+        (lambda: Body3.cylinder(radius=0.0, height=1.0), "radius must be positive"),
+        (lambda: Body3.cylinder(radius=1.0, height=-1.0), "height must be positive"),
+        (lambda: Body3.sphere(radius=float("nan")), "radius must be finite"),
+    ),
+)
+def test_primitive_dimensions_are_validated_at_construction(
+    constructor: Callable[[], Body3],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        constructor()
+
+
 def test_region_extrusion_meshes_caps_and_sides() -> None:
     body = Body3.from_region(RectangleRegion(2.0, 3.0)).extrude(4.0)
 
@@ -123,7 +157,83 @@ def test_body_transform_applies_to_meshable_feature_frames() -> None:
 
 def test_region_extrusion_requires_region_like_object() -> None:
     with pytest.raises(TypeError, match="to_array"):
-        Body3().extrude(1.0, region=object()).to_mesh(tolerance=1e-3)
+        Body3().extrude(1.0, region=object())
+
+    with pytest.raises(TypeError, match="to_array"):
+        Body3.from_region(object())
+
+
+def test_body_feature_planes_are_validated_at_construction() -> None:
+    with pytest.raises(TypeError, match="feature plane must be a Plane3"):
+        Body3.from_region(RectangleRegion(1.0, 1.0), plane=object())  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match="feature plane must be a Plane3"):
+        Body3.box(  # type: ignore[arg-type]
+            width=1.0,
+            depth=1.0,
+            height=1.0,
+            plane=object(),
+        )
+
+
+def test_body_rejects_unknown_feature_at_construction() -> None:
+    with pytest.raises(TypeError, match="unsupported feature object"):
+        Body3(features=(object(),))  # type: ignore[arg-type]
+
+
+def test_body_rejects_second_generator_with_part_guidance() -> None:
+    with pytest.raises(ValueError, match=r"Part\.with_bodies"):
+        Body3.box(width=1.0, depth=1.0, height=1.0).extrude(
+            1.0,
+            region=RectangleRegion(1.0, 1.0),
+        )
+
+
+def test_empty_and_region_only_bodies_remain_unmeshable() -> None:
+    for body in (Body3(), Body3.from_region(RectangleRegion(1.0, 1.0))):
+        with pytest.raises(ValueError, match="body has no meshable features"):
+            body.to_mesh(tolerance=1e-3)
+
+
+def test_body_rejects_modifier_without_generator() -> None:
+    with pytest.raises(ValueError, match="body modifier requires a solid generator"):
+        Body3().with_feature(FilletFeature(0.1))
+
+
+@pytest.mark.parametrize(
+    ("body", "operation"),
+    (
+        (
+            Body3(
+                features=(
+                    RevolveFeature(RectangleRegion(1.0, 1.0), Plane3.world_xy(), 180.0),
+                )
+            ),
+            "revolve",
+        ),
+        (
+            Body3.box(width=1.0, depth=1.0, height=1.0).with_feature(
+                BooleanFeature("union", object())
+            ),
+            "boolean",
+        ),
+        (
+            Body3.box(width=1.0, depth=1.0, height=1.0).with_feature(
+                FilletFeature(0.1)
+            ),
+            "fillet",
+        ),
+        (
+            Body3.box(width=1.0, depth=1.0, height=1.0).with_feature(
+                ChamferFeature(0.1)
+            ),
+            "chamfer",
+        ),
+    ),
+)
+def test_unsupported_features_name_the_operation(body: Body3, operation: str) -> None:
+    with pytest.raises(NotImplementedError, match=operation):
+        body.to_mesh(tolerance=1e-3)
 
 
 def test_mesh_to_array_from_body() -> None:

@@ -45,6 +45,19 @@ def test_region2_carries_holes_as_closed_polyline_loops() -> None:
     np.testing.assert_allclose(hole, [[1, 1], [2, 1], [2, 2], [1, 2]])
 
 
+def test_region2_rejects_open_outer_at_construction() -> None:
+    with pytest.raises(ValueError, match="region outer boundary must be closed"):
+        Region2(Polyline2(((0, 0), (1, 0), (1, 1))))
+
+
+def test_region2_rejects_open_hole_at_construction() -> None:
+    outer = Polyline2(((0, 0), (2, 0), (2, 2), (0, 2)), closed=True)
+    hole = Polyline2(((0.5, 0.5), (1.5, 0.5), (1.5, 1.5)))
+
+    with pytest.raises(ValueError, match=r"region holes\[0\] boundary must be closed"):
+        Region2(outer, holes=(hole,))
+
+
 def test_region_constructors_reject_invalid_dimensions() -> None:
     with pytest.raises(ValueError, match="width must be positive"):
         Region2.rectangle(0, 1)
