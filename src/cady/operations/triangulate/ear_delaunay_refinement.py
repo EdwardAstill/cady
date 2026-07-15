@@ -665,6 +665,10 @@ def _point_on_segment2(point, start, end, tolerance):
     )
 
 
+def _same_point2(left, right, tolerance):
+    return bool(np.max(np.abs(left - right)) <= tolerance)
+
+
 def _segments_intersect2(a, b, c, d, tolerance):
     ab_c = _cross2(a, b, c)
     ab_d = _cross2(a, b, d)
@@ -705,6 +709,10 @@ def _triangulate_loop2(nodes, loop, tolerance):
                 continue
             if any(
                 candidate not in {previous, current, following}
+                and not any(
+                    _same_point2(nodes[candidate], nodes[vertex], tolerance)
+                    for vertex in (previous, current, following)
+                )
                 and _point_in_triangle(
                     nodes[candidate],
                     nodes[previous],

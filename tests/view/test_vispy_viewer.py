@@ -24,9 +24,12 @@ from cady.view.vispy.canvas import (
     _require_vispy,
     _select_vispy_shader_backend,
 )
+from cady.view.vispy.draw_batches import edge_batch as _edge_batch
 from cady.view.vispy.draw_batches import element_index_data as _element_index_data
+from cady.view.vispy.draw_batches import face_batch as _face_batch
 from cady.view.vispy.draw_batches import line_batch as _line_batch
 from cady.view.vispy.draw_batches import mesh_edge_color as _mesh_edge_color
+from cady.view.vispy.draw_batches import triangle_edges as _triangle_edges
 from cady.view.vispy.interaction import (
     ViewerInteractionState,
     pan_world_units_per_pixel,
@@ -46,9 +49,6 @@ from cady.view.vispy.interaction import (
 )
 from cady.view.vispy.mesh_buffers import (
     flat_face_buffers as _flat_face_buffers,
-)
-from cady.view.vispy.mesh_buffers import (
-    orientation_edges as _orientation_edges,
 )
 from cady.view.vispy.overlays import (
     scale_bar_for_camera as _scale_bar_for_camera,
@@ -308,6 +308,24 @@ def test_wireframe_mesh_edges_use_style_color() -> None:
     assert _mesh_edge_color(prepared.meshes[0]) == (1.0, 0.3, 0.1)
 
 
+def test_shaded_mesh_without_display_edges_has_no_edge_overlay() -> None:
+    prepared = prepare_scene(
+        Scene("plain").add(Body3.box(width=1.0, depth=1.0, height=1.0)),
+        tolerance=1e-3,
+    )
+
+    assert _face_batch(prepared.meshes[0], _FakeGloo()) is not None
+    assert _edge_batch(prepared.meshes[0], _FakeGloo()) is None
+
+
+def test_wireframe_mesh_derives_simple_triangle_edges() -> None:
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
+
+    edges = {tuple(edge) for edge in _triangle_edges(faces).tolist()}
+
+    assert edges == {(0, 1), (0, 2), (0, 3), (1, 2), (2, 3)}
+
+
 def test_camera_orientation_maps_camera_position_to_view_z() -> None:
     camera = Camera.look_at(position=(0.0, -2.0, 0.0), target=(0.0, 0.0, 0.0))
 
@@ -324,7 +342,6 @@ def test_pan_moves_view_without_changing_orbit_orientation() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
     orientation = state.orientation.copy()
@@ -356,7 +373,6 @@ def test_perspective_pan_speed_tracks_camera_distance() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
 
@@ -378,7 +394,6 @@ def test_orthographic_pan_speed_tracks_view_scale() -> None:
     )
     state = ViewerInteractionState.from_camera(
         camera,
-        local_center=np.zeros(3, dtype=np.float32),
         radius=5.0,
     )
 
@@ -390,6 +405,34 @@ def test_orthographic_pan_speed_tracks_view_scale() -> None:
     state.pan_by_pixels(10.0, 0.0, (900, 700))
 
     assert state.pan[0] == pytest.approx(near_pan * 2.0)
+
+
+def test_camera_target_is_the_orbit_center() -> None:
+    camera = Camera.perspective(
+        position=(10.0, -10.0, 0.0),
+        target=(10.0, 0.0, 0.0),
+    )
+
+    state = ViewerInteractionState.from_camera(camera, radius=5.0)
+    centered_target = np.array((*camera.target, 1.0), dtype=np.float32) @ state.model_matrix()
+
+    np.testing.assert_allclose(centered_target[:3], [0.0, 0.0, 0.0], atol=1e-6)
+
+
+def test_viewer_state_keeps_orbit_and_zoom_controls() -> None:
+    camera = Camera.perspective(
+        position=(0.0, -10.0, 0.0),
+        target=(0.0, 0.0, 0.0),
+    )
+    state = ViewerInteractionState.from_camera(camera, radius=5.0)
+    initial_orientation = state.orientation.copy()
+    initial_distance = state.distance
+
+    state.orbit(20.0, -10.0)
+    state.zoom(1.0)
+
+    assert not np.allclose(state.orientation, initial_orientation)
+    assert state.distance < initial_distance
 
 
 def test_orthographic_zoom_changes_scale_instead_of_camera_distance() -> None:
@@ -469,23 +512,6 @@ def test_scale_bar_is_only_available_for_orthographic_cameras() -> None:
     assert orthographic is not None
     assert orthographic.label == "1 unit"
     assert perspective is None
-
-
-def test_orientation_edges_hide_coplanar_triangle_diagonal() -> None:
-    vertices = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ],
-        dtype=np.float32,
-    )
-    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
-
-    edges = {tuple(sorted(edge)) for edge in _orientation_edges(vertices, faces).tolist()}
-
-    assert edges == {(0, 1), (1, 2), (2, 3), (0, 3)}
 
 
 def test_flat_face_buffers_duplicate_vertices_per_face() -> None:

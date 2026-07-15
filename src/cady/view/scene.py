@@ -72,13 +72,11 @@ class Scene:
     )
     lights: tuple[Light, ...] = field(
         default_factory=lambda: (
-            AmbientLight(intensity=0.4),
-            DirectionalLight(direction=(0.2, 0.45, 0.9), intensity=0.72),
+            AmbientLight(intensity=0.35),
+            DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.65),
         )
     )
-    overlays: tuple[SceneOverlay, ...] = field(
-        default_factory=lambda: (ScaleBarOverlay(), LocalAxesOverlay())
-    )
+    overlays: tuple[SceneOverlay, ...] = field(default_factory=tuple)
     objects: tuple[SceneObject, ...] = field(default_factory=tuple)
     units: str = "m"
     metadata: Metadata = field(default_factory=tuple)
@@ -369,9 +367,9 @@ def _lighting(
 ) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
     # The current shader consumes one ambient term and one directional term.
     # Defaults keep ad-hoc scenes readable even when all custom lights are absent.
-    ambient = np.array((0.28, 0.28, 0.28), dtype=np.float32)
-    diffuse = np.array((0.72, 0.72, 0.72), dtype=np.float32)
-    direction = np.array((0.2, 0.45, 0.9), dtype=np.float32)
+    ambient = np.array((0.35, 0.35, 0.35), dtype=np.float32)
+    diffuse = np.array((0.65, 0.65, 0.65), dtype=np.float32)
+    direction = np.array((-1.0, -1.0, -2.0), dtype=np.float32)
     ambient_seen = False
     directional_seen = False
 
@@ -386,9 +384,9 @@ def _lighting(
             directional_seen = True
 
     if not ambient_seen:
-        ambient = np.array((0.28, 0.28, 0.28), dtype=np.float32)
+        ambient = np.array((0.35, 0.35, 0.35), dtype=np.float32)
     if not directional_seen:
-        diffuse = np.array((0.72, 0.72, 0.72), dtype=np.float32)
+        diffuse = np.array((0.65, 0.65, 0.65), dtype=np.float32)
 
     return (
         _array3_tuple(np.clip(ambient, 0.0, 1.0)),

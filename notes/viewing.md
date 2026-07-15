@@ -201,15 +201,15 @@ A `Scene` is complete as soon as it is created. It always contains:
 - `units` and metadata
 
 The user can omit `camera` and `lights` when constructing a scene, but the
-defaults are still real objects stored directly on the `Scene` value. The
-default scene also includes a scale-bar overlay.
+defaults are still real objects stored directly on the `Scene` value. Default
+scenes do not include overlays; scale bars and local axes are opt-in.
 
 ```python
 scene = Scene("box")
 
 scene.camera  # default Camera
 scene.lights  # default light tuple
-scene.overlays  # default ScaleBarOverlay and LocalAxesOverlay tuple
+scene.overlays  # empty by default
 ```
 
 The target passed to `Scene.add(...)` can be a mesh, a meshable CAD value, a
@@ -307,7 +307,9 @@ path used by target `.view(...)` methods.
   update/draw overlays, and draws the prepared batches.
 - `draw_batches.py` turns prepared mesh and line payloads into GPU draw
   batches. It owns the split into face batches, edge batches, and point batches.
-- `mesh_buffers.py` owns shaded face buffers and fallback orientation edges.
+  Shaded meshes use only explicit display edges; wireframe meshes can derive
+  their raw triangle edges.
+- `mesh_buffers.py` owns the flat shaded face buffers.
 - `interaction.py` owns camera interaction state for orbit, pan, zoom, keyboard
   view changes, camera orientation, model/view matrices, orthographic scale, and
   projection clip planes.

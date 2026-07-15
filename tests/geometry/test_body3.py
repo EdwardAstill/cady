@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import TypeAlias
 
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from cady.geometry import Body3, Plane3
+from cady.geometry import Body3, Circle2, Plane3, Region2
 from cady.operations.transforms import Transform3
 
 PointArray2: TypeAlias = NDArray[np.float64]
@@ -78,6 +79,29 @@ def test_region_extrusion_meshes_caps_and_sides() -> None:
 
     assert mesh.bounds() == ((0.0, 0.0, 0.0), (2.0, 3.0, 4.0))
     assert len(mesh.faces) == 12
+
+
+def test_region_extrusion_with_hole_keeps_cap_faces() -> None:
+    outer = Region2.rectangle(1.0, 0.6).outer
+    region = Region2(outer, holes=(Circle2((0.5, 0.3), 0.12),))
+
+    mesh = Body3.from_region(region).extrude(0.04).to_mesh(tolerance=1e-3)
+    vertices, faces, _edges = mesh.to_array(tolerance=1e-3)
+    triangles = vertices[faces]
+    normals = np.cross(
+        triangles[:, 1] - triangles[:, 0],
+        triangles[:, 2] - triangles[:, 0],
+    )
+    edge_counts: Counter[
+        tuple[tuple[float, float, float], tuple[float, float, float]]
+    ] = Counter()
+    for face in mesh.faces:
+        points = [tuple(round(value, 12) for value in mesh.vertices[index]) for index in face]
+        for start, end in zip(points, points[1:] + points[:1], strict=True):
+            edge_counts[tuple(sorted((start, end)))] += 1
+
+    assert np.count_nonzero(np.abs(normals[:, 2]) > 1e-12) > 0
+    assert set(edge_counts.values()) == {2}
 
 
 def test_extrude_accepts_region_directly() -> None:

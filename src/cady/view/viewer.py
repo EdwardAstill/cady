@@ -39,7 +39,7 @@ Projection = Literal["orthographic", "perspective"]
 _DEFAULT_LINE_COLOR = (0.05, 0.23, 0.55)
 DEFAULT_VIEW_COLOR = (0.62, 0.68, 0.72)
 DEFAULT_WIRE_COLOR = (0.05, 0.23, 0.55)
-DEFAULT_VIEW_LIGHT = DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=1.4)
+DEFAULT_VIEW_LIGHT = DirectionalLight(direction=(-1.0, -1.0, -2.0), intensity=0.65)
 DEFAULT_VIEW_ASPECT = 900.0 / 700.0
 DEFAULT_FOV_DEGREES = 35.0
 FIT_PADDING = 1.18
@@ -145,7 +145,7 @@ def open_target_view(
         Scene(
             scene_name,
             camera=resolved_camera,
-            lights=(AmbientLight(intensity=0.4), light or DEFAULT_VIEW_LIGHT),
+            lights=(AmbientLight(intensity=0.35), light or DEFAULT_VIEW_LIGHT),
         )
         .add(target, name=name, pose=pose, style=resolved_style)
     )

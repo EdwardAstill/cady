@@ -15,8 +15,8 @@ kept behind the viewer launch path.
 4. `vispy.draw_batches.build_canvas_geometry(...)` converts `RenderScene` data
    into GPU-ready draw batches and viewer bounds.
 5. `vispy.canvas._make_vispy_canvas(...)` creates the interactive canvas, draws
-   face, edge, point, and overlay batches, and delegates camera motion to
-   `vispy.interaction`.
+   face, explicit/wireframe edge, point, and opt-in overlay batches, and
+   delegates camera motion to `vispy.interaction`.
 
 ## Top-Level Files
 
@@ -57,6 +57,8 @@ kept behind the viewer launch path.
     Point clouds and explicit polylines are handled before mesh conversion.
   - Applies scene-object poses, resolves display colors, and reduces scene
     lights to the ambient/directional values used by the current shader.
+  - Defaults to one restrained ambient light, one directional light, and no
+    overlays. Overlays remain available when a caller explicitly requests them.
 
 - `style.py`
   - Defines `DisplayStyle` and `RenderMode` (`shaded`, `wireframe`, `points`).
@@ -80,7 +82,9 @@ kept behind the viewer launch path.
 
 - `vispy/canvas.py`
   - Imports VisPy only inside the canvas creation path.
-  - Defines the shader programs and `_make_vispy_canvas(...)` factory.
+  - Defines a small ambient-plus-directional shader and the
+    `_make_vispy_canvas(...)` factory. There are no shadow, specular, or material
+    passes.
   - The inner `VispyCanvas` owns GL state, projection/model/view matrices,
     draw order, mouse interaction, wheel zoom, keyboard shortcuts, and overlay
     drawing.
@@ -88,25 +92,24 @@ kept behind the viewer launch path.
 
 - `vispy/draw_batches.py`
   - Converts `RenderScene` meshes and lines into `DrawBatch` values.
-  - Builds separate face, edge, and point batches for the canvas.
+  - Builds separate face, edge, and point batches for the canvas. Shaded meshes
+    only draw semantic display edges; wireframe meshes derive raw triangle edges
+    when no explicit edges exist.
   - Computes `SceneBounds`, which drive orbit center, clipping radius, and
     overlay sizing.
 
 - `vispy/interaction.py`
   - Owns viewer-space matrix math and interactive camera state.
-  - `ViewerInteractionState` tracks distance, pan, orientation, and orthographic
-    scale.
+  - `ViewerInteractionState` tracks distance, pan, orientation, orthographic
+    scale, and the declared camera target used as the orbit center.
   - Handles orbit, pan, zoom, local axis length, projection clip planes, and
     numeric-key orientation shortcuts.
 
 - `vispy/mesh_buffers.py`
-  - Builds view-only mesh buffers for shaded rendering and generated display
-    edges.
+  - Builds view-only mesh buffers for flat shaded rendering.
   - `flat_face_buffers(...)` duplicates each triangle's vertices and assigns one
     normal per face for flat shading.
-  - `orientation_edges(...)` suppresses coplanar tessellation diagonals while
-    keeping hard edges and boundaries visible.
-  - These operations do not mutate or simplify the source `Mesh3`.
+  - This operation does not mutate or simplify the source `Mesh3`.
 
 - `vispy/overlays.py`
   - Implements VisPy renderers for `ScaleBarOverlay` and `LocalAxesOverlay`.

@@ -27,7 +27,7 @@ def test_scene_stores_targets_and_view_state_immutably() -> None:
     assert [obj.object_name for obj in scene.objects] == ["plate", "front"]
     assert scene.camera is camera
     assert len(scene.lights) == 1
-    assert scene.overlays == (ScaleBarOverlay(), LocalAxesOverlay())
+    assert scene.overlays == ()
 
     with pytest.raises(FrozenInstanceError):
         scene.name = "changed"  # type: ignore[misc]
@@ -46,6 +46,13 @@ def test_scene_stores_overlay_values() -> None:
         Scene(overlays=(object(),))  # type: ignore[list-item]
     with pytest.raises(ViewError):
         Scene().with_overlay(object())
+
+
+def test_scene_defaults_to_simple_lighting_without_overlays() -> None:
+    scene = Scene()
+
+    assert scene.overlays == ()
+    assert [light.intensity for light in scene.lights] == [0.35, 0.65]
 
 
 def test_local_axes_overlay_validates_axis_colors() -> None:

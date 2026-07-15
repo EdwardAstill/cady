@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from cady.view.scene import RenderScene, SceneLine, SceneMesh
-from cady.view.vispy.mesh_buffers import flat_face_buffers, orientation_edges
+from cady.view.vispy.mesh_buffers import flat_face_buffers
 
 DEFAULT_EDGE_COLOR = (0.08, 0.12, 0.16)
 _UINT16_MAX = int(np.iinfo(np.uint16).max)
@@ -107,16 +107,25 @@ def face_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
     )
 
 
+def triangle_edges(faces: np.ndarray) -> np.ndarray:
+    """Return the unique edges from triangular faces."""
+    if len(faces) == 0:
+        return np.empty((0, 2), dtype=np.uint32)
+    edges = np.concatenate(
+        (faces[:, (0, 1)], faces[:, (1, 2)], faces[:, (2, 0)]),
+        axis=0,
+    )
+    return np.unique(np.sort(edges, axis=1), axis=0).astype(np.uint32, copy=False)
+
+
 def edge_batch(mesh: SceneMesh, gloo: Any) -> DrawBatch | None:
     if mesh.render_mode not in {"shaded", "wireframe"}:
         return None
-    # Semantic display edges take precedence; otherwise derive only visible
-    # orientation edges so triangulation diagonals do not dominate the view.
-    edge_indices = (
-        mesh.edges
-        if len(mesh.edges) > 0
-        else orientation_edges(mesh.vertices, mesh.faces)
-    )
+    # Shaded v1 views stay clean unless the semantic mesh explicitly carries
+    # display edges. Wireframe mode derives the raw triangle edges when needed.
+    edge_indices = mesh.edges
+    if mesh.render_mode == "wireframe" and len(edge_indices) == 0:
+        edge_indices = triangle_edges(mesh.faces)
     if len(edge_indices) == 0:
         return None
     positions, normals, colors = solid_color_vertices(mesh.vertices, mesh_edge_color(mesh))
@@ -148,8 +157,8 @@ def scene_bounds(geometry_vertices: Sequence[np.ndarray]) -> SceneBounds:
     all_vertices = np.vstack(geometry_vertices)
     local_center = (all_vertices.min(axis=0) + all_vertices.max(axis=0)) / 2.0
     spans = all_vertices.max(axis=0) - all_vertices.min(axis=0)
-    # The viewer orbits around the local center; padding the largest span gives
-    # short and flat geometry enough radius for clipping and overlay sizing.
+    # Padding the largest span gives short and flat geometry enough radius for
+    # clipping and overlay sizing.
     radius = float(np.max(spans)) * 1.2 or 1.0
     return SceneBounds(local_center=local_center, radius=radius)
 
@@ -194,4 +203,5 @@ __all__ = [
     "index_buffer",
     "mesh_edge_color",
     "solid_color_vertices",
+    "triangle_edges",
 ]

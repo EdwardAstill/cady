@@ -139,7 +139,6 @@ def _make_vispy_canvas(
             self._point_batches = geometry.point_batches
             self._interaction = ViewerInteractionState.from_camera(
                 render_scene.camera,
-                local_center=geometry.bounds.local_center,
                 radius=geometry.bounds.radius,
             )
             self._local_axes = create_local_axes_renderer(
@@ -173,7 +172,7 @@ def _make_vispy_canvas(
 
         def _configure_canvas_state(self) -> None:
             gloo.set_state(
-                clear_color="white",
+                clear_color=(0.94, 0.95, 0.96, 1.0),
                 depth_test=True,
                 polygon_offset=(1, 1),
                 blend_func=("src_alpha", "one_minus_src_alpha"),
