@@ -10,11 +10,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cady.geometry.conic2 import Circle2
+from cady.geometry.curve import Curve2
 from cady.geometry.mesh import Mesh3
 from cady.geometry.plane3 import Plane3
 from cady.geometry.point import Point2 as Point2Value
 from cady.geometry.point import Point3 as Point3Value
-from cady.geometry.polyline import Curve2, Polyline2
+from cady.geometry.polyline import Polyline2
 from cady.geometry.surface import Surface3
 from cady.operations.mesh.construction import surface_region_mesh
 from cady.operations.primitives import cross3, normalised3, sub3

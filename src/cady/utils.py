@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from math import isfinite
+from numbers import Real
+from typing import cast
 
 EdgeIndex = tuple[int, int]
+
+
+def finite_coordinates(value: object, *, expected: int, name: str) -> tuple[float, ...]:
+    """Return a fixed-length tuple of finite real coordinates."""
+    if isinstance(value, str | bytes) or not isinstance(value, Iterable):
+        raise TypeError(f"{name} must contain {expected} coordinates")
+    values = tuple(cast(Iterable[object], value))
+    if len(values) != expected:
+        raise ValueError(f"{name} must contain {expected} coordinates")
+    if any(isinstance(component, bool) for component in values) or any(
+        not isinstance(component, Real) for component in values
+    ):
+        raise TypeError(f"{name} coordinates must be real numbers")
+
+    numeric_values = cast(tuple[Real, ...], values)
+    coordinates = tuple(float(component) for component in numeric_values)
+    if not all(isfinite(component) for component in coordinates):
+        raise ValueError(f"{name} coordinates must be finite")
+    return coordinates
 
 
 def finite(value: float, name: str) -> float:

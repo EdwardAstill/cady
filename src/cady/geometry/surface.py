@@ -6,11 +6,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-from cady.geometry._coordinates import vector2
 from cady.geometry.plane3 import Plane3
 from cady.geometry.point import Point2 as Point2Value
 from cady.geometry.point import Point3 as Point3Value
-from cady.geometry.vector import Vector3
+from cady.geometry.vector import Vector3, vector2
 from cady.operations.primitives import cross3, normalised2, normalised3, sub3
 
 SurfaceKind = Literal["plane", "parametric"]

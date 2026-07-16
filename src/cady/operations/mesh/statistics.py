@@ -2,12 +2,63 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from math import fsum
 from typing import TypeAlias
 
 import numpy as np
 from numpy.typing import NDArray
 
 FloatArray: TypeAlias = NDArray[np.float64]
+Point2: TypeAlias = Sequence[float]
+Point3: TypeAlias = Sequence[float]
+TriangleIndex: TypeAlias = tuple[int, int, int]
+
+
+def mesh2_area(
+    vertices: tuple[Point2, ...],
+    faces: tuple[TriangleIndex, ...],
+) -> float:
+    """Return the total unsigned area of an indexed 2D triangle mesh."""
+    return float(
+        fsum(
+            abs(_triangle_area2(vertices[a], vertices[b], vertices[c]))
+            for a, b, c in faces
+        )
+    )
+
+
+def mesh3_area(
+    vertices: tuple[Point3, ...],
+    faces: tuple[TriangleIndex, ...],
+) -> float:
+    """Return the total surface area of an indexed 3D triangle mesh."""
+    return float(
+        fsum(_triangle_area3(vertices[a], vertices[b], vertices[c]) for a, b, c in faces)
+    )
+
+
+def mesh3_volume(
+    vertices: tuple[Point3, ...],
+    faces: tuple[TriangleIndex, ...],
+) -> float:
+    """Return absolute enclosed volume using signed tetrahedron integration."""
+    if not faces or not vertices:
+        return 0.0
+
+    signed_sum = fsum(
+        (
+            vertices[a][0]
+            * (vertices[b][1] * vertices[c][2] - vertices[b][2] * vertices[c][1])
+            - vertices[a][1]
+            * (vertices[b][0] * vertices[c][2] - vertices[b][2] * vertices[c][0])
+            + vertices[a][2]
+            * (vertices[b][0] * vertices[c][1] - vertices[b][1] * vertices[c][0])
+        )
+        / 6.0
+        for a, b, c in faces
+    )
+    return abs(signed_sum)
 
 
 def face_areas(faces: object) -> FloatArray:
@@ -69,3 +120,22 @@ def _triangle_points(faces: object) -> FloatArray:
     if values.ndim != 3 or values.shape[1] != 3 or values.shape[2] not in {2, 3}:
         raise ValueError("faces must have shape (n, 3, 2) or (n, 3, 3)")
     return values
+
+
+def _triangle_area2(a: Point2, b: Point2, c: Point2) -> float:
+    return 0.5 * (
+        (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+    )
+
+
+def _triangle_area3(a: Point3, b: Point3, c: Point3) -> float:
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ac = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    cross = (
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    )
+    return 0.5 * (
+        cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]
+    ) ** 0.5

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from types import NotImplementedType
 from typing import cast, overload
 
-from cady.geometry._coordinates import finite_coordinates
 from cady.geometry.vector import Vector2, Vector3
+from cady.utils import finite_coordinates
 
 
 @dataclass(frozen=True, init=False)
@@ -145,6 +145,22 @@ class Point3(Sequence[float]):
 
     def __hash__(self) -> int:
         return hash(self._coordinates)
+
+
+def point2(value: object, *, name: str = "point") -> Point2:
+    """Return a semantic 2D point from a coordinate value."""
+    if isinstance(value, Point2):
+        return value
+    x, y = finite_coordinates(value, expected=2, name=name)
+    return Point2(x, y)
+
+
+def point3(value: object, *, name: str = "point") -> Point3:
+    """Return a semantic 3D point from a coordinate value."""
+    if isinstance(value, Point3):
+        return value
+    x, y, z = finite_coordinates(value, expected=3, name=name)
+    return Point3(x, y, z)
 
 
 __all__ = ["Point2", "Point3"]

@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from math import acos, atan2, ceil, cos, pi, sin
 from typing import TYPE_CHECKING
 
-from cady.geometry._coordinates import point2, point3, vector3
-from cady.geometry.point import Point2, Point3
-from cady.geometry.vector import Vector3
+from cady.geometry.point import Point2, Point3, point2, point3
+from cady.geometry.vector import Vector3, vector3
 from cady.operations.primitives import add3, dot3, length3, scale3, sub3
 from cady.utils import positive, positive_tolerance
 

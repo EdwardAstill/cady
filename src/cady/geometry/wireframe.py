@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, TypeAlias, cast
 
 import numpy as np
 
-from cady.geometry._coordinates import point3
 from cady.geometry.mesh import EdgeIndex, Mesh3
 from cady.geometry.point import Point3 as Point3Value
+from cady.geometry.point import point3
 from cady.geometry.polyline import Polyline3
 from cady.operations.transforms import Transform3
 

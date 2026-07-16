@@ -6,8 +6,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from cady.geometry._coordinates import point2, point3
-from cady.geometry.point import Point2, Point3
+from cady.geometry.point import Point2, Point3, point2, point3
 from cady.operations.transforms import Transform2, Transform3
 from cady.utils import positive_tolerance
 

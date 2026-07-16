@@ -5,18 +5,23 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
-from math import acos, degrees, dist, fsum, isfinite
+from math import fsum
 from numbers import Real
-from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from cady.errors import GeometryError
-from cady.geometry._coordinates import point2, point3
+from cady.geometry.curve import Curve2, Curve3
 from cady.geometry.line import Line2, Line3
 from cady.geometry.point import Point2 as Point2Value
 from cady.geometry.point import Point3 as Point3Value
+from cady.geometry.point import point2, point3
+from cady.operations.polylines import (
+    polyline2_discontinuities,
+    polyline3_discontinuities,
+)
 from cady.utils import positive_tolerance
 
 Point2: TypeAlias = Sequence[float]
@@ -30,14 +35,6 @@ if TYPE_CHECKING:
 
 FaceIndex = tuple[int, int, int]
 EdgeIndex = tuple[int, int]
-
-
-class Curve2(Protocol):
-    """Common protocol for 2D curves that can be discretized on demand."""
-
-    def bounds(self) -> tuple[Point2, Point2]: ...
-
-    def points(self) -> tuple[Point2, ...]: ...
 
 
 def _is_curve2(value: object) -> bool:
@@ -187,7 +184,7 @@ class Polyline2:
         The measured angle is the change in travel direction: a straight
         continuation is 0 degrees and a square corner is 90 degrees.
         """
-        return _polyline2_discontinuities(
+        return polyline2_discontinuities(
             self.vertices,
             closed=self.closed,
             min_angle_degrees=min_angle_degrees,
@@ -238,14 +235,6 @@ class Polyline2:
         from cady.operations.mesh.construction import closed_polyline_mesh2
 
         return closed_polyline_mesh2(self, tolerance=tolerance)
-
-
-class Curve3(Protocol):
-    """Common protocol for 3D curves that can be sampled to polylines."""
-
-    def bounds(self) -> tuple[Point3, Point3]: ...
-
-    def points(self) -> tuple[Point3, ...]: ...
 
 
 def _is_curve3(value: object) -> bool:
@@ -410,7 +399,7 @@ class Polyline3:
         The measured angle is the change in travel direction: a straight
         continuation is 0 degrees and a square corner is 90 degrees.
         """
-        return _polyline3_discontinuities(
+        return polyline3_discontinuities(
             self.vertices,
             closed=self.closed,
             min_angle_degrees=min_angle_degrees,
@@ -540,151 +529,6 @@ def _reverse_curve3(curve: Curve3) -> Curve3:
     if isinstance(curve, Spline3):
         return Spline3(tuple(reversed(curve.control_points)))
     raise GeometryError(f"{type(curve).__name__} cannot be reversed")
-
-
-def _polyline2_discontinuities(
-    points: tuple[Point2, ...],
-    *,
-    closed: bool,
-    min_angle_degrees: float,
-    min_segment_length: float,
-) -> tuple[Point2, ...]:
-    min_angle = _validated_min_angle_degrees(min_angle_degrees)
-    min_length = _validated_min_segment_length(min_segment_length)
-    if len(points) < 3:
-        return ()
-
-    discontinuities: list[Point2] = []
-    if closed:
-        point_triples = (
-            (
-                points[(index - 1) % len(points)],
-                points[index],
-                points[(index + 1) % len(points)],
-            )
-            for index in range(len(points))
-        )
-    else:
-        point_triples = (
-            (points[index - 1], points[index], points[index + 1])
-            for index in range(1, len(points) - 1)
-        )
-
-    for previous, current, following in point_triples:
-        angle = _turn_angle_degrees2(
-            previous,
-            current,
-            following,
-            min_segment_length=min_length,
-        )
-        if angle is not None and angle >= min_angle:
-            discontinuities.append(current)
-    return tuple(discontinuities)
-
-
-def _polyline3_discontinuities(
-    points: tuple[Point3, ...],
-    *,
-    closed: bool,
-    min_angle_degrees: float,
-    min_segment_length: float,
-) -> tuple[Point3, ...]:
-    min_angle = _validated_min_angle_degrees(min_angle_degrees)
-    min_length = _validated_min_segment_length(min_segment_length)
-    if len(points) < 3:
-        return ()
-
-    discontinuities: list[Point3] = []
-    if closed:
-        point_triples = (
-            (
-                points[(index - 1) % len(points)],
-                points[index],
-                points[(index + 1) % len(points)],
-            )
-            for index in range(len(points))
-        )
-    else:
-        point_triples = (
-            (points[index - 1], points[index], points[index + 1])
-            for index in range(1, len(points) - 1)
-        )
-
-    for previous, current, following in point_triples:
-        angle = _turn_angle_degrees3(
-            previous,
-            current,
-            following,
-            min_segment_length=min_length,
-        )
-        if angle is not None and angle >= min_angle:
-            discontinuities.append(current)
-    return tuple(discontinuities)
-
-
-def _turn_angle_degrees2(
-    previous: Point2,
-    current: Point2,
-    following: Point2,
-    *,
-    min_segment_length: float,
-) -> float | None:
-    incoming = (current[0] - previous[0], current[1] - previous[1])
-    outgoing = (following[0] - current[0], following[1] - current[1])
-    incoming_length = dist(previous, current)
-    outgoing_length = dist(current, following)
-    if incoming_length <= min_segment_length or outgoing_length <= min_segment_length:
-        return None
-    dot_product = incoming[0] * outgoing[0] + incoming[1] * outgoing[1]
-    return _angle_degrees(dot_product, incoming_length, outgoing_length)
-
-
-def _turn_angle_degrees3(
-    previous: Point3,
-    current: Point3,
-    following: Point3,
-    *,
-    min_segment_length: float,
-) -> float | None:
-    incoming = (
-        current[0] - previous[0],
-        current[1] - previous[1],
-        current[2] - previous[2],
-    )
-    outgoing = (
-        following[0] - current[0],
-        following[1] - current[1],
-        following[2] - current[2],
-    )
-    incoming_length = dist(previous, current)
-    outgoing_length = dist(current, following)
-    if incoming_length <= min_segment_length or outgoing_length <= min_segment_length:
-        return None
-    dot_product = (
-        incoming[0] * outgoing[0]
-        + incoming[1] * outgoing[1]
-        + incoming[2] * outgoing[2]
-    )
-    return _angle_degrees(dot_product, incoming_length, outgoing_length)
-
-
-def _angle_degrees(dot_product: float, first_length: float, second_length: float) -> float:
-    cosine = dot_product / (first_length * second_length)
-    return degrees(acos(max(-1.0, min(1.0, cosine))))
-
-
-def _validated_min_angle_degrees(value: float) -> float:
-    angle = float(value)
-    if not isfinite(angle) or angle <= 0.0 or angle > 180.0:
-        raise ValueError("min_angle_degrees must be greater than 0 and at most 180")
-    return angle
-
-
-def _validated_min_segment_length(value: float) -> float:
-    length = float(value)
-    if not isfinite(length) or length < 0.0:
-        raise ValueError("min_segment_length must be finite and non-negative")
-    return length
 
 
 def _discretized_points2(

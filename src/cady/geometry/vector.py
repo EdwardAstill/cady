@@ -9,8 +9,7 @@ from numbers import Real
 from types import NotImplementedType
 from typing import cast, overload
 
-from cady.geometry._coordinates import finite_coordinates
-from cady.utils import finite
+from cady.utils import finite, finite_coordinates
 
 
 @dataclass(frozen=True, init=False)
@@ -208,6 +207,22 @@ class Vector3(Sequence[float]):
 
     def __hash__(self) -> int:
         return hash(self._coordinates)
+
+
+def vector2(value: object, *, name: str = "vector") -> Vector2:
+    """Return a semantic 2D vector from a coordinate value."""
+    if isinstance(value, Vector2):
+        return value
+    x, y = finite_coordinates(value, expected=2, name=name)
+    return Vector2(x, y)
+
+
+def vector3(value: object, *, name: str = "vector") -> Vector3:
+    """Return a semantic 3D vector from a coordinate value."""
+    if isinstance(value, Vector3):
+        return value
+    x, y, z = finite_coordinates(value, expected=3, name=name)
+    return Vector3(x, y, z)
 
 
 __all__ = ["Vector2", "Vector3"]

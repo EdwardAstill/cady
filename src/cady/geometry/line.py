@@ -9,8 +9,7 @@ from typing import TypeAlias
 import numpy as np
 from numpy.typing import NDArray
 
-from cady.geometry._coordinates import point2, point3
-from cady.geometry.point import Point2, Point3
+from cady.geometry.point import Point2, Point3, point2, point3
 from cady.utils import positive_tolerance
 
 PointArray2: TypeAlias = NDArray[np.float64]
